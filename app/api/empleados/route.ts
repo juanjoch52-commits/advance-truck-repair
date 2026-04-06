@@ -227,6 +227,34 @@ export async function POST(request: Request) {
       fecha_contratacion: hire_date,
       rol: mapRoleToLegacy(role),
     },
+    {
+      nombre_completo: full_name,
+      telefono: phone,
+      pin: access_pin,
+      rol: mapRoleToLegacy(role),
+      notas: notes,
+    },
+    {
+      nombre: full_name,
+      telefono: phone,
+      pin: access_pin,
+      rol: mapRoleToLegacy(role),
+      notas: notes,
+    },
+    {
+      nombre_completo: full_name,
+      telefono: phone,
+      pin_acceso: access_pin,
+      rol: mapRoleToLegacy(role),
+      notas: notes,
+    },
+    {
+      nombre: full_name,
+      telefono: phone,
+      pin_acceso: access_pin,
+      rol: mapRoleToLegacy(role),
+      notas: notes,
+    },
   ];
 
   let fallbackError: string | null = null;
