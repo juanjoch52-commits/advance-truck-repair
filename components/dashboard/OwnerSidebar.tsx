@@ -13,6 +13,7 @@ const ownerNavItems = [
   { label: 'Dashboard', href: '/dashboard' },
   { label: 'Empleados', href: '/empleados' },
   { label: 'Gestión de Accesos', href: '/admin/accesos' },
+  { label: 'Gestión de Órdenes', href: '/admin/ordenes' },
   { label: 'Nuevo Trabajo', href: '/trabajos/nuevo' },
   { label: 'Aprobaciones', href: '/admin/aprobaciones' },
   { label: 'Buscar Unidad', href: '/buscar' },

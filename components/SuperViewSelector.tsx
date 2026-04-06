@@ -28,7 +28,6 @@ export function SuperViewSelector({ className }: SuperViewSelectorProps) {
       .then((r) => r.json())
       .then((json: AuthMe) => {
         if (!json.authenticated || !json.user?.is_super_user) return;
-        if (json.user.full_name?.trim().toLowerCase() !== 'juan chávez medina') return;
         setVisible(true);
         setCurrent((json.user.effective_role ?? 'owner') as EffectiveRole);
       })
