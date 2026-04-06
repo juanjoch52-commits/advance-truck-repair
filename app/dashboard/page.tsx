@@ -14,6 +14,8 @@ type Employee = {
   hire_date: string;
 };
 
+type GenericRow = Record<string, unknown>;
+
 type WorkOrder = {
   employee_id: string;
   labor_amount: number;
@@ -65,6 +67,60 @@ function resolveRange(inputStart?: string, inputEnd?: string) {
   return { start: inputStart, end: inputEnd };
 }
 
+function mapRole(value: unknown): Employee['role'] {
+  const role = String(value ?? '').trim().toLowerCase();
+  if (role === 'mechanic' || role === 'mecanico') return 'mechanic';
+  return 'admin';
+}
+
+function mapEmployeeRow(row: GenericRow): Employee | null {
+  const id = String(row.id ?? row.employee_id ?? row.empleado_id ?? '').trim();
+  const fullName = String(row.full_name ?? row.nombre_completo ?? row.nombre ?? '').trim();
+  const hireDate = String(row.hire_date ?? row.fecha_contratacion ?? new Date().toISOString().slice(0, 10)).trim();
+
+  if (!id || !fullName) return null;
+
+  return {
+    id,
+    full_name: fullName,
+    phone: String(row.phone ?? row.telefono ?? '').trim() || null,
+    role: mapRole(row.role ?? row.rol ?? row.tipo),
+    hire_date: hireDate,
+  };
+}
+
+async function loadEmployeesWithFallback(supabase: ReturnType<typeof getSupabaseServerClient>) {
+  const primary = await supabase
+    .from('employees')
+    .select('id,full_name,phone,role,hire_date')
+    .order('full_name', { ascending: true })
+    .returns<Employee[]>();
+
+  if (!primary.error) {
+    return { data: primary.data ?? [], error: null as { message: string } | null };
+  }
+
+  if (primary.error.code !== 'PGRST205') {
+    return { data: [] as Employee[], error: { message: primary.error.message } };
+  }
+
+  const fallback = await supabase
+    .from('empleados')
+    .select('*')
+    .returns<GenericRow[]>();
+
+  if (fallback.error) {
+    return { data: [] as Employee[], error: { message: fallback.error.message } };
+  }
+
+  const mapped = (fallback.data ?? [])
+    .map((row) => mapEmployeeRow(row))
+    .filter((row): row is Employee => row !== null)
+    .sort((a, b) => a.full_name.localeCompare(b.full_name, 'es'));
+
+  return { data: mapped, error: null as { message: string } | null };
+}
+
 export default async function Home({
   searchParams,
 }: {
@@ -90,11 +146,7 @@ export default async function Home({
   try {
     const supabase = getSupabaseServerClient();
 
-    const employeesQuery = supabase
-      .from('employees')
-      .select('id,full_name,phone,role,hire_date')
-      .order('full_name', { ascending: true })
-      .returns<Employee[]>();
+    const employeesQuery = loadEmployeesWithFallback(supabase);
 
     const debtsQuery = supabase
       .from('debts')
