@@ -94,13 +94,13 @@ export function OwnerSidebar({ role, displayName, canManageAccesses = false, pen
               <span className="text-xs text-slate-500">›</span>
             </Link>
           )}
-          <Link
+          <a
             href="/salir"
             className="flex items-center justify-between rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-200 transition hover:border-red-400/40 hover:bg-red-500/20"
           >
             <span>Salir</span>
             <span className="text-xs text-red-300">00</span>
-          </Link>
+          </a>
         </nav>
       </div>
     </aside>

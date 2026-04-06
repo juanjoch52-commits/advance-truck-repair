@@ -72,7 +72,7 @@ function getDefaultHomeForRole(role: EffectiveRole) {
 }
 
 function isJuanSuperUser(session: SessionUser) {
-  return session.is_super_user && session.full_name.trim().toLowerCase() === 'juan chávez medina';
+  return session.is_super_user;
 }
 
 function startsWithAny(pathname: string, prefixes: string[]) {
