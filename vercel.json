@@ -1,0 +1,9 @@
+{
+  "version": 2,
+  "crons": [
+    {
+      "path": "/api/reportes/semanal",
+      "schedule": "0 3 * * 6"
+    }
+  ]
+}
