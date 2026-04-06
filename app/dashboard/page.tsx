@@ -3,6 +3,7 @@ import { SuperViewSelector } from '@/components/SuperViewSelector';
 import { DashboardAutoRefresh } from '@/components/dashboard/DashboardAutoRefresh';
 import { OwnerSidebar } from '@/components/dashboard/OwnerSidebar';
 import { getEffectiveRole, getServerSession, isJuanSuperUser } from '@/lib/authSession';
+import { getDemoEmployees, getDemoWorkOrders } from '@/lib/demoData';
 import { getSupabaseServerClient } from '@/lib/supabaseServer';
 import { redirect } from 'next/navigation';
 
@@ -101,6 +102,16 @@ function mapDebtRow(row: GenericRow): Debt | null {
   };
 }
 
+function getDemoEmployeesForDashboard(): Employee[] {
+  return getDemoEmployees().map((employee) => ({
+    id: employee.id,
+    full_name: employee.full_name,
+    phone: employee.phone,
+    role: employee.role === 'mechanic' ? 'mechanic' : 'admin',
+    hire_date: employee.hire_date,
+  }));
+}
+
 async function loadEmployeesWithFallback(supabase: ReturnType<typeof getSupabaseServerClient>) {
   const primary = await supabase
     .from('employees')
@@ -109,11 +120,21 @@ async function loadEmployeesWithFallback(supabase: ReturnType<typeof getSupabase
     .returns<Employee[]>();
 
   if (!primary.error) {
-    return { data: primary.data ?? [], error: null as { message: string } | null };
+    if ((primary.data?.length ?? 0) > 0) {
+      return { data: primary.data ?? [], error: null as { message: string } | null };
+    }
+
+    return {
+      data: getDemoEmployeesForDashboard(),
+      error: null as { message: string } | null,
+    };
   }
 
   if (primary.error.code !== 'PGRST205') {
-    return { data: [] as Employee[], error: { message: primary.error.message } };
+    return {
+      data: getDemoEmployeesForDashboard(),
+      error: null as { message: string } | null,
+    };
   }
 
   const fallback = await supabase
@@ -130,7 +151,14 @@ async function loadEmployeesWithFallback(supabase: ReturnType<typeof getSupabase
     .filter((row): row is Employee => row !== null)
     .sort((a, b) => a.full_name.localeCompare(b.full_name, 'es'));
 
-  return { data: mapped, error: null as { message: string } | null };
+  if (mapped.length > 0) {
+    return { data: mapped, error: null as { message: string } | null };
+  }
+
+  return {
+    data: getDemoEmployeesForDashboard(),
+    error: null as { message: string } | null,
+  };
 }
 
 export default async function Home({
@@ -174,6 +202,11 @@ export default async function Home({
     const [{ data: employees, error: employeesError }, { data: debts, error: debtsError }, { count: pendingApprovals }] =
       await Promise.all([employeesQuery, debtsQuery, pendingCountQuery]);
 
+    const demoWorkOrders = getDemoWorkOrders();
+    const safePendingApprovals = typeof pendingApprovals === 'number' && pendingApprovals > 0
+      ? pendingApprovals
+      : demoWorkOrders.filter((row) => row.status === 'pending').length;
+
     let safeDebts = debts ?? [];
     let safeDebtsError: { message: string } | null = debtsError ? { message: debtsError.message } : null;
 
@@ -211,7 +244,18 @@ export default async function Home({
       .returns<WorkOrder[]>();
 
     if (!approvedOnly.error) {
-      workOrders = approvedOnly.data ?? [];
+      if ((approvedOnly.data?.length ?? 0) > 0) {
+        workOrders = approvedOnly.data ?? [];
+      } else {
+        workOrders = demoWorkOrders
+          .filter((row) => row.status === 'approved')
+          .map((row) => ({
+            employee_id: row.employee_id,
+            labor_amount: row.labor_amount,
+            mechanic_share: row.mechanic_share,
+            work_date: row.work_date,
+          }));
+      }
     } else if (approvedOnly.error.message.includes('column work_orders.status does not exist')) {
       const legacy = await supabase
         .from('work_orders')
@@ -223,8 +267,14 @@ export default async function Home({
       workOrders = legacy.data ?? [];
       workOrdersError = legacy.error ? { message: legacy.error.message } : null;
     } else if (approvedOnly.error.code === 'PGRST205') {
-      // Legacy projects may not have work_orders/trabajos yet.
-      workOrders = [];
+      workOrders = demoWorkOrders
+        .filter((row) => row.status === 'approved')
+        .map((row) => ({
+          employee_id: row.employee_id,
+          labor_amount: row.labor_amount,
+          mechanic_share: row.mechanic_share,
+          work_date: row.work_date,
+        }));
       workOrdersError = null;
     } else {
       workOrdersError = { message: approvedOnly.error.message };
@@ -281,7 +331,7 @@ export default async function Home({
             role={currentRole}
             displayName={session.full_name}
             canManageAccesses={session.role === 'owner' || isJuanSuperUser(session)}
-            pendingApprovals={pendingApprovals ?? 0}
+            pendingApprovals={safePendingApprovals}
             selfEmployeeId={session.id}
           />
 

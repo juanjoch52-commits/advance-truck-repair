@@ -3,6 +3,7 @@ import { BackButton } from '@/components/BackButton';
 import { EmployeeProfileEditModal } from '@/components/EmployeeProfileEditModal';
 import { PhotoEvidenceButton } from '@/components/PhotoEvidenceButton';
 import { getServerSession } from '@/lib/authSession';
+import { findDemoEmployeeById, getDemoWorkOrders } from '@/lib/demoData';
 import { getSupabaseServerClient } from '@/lib/supabaseServer';
 
 type Employee = {
@@ -73,6 +74,85 @@ export default async function EmployeeProfilePage({
               Este perfil es de sesión (OWNER_PIN) y no depende de la tabla de empleados.
             </p>
           </article>
+        </section>
+      </main>
+    );
+  }
+
+  const demoEmployee = findDemoEmployeeById(id);
+  if (demoEmployee) {
+    const demoOrders = getDemoWorkOrders().filter((row) => row.employee_id === id);
+    const totalLabor = demoOrders.reduce((sum, row) => sum + row.labor_amount, 0);
+    const totalMechanicShare = demoOrders.reduce((sum, row) => sum + row.mechanic_share, 0);
+
+    return (
+      <main className="min-h-screen bg-slate-950 px-6 py-10 text-slate-100">
+        <section className="mx-auto max-w-6xl space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <BackButton fallbackHref="/dashboard" label="Volver" />
+              <h1 className="text-3xl font-bold tracking-tight">Perfil del Empleado</h1>
+            </div>
+            <Link className="rounded-md border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800" href="/dashboard">
+              Dashboard
+            </Link>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <article className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 md:col-span-2">
+              <h2 className="text-xl font-semibold">{demoEmployee.full_name}</h2>
+              <p className="mt-2 text-sm text-slate-300">Rol: {demoEmployee.role}</p>
+              <p className="text-sm text-slate-300">Telefono: {demoEmployee.phone ?? 'N/A'}</p>
+              <p className="text-sm text-slate-300">Fecha contratacion: {demoEmployee.hire_date}</p>
+              <p className="mt-3 rounded-md bg-slate-800/60 p-3 text-sm text-slate-200">Notas: {demoEmployee.notes ?? 'Sin notas'}</p>
+            </article>
+
+            <article className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+              <h3 className="font-semibold">Resumen</h3>
+              <p className="mt-2 text-sm text-slate-300">Labor total: {money.format(totalLabor)}</p>
+              <p className="text-sm text-slate-300">50% mecanico: {money.format(totalMechanicShare)}</p>
+              <p className="text-sm text-amber-300">Deuda pendiente: {money.format(0)}</p>
+            </article>
+          </div>
+
+          <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+            <h3 className="mb-3 text-lg font-semibold">Historial de Trabajos</h3>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-sm">
+                <thead className="text-slate-300">
+                  <tr>
+                    <th className="py-2 pr-3">Fecha</th>
+                    <th className="py-2 pr-3">Servicio</th>
+                    <th className="py-2 pr-3">Unidad</th>
+                    <th className="py-2 pr-3">Invoice</th>
+                    <th className="py-2 pr-3">Labor</th>
+                    <th className="py-2 pr-3">50%</th>
+                    <th className="py-2 pr-3">Fotos</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {demoOrders.map((row) => (
+                    <tr key={row.id} className="border-t border-slate-800">
+                      <td className="py-2 pr-3">{row.work_date}</td>
+                      <td className="py-2 pr-3">{row.company}</td>
+                      <td className="py-2 pr-3">{row.unit}</td>
+                      <td className="py-2 pr-3">{row.invoice_number}</td>
+                      <td className="py-2 pr-3">{money.format(row.labor_amount)}</td>
+                      <td className="py-2 pr-3 text-emerald-300">{money.format(row.mechanic_share)}</td>
+                      <td className="py-2 pr-3">
+                        <PhotoEvidenceButton paperworkPath={null} partPhotoPath={null} uploadedAt={row.created_at} />
+                      </td>
+                    </tr>
+                  ))}
+                  {demoOrders.length === 0 && (
+                    <tr>
+                      <td className="py-3 text-slate-400" colSpan={7}>Sin trabajos registrados.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
         </section>
       </main>
     );

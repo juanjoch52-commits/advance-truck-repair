@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getEffectiveRole, getServerSession } from '@/lib/authSession';
+import { getDemoEmployees } from '@/lib/demoData';
 
 type CreateEmployeeBody = {
   full_name: string;
@@ -80,11 +81,11 @@ export async function GET() {
     .returns<EmployeeResponse[]>();
 
   if (!primary.error) {
-    return NextResponse.json({ employees: primary.data ?? [] });
+    return NextResponse.json({ employees: (primary.data?.length ? primary.data : getDemoEmployees()) ?? [] });
   }
 
   if (primary.error.code !== 'PGRST205') {
-    return NextResponse.json({ employees: [], error: primary.error.message }, { status: 500 });
+    return NextResponse.json({ employees: getDemoEmployees() });
   }
 
   const fallback = await supabase
@@ -93,7 +94,7 @@ export async function GET() {
     .returns<GenericRow[]>();
 
   if (fallback.error) {
-    return NextResponse.json({ employees: [], error: fallback.error.message }, { status: 500 });
+    return NextResponse.json({ employees: getDemoEmployees() });
   }
 
   const mapped = (fallback.data ?? [])
@@ -101,7 +102,7 @@ export async function GET() {
     .filter((row): row is EmployeeResponse => row !== null)
     .sort((a, b) => a.full_name.localeCompare(b.full_name, 'es'));
 
-  return NextResponse.json({ employees: mapped });
+  return NextResponse.json({ employees: mapped.length > 0 ? mapped : getDemoEmployees() });
 }
 
 export async function POST(request: Request) {

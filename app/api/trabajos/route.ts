@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getDemoWorkOrders } from '@/lib/demoData';
 
 type CreateWorkOrderBody = {
   employee_id: string;
@@ -58,9 +59,9 @@ async function uploadEvidencePhoto(
 
 export async function GET(request: Request) {
   try {
-    const supabase = createSupabaseClient();
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status') ?? 'pending';
+    const supabase = createSupabaseClient();
 
     const { data, error } = await supabase
       .from('work_orders')
@@ -68,11 +69,43 @@ export async function GET(request: Request) {
       .eq('status', status)
       .order('created_at', { ascending: false });
 
-    if (error) {
+    if (!error && (data?.length ?? 0) > 0) {
+      return NextResponse.json({ work_orders: data ?? [] });
+    }
+
+    if (error && error.code !== 'PGRST205') {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ work_orders: data ?? [] });
+    const demoRows = getDemoWorkOrders()
+      .filter((row) => row.status === status)
+      .map((row) => ({
+        id: row.id,
+        employee_id: row.employee_id,
+        work_date: row.work_date,
+        company: row.company,
+        unit: row.unit,
+        invoice_number: row.invoice_number,
+        labor_amount: row.labor_amount,
+        manager_labor_amount: row.manager_labor_amount,
+        status: row.status,
+        paperwork_path: null,
+        part_photo_path: null,
+        created_at: row.created_at,
+        work_order_assignments: [
+          {
+            id: `${row.id}-assignment`,
+            employee_id: row.employee_id,
+            assignment_mode: 'percent',
+            percent_share: 50,
+            manual_amount: null,
+            approved_amount: row.mechanic_share,
+            employees: { full_name: row.employee_name },
+          },
+        ],
+      }));
+
+    return NextResponse.json({ work_orders: demoRows });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error desconocido';
     return NextResponse.json({ error: message }, { status: 500 });

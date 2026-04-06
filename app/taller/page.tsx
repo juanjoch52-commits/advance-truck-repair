@@ -85,7 +85,7 @@ function LogoHeader({ subtitle }: { subtitle?: string }) {
           alt="Advance Truck Repair"
           width={320}
           height={320}
-          className="h-auto w-full object-contain [mix-blend-mode:multiply]"
+          className="h-auto w-full object-contain opacity-95 [filter:contrast(1.18)_brightness(1.04)] [mix-blend-mode:multiply]"
           priority
           unoptimized
         />
@@ -723,7 +723,7 @@ export default function TallerPage() {
                 alt="ATR"
                 width={80}
                 height={80}
-                  className="h-auto w-full object-contain [mix-blend-mode:multiply]"
+                  className="h-auto w-full object-contain opacity-95 [filter:contrast(1.18)_brightness(1.04)] [mix-blend-mode:multiply]"
                 unoptimized
               />
             </div>

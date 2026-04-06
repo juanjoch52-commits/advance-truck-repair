@@ -61,7 +61,7 @@ export default function LoginPage() {
               <img
                 src="/logo.png"
                 alt="Advance Truck Repair"
-                className="h-auto w-full object-contain [mix-blend-mode:multiply]"
+                className="h-auto w-full object-contain opacity-95 [filter:contrast(1.18)_brightness(1.04)] [mix-blend-mode:multiply]"
                 loading="eager"
                 decoding="async"
               />

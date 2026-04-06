@@ -44,50 +44,39 @@ if (!supabaseUrl || !supabaseKey) {
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
-const mechanics = ['Diosdel Valdivieso', 'Jose Mendez', 'Santiago Rodriguez', 'Pablo Sanchez', 'Geiler Hernandez', 'Jairo Parra'];
+const mechanics = [
+  'Diosdel Valdivieso Medina',
+  'Santiago Silverio',
+  'Jose Mendez',
+  'Pablo Gonzalez',
+  'Geiler Rodriguez',
+  'Jairo Parra',
+];
 
 const sampleRows = {
-  'Diosdel Valdivieso': [
-    { unit: '555', company: 'Hider', labor: 120, invoice: 'HD-555-01' },
-    { unit: '102', company: 'Ilkhomjon', labor: 450, invoice: '' },
-    { unit: '219', company: 'Hider', labor: 300, invoice: 'HD-219-02' },
-    { unit: '407', company: 'Ilkhomjon', labor: 800, invoice: 'IK-407-03' },
-    { unit: '880', company: 'Hider', labor: 220, invoice: 'HD-880-04' },
+  'Santiago Silverio': [
+    { unit: '#1020', company: 'Oil Change', labor: 120, invoice: 'ATR-1001', status: 'approved' },
+    { unit: '#6402', company: 'Brake Labor', labor: 260, invoice: 'ATR-1007', status: 'approved' },
+  ],
+  'Diosdel Valdivieso Medina': [
+    { unit: '#4055', company: 'Brake Labor', labor: 240, invoice: 'ATR-1002', status: 'approved' },
+    { unit: '#5501', company: 'Wheel Seal', labor: 175, invoice: 'ATR-1008', status: 'approved' },
   ],
   'Jose Mendez': [
-    { unit: '331', company: 'Hider', labor: 180, invoice: 'HD-331-05' },
-    { unit: '602', company: 'Ilkhomjon', labor: 600, invoice: 'IK-602-06' },
-    { unit: '149', company: 'Hider', labor: 350, invoice: '' },
-    { unit: '718', company: 'Ilkhomjon', labor: 260, invoice: 'IK-718-07' },
-    { unit: '511', company: 'Hider', labor: 410, invoice: 'HD-511-08' },
+    { unit: '#8821', company: 'Wheel Seal', labor: 180, invoice: 'ATR-1003', status: 'approved' },
+    { unit: '#9084', company: 'King Pin', labor: 430, invoice: 'ATR-1009', status: 'pending' },
   ],
-  'Santiago Rodriguez': [
-    { unit: '102', company: 'Ilkhomjon', labor: 800, invoice: 'IK-102-09' },
-    { unit: '555', company: 'Hider', labor: 500, invoice: 'HD-555-10' },
-    { unit: '644', company: 'Ilkhomjon', labor: 390, invoice: '' },
-    { unit: '278', company: 'Hider', labor: 120, invoice: 'HD-278-11' },
-    { unit: '403', company: 'Ilkhomjon', labor: 450, invoice: 'IK-403-12' },
+  'Pablo Gonzalez': [
+    { unit: '#3314', company: 'King Pin', labor: 450, invoice: 'ATR-1004', status: 'approved' },
+    { unit: '#7712', company: 'Air Bag replacement', labor: 410, invoice: 'ATR-1010', status: 'pending' },
   ],
-  'Pablo Sanchez': [
-    { unit: '809', company: 'Hider', labor: 175, invoice: 'HD-809-13' },
-    { unit: '190', company: 'Ilkhomjon', labor: 520, invoice: 'IK-190-14' },
-    { unit: '702', company: 'Hider', labor: 240, invoice: '' },
-    { unit: '505', company: 'Ilkhomjon', labor: 650, invoice: 'IK-505-15' },
-    { unit: '346', company: 'Hider', labor: 295, invoice: 'HD-346-16' },
-  ],
-  'Geiler Hernandez': [
-    { unit: '401', company: 'Ilkhomjon', labor: 700, invoice: 'IK-401-17' },
-    { unit: '555', company: 'Hider', labor: 450, invoice: 'HD-555-18' },
-    { unit: '200', company: 'Ilkhomjon', labor: 330, invoice: '' },
-    { unit: '819', company: 'Hider', labor: 180, invoice: 'HD-819-19' },
-    { unit: '744', company: 'Ilkhomjon', labor: 120, invoice: 'IK-744-20' },
+  'Geiler Rodriguez': [
+    { unit: '#7190', company: 'Air Bag replacement', labor: 390, invoice: 'ATR-1005', status: 'approved' },
+    { unit: '#6127', company: 'Oil Change', labor: 110, invoice: 'ATR-1011', status: 'pending' },
   ],
   'Jairo Parra': [
-    { unit: '357', company: 'Hider', labor: 250, invoice: 'HD-357-21' },
-    { unit: '620', company: 'Ilkhomjon', labor: 420, invoice: 'IK-620-22' },
-    { unit: '114', company: 'Hider', labor: 340, invoice: '' },
-    { unit: '506', company: 'Ilkhomjon', labor: 500, invoice: 'IK-506-23' },
-    { unit: '921', company: 'Hider', labor: 150, invoice: 'HD-921-24' },
+    { unit: '#2288', company: 'Oil Change', labor: 95, invoice: 'ATR-1006', status: 'approved' },
+    { unit: '#4835', company: 'Brake Labor', labor: 225, invoice: 'ATR-1012', status: 'pending' },
   ],
 };
 
@@ -117,26 +106,28 @@ if (approvalColumnsError) {
 }
 
 const today = new Date();
-const baseDate = new Date(today);
-baseDate.setDate(today.getDate() - 8);
+const recentDates = [3, 2, 1, 0].map((offset) => {
+  const date = new Date(today);
+  date.setDate(today.getDate() - offset);
+  return date.toISOString().slice(0, 10);
+});
 
 const allRows = [];
 for (const [name, rows] of Object.entries(sampleRows)) {
   const employeeId = employeeMap.get(name);
   rows.forEach((row, index) => {
-    const workDate = new Date(baseDate);
-    workDate.setDate(baseDate.getDate() + index * 2);
+    const workDate = recentDates[index % recentDates.length];
 
     allRows.push({
       employee_id: employeeId,
-      work_date: workDate.toISOString().slice(0, 10),
+      work_date: workDate,
       company: row.company,
       unit: row.unit,
-      invoice_number: row.invoice || `PEND-${row.unit}-${index + 1}`,
+      invoice_number: row.invoice,
       labor_amount: row.labor,
       ...(hasApprovalColumns
         ? {
-            status: 'approved',
+            status: row.status,
             manager_labor_amount: row.labor,
           }
         : {}),

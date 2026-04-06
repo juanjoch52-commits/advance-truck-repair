@@ -38,13 +38,16 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
 
 const employees = [
-  { full_name: 'Diosdel Valdivieso', phone: null, access_pin: '1111', hire_date: '2024-01-01', notes: 'Mecánico inicial del taller.', role: 'mechanic' },
-  { full_name: 'Jose Mendez', phone: null, access_pin: '2222', hire_date: '2024-01-01', notes: 'Mecánico inicial del taller.', role: 'mechanic' },
-  { full_name: 'Santiago Rodriguez', phone: null, access_pin: '3333', hire_date: '2024-01-01', notes: 'Mecánico inicial del taller.', role: 'mechanic' },
-  { full_name: 'Pablo Sanchez', phone: null, access_pin: '4444', hire_date: '2024-01-01', notes: 'Mecánico inicial del taller.', role: 'mechanic' },
-  { full_name: 'Geiler Hernandez', phone: null, access_pin: '5555', hire_date: '2024-01-01', notes: 'Mecánico inicial del taller.', role: 'mechanic' },
-  { full_name: 'Jairo Parra', phone: null, access_pin: '6666', hire_date: '2024-01-01', notes: 'Mecánico inicial del taller.', role: 'mechanic' },
-  { full_name: 'Ana', phone: null, access_pin: '7777', hire_date: '2024-01-01', notes: 'Administración del taller.', role: 'admin' },
+  { full_name: 'Juan Chavez Medina', phone: null, access_pin: '2026', hire_date: '2024-01-01', notes: 'Administrador del Sistema / Tech.', role: 'SUPER_USER' },
+  { full_name: 'Ana G. Garcia de Torrealba', phone: null, access_pin: '3001', hire_date: '2024-01-01', notes: 'Administración Principal.', role: 'admin' },
+  { full_name: 'Carmen', phone: null, access_pin: '3002', hire_date: '2024-01-01', notes: 'Oficina / Pagos.', role: 'admin' },
+  { full_name: 'Kenia', phone: null, access_pin: '3003', hire_date: '2024-01-01', notes: 'Oficina / Pagos.', role: 'admin' },
+  { full_name: 'Diosdel Valdivieso Medina', phone: null, access_pin: '1101', hire_date: '2024-01-01', notes: 'Mecánico.', role: 'mechanic' },
+  { full_name: 'Santiago Silverio', phone: null, access_pin: '1102', hire_date: '2024-01-01', notes: 'Mecánico.', role: 'mechanic' },
+  { full_name: 'Jose Mendez', phone: null, access_pin: '1103', hire_date: '2024-01-01', notes: 'Mecánico.', role: 'mechanic' },
+  { full_name: 'Pablo Gonzalez', phone: null, access_pin: '1104', hire_date: '2024-01-01', notes: 'Mecánico.', role: 'mechanic' },
+  { full_name: 'Geiler Rodriguez', phone: null, access_pin: '1105', hire_date: '2024-01-01', notes: 'Mecánico.', role: 'mechanic' },
+  { full_name: 'Jairo Parra', phone: null, access_pin: '1106', hire_date: '2024-01-01', notes: 'Mecánico.', role: 'mechanic' },
 ];
 
 const names = employees.map((employee) => employee.full_name);
