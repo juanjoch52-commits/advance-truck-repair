@@ -38,13 +38,13 @@ export function OwnerSidebar({ role, displayName, canManageAccesses = false, pen
 
   return (
     <aside className="rounded-[28px] border border-white/10 bg-slate-950/70 p-5 shadow-2xl shadow-black/20 backdrop-blur xl:sticky xl:top-6 xl:h-[calc(100vh-3rem)]">
-      <div className="rounded-2xl border border-amber-300/20 bg-transparent p-4">
+      <div className="flex items-center justify-center rounded-2xl p-2">
         <Image
           src="/logo.png"
           alt="Advance Truck Repair"
           width={640}
           height={640}
-          className="h-auto w-full object-contain opacity-95 [filter:contrast(1.18)_brightness(1.04)] [mix-blend-mode:multiply]"
+          className="h-auto w-full object-contain"
           priority
           unoptimized
         />

@@ -89,59 +89,50 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'PIN inválido' }, { status: 401 });
     }
 
-    const ownerPin = process.env.OWNER_PIN?.trim();
     let sessionUser: SessionUser | null = null;
 
-    if (ownerPin && pin === ownerPin) {
-      sessionUser = {
-        id: 'owner',
-        full_name: process.env.OWNER_NAME?.trim() || 'Owner',
-        role: 'owner',
-        effective_role: 'owner',
-        requires_pin_update: false,
-        is_super_user: false,
-      };
-    } else {
-      const supabase = getClient();
-      const { data, error } = await getEmployeeRows(supabase);
+    // All authentication goes through the DB — no legacy OWNER_PIN env var
+    const supabase = getClient();
+    const { data, error } = await getEmployeeRows(supabase);
 
-      if (error || !data || data.length === 0) {
-        return NextResponse.json({ error: 'PIN incorrecto' }, { status: 401 });
-      }
+    if (error || !data || data.length === 0) {
+      return NextResponse.json({ error: 'PIN incorrecto' }, { status: 401 });
+    }
 
-      const employee = data.find((row) => pin === row.access_pin);
+    const employee = data.find((row) => pin === row.access_pin);
 
-      if (!employee) {
-        return NextResponse.json({ error: 'PIN incorrecto' }, { status: 401 });
-      }
+    if (!employee) {
+      return NextResponse.json({ error: 'PIN incorrecto' }, { status: 401 });
+    }
 
-      const isSuperUser = employee.role === 'SUPER_USER';
-      const isOwner = employee.role === 'owner';
+    const isSuperUser = employee.role === 'SUPER_USER';
+    const isOwner = employee.role === 'owner';
 
-      const mappedRole = isSuperUser
-        ? 'super_user'
-        : isOwner
-          ? 'owner'
-          : employee.role === 'mechanic'
-            ? 'mechanic'
-            : 'admin';
-
-      const effectiveRole = (isSuperUser || isOwner)
+    const mappedRole = isSuperUser
+      ? 'super_user'
+      : isOwner
         ? 'owner'
-        : mappedRole === 'mechanic'
+        : employee.role === 'mechanic'
           ? 'mechanic'
           : 'admin';
 
-      sessionUser = {
-        id: employee.id,
-        full_name: employee.full_name,
-        role: mappedRole,
-        effective_role: effectiveRole,
-        requires_pin_update: Boolean(employee.is_temporary_pin),
-        // owner from DB is NOT a technical super_user — no view switching
-        is_super_user: isSuperUser,
-      };
-    }
+    // SUPER_USER lands on owner dashboard (effective_role: 'owner')
+    // but keeps is_super_user: true → view-switcher and all tech features appear
+    const effectiveRole = (isSuperUser || isOwner)
+      ? 'owner'
+      : mappedRole === 'mechanic'
+        ? 'mechanic'
+        : 'admin';
+
+    sessionUser = {
+      id: employee.id,
+      full_name: employee.full_name,
+      role: mappedRole,
+      effective_role: effectiveRole,
+      requires_pin_update: Boolean(employee.is_temporary_pin),
+      // Only the DB SUPER_USER gets technical features (view switching, etc.)
+      is_super_user: isSuperUser,
+    };
 
     const response = NextResponse.json({ ok: true, user: sessionUser });
     response.cookies.set(getSessionCookieName(), serializeSession(sessionUser), {
