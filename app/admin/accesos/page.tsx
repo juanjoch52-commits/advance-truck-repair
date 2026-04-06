@@ -33,6 +33,7 @@ export default function GestionAccesosPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isSuperUser, setIsSuperUser] = useState(false);
   const [cleanupStep, setCleanupStep] = useState<'idle' | 'confirm' | 'running'>('idle');
+  const [pinInputs, setPinInputs] = useState<Record<string, string>>({});
 
   const loadRows = useCallback(() => {
     setLoading(true);
@@ -41,6 +42,7 @@ export default function GestionAccesosPage() {
       .then((json: { credentials?: CredentialRow[]; error?: string }) => {
         if (!json.credentials) throw new Error(json.error ?? 'No se pudieron cargar credenciales');
         setRows(json.credentials);
+        setPinInputs(Object.fromEntries(json.credentials.map((row) => [row.id, row.pin_display])));
       })
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : 'Error al cargar credenciales';
@@ -107,6 +109,37 @@ export default function GestionAccesosPage() {
     }
   }
 
+  async function handleSavePin(employeeId: string) {
+    const pin = String(pinInputs[employeeId] ?? '').trim();
+
+    if (!/^\d{4,6}$/.test(pin)) {
+      setToast({ message: 'El PIN debe tener entre 4 y 6 dígitos.', type: 'error' });
+      return;
+    }
+
+    setResettingId(employeeId);
+    try {
+      const res = await fetch(`/api/accesos/${employeeId}/reset-pin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin }),
+      });
+      const json = await res.json() as { ok?: boolean; error?: string };
+
+      if (!res.ok || !json.ok) {
+        setToast({ message: json.error ?? 'No se pudo guardar el PIN.', type: 'error' });
+        return;
+      }
+
+      setToast({ message: `PIN actualizado: ${pin}`, type: 'success' });
+      loadRows();
+    } catch {
+      setToast({ message: 'Error de conexión al actualizar PIN.', type: 'error' });
+    } finally {
+      setResettingId(null);
+    }
+  }
+
   return (
     <main className="brand-bg min-h-screen px-4 py-8 text-slate-100 sm:px-6">
       <section className="mx-auto max-w-6xl space-y-6">
@@ -146,7 +179,7 @@ export default function GestionAccesosPage() {
                 <th className="px-4 py-3">Rol</th>
                 <th className="px-4 py-3">PIN Actual (o Temporal)</th>
                 <th className="px-4 py-3">Estado PIN</th>
-                <th className="px-4 py-3">Acción</th>
+                <th className="px-4 py-3">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -166,9 +199,7 @@ export default function GestionAccesosPage() {
                       <p className="text-xs uppercase tracking-[0.14em] text-slate-500">ID {row.id.slice(0, 8)}</p>
                     </td>
                     <td className="px-4 py-3">{roleLabel[row.role]}</td>
-                    <td className="px-4 py-3 font-mono tracking-wider text-amber-200">
-                      {row.pin_display}
-                    </td>
+                    <td className="px-4 py-3 font-mono tracking-wider text-amber-200">{row.pin_display}</td>
                     <td className="px-4 py-3">
                       {row.is_temporary_pin ? (
                         <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-amber-300">
@@ -181,14 +212,36 @@ export default function GestionAccesosPage() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        disabled={resettingId === row.id}
-                        onClick={() => void handleResetPin(row.id)}
-                        className="rounded-xl border border-red-400/30 bg-red-400/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-red-200 transition hover:bg-red-400/20 disabled:opacity-50"
-                      >
-                        {resettingId === row.id ? 'Reseteando...' : 'Resetear PIN'}
-                      </button>
+                      <div className="flex min-w-[280px] flex-wrap items-center gap-2">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          maxLength={6}
+                          value={pinInputs[row.id] ?? ''}
+                          onChange={(event) => setPinInputs((prev) => ({
+                            ...prev,
+                            [row.id]: event.target.value.replace(/\D/g, '').slice(0, 6),
+                          }))}
+                          className="w-28 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-white outline-none focus:border-amber-300/50"
+                        />
+                        <button
+                          type="button"
+                          disabled={resettingId === row.id}
+                          onClick={() => void handleSavePin(row.id)}
+                          className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-emerald-200 transition hover:bg-emerald-400/20 disabled:opacity-50"
+                        >
+                          {resettingId === row.id ? 'Guardando...' : 'Guardar PIN'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={resettingId === row.id}
+                          onClick={() => void handleResetPin(row.id)}
+                          className="rounded-xl border border-red-400/30 bg-red-400/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-red-200 transition hover:bg-red-400/20 disabled:opacity-50"
+                        >
+                          {resettingId === row.id ? 'Reseteando...' : 'PIN aleatorio'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

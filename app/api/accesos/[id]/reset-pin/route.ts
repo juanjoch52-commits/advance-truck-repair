@@ -15,8 +15,12 @@ function generateTemporaryPin() {
   return String(randomInt(1000, 10000));
 }
 
+type ResetPinBody = {
+  pin?: string;
+};
+
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
@@ -28,24 +32,51 @@ export async function POST(
     }
 
     const { id } = await params;
-    const temporaryPin = generateTemporaryPin();
+    const body = await request.json().catch(() => ({})) as ResetPinBody;
+    const requestedPin = String(body.pin ?? '').trim();
+
+    if (requestedPin && !/^\d{4,6}$/.test(requestedPin)) {
+      return NextResponse.json({ error: 'El PIN debe tener entre 4 y 6 digitos.' }, { status: 400 });
+    }
+
+    const temporaryPin = requestedPin || generateTemporaryPin();
 
     const supabase = getClient();
 
-    const { error } = await supabase
+    const primary = await supabase
       .from('employees')
       .update({
         access_pin: temporaryPin,
-        is_temporary_pin: true,
-        temporary_pin_plain: temporaryPin,
+        is_temporary_pin: !requestedPin,
+        temporary_pin_plain: requestedPin ? null : temporaryPin,
       })
       .eq('id', id);
+
+    let error: { message: string } | null = null;
+
+    if (!primary.error) {
+      error = null;
+    } else if (primary.error.code === 'PGRST205') {
+      const fallback = await supabase
+        .from('empleados')
+        .update({
+          pin: temporaryPin,
+          pin_temporal: !requestedPin,
+        })
+        .eq('id', id);
+
+      if (fallback.error) {
+        error = { message: fallback.error.message };
+      }
+    } else {
+      error = { message: primary.error.message };
+    }
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ ok: true, temporary_pin: temporaryPin });
+    return NextResponse.json({ ok: true, temporary_pin: temporaryPin, custom: Boolean(requestedPin) });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error desconocido';
     return NextResponse.json({ error: message }, { status: 500 });

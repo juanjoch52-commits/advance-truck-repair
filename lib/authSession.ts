@@ -62,7 +62,7 @@ export function getDefaultHomeForRole(role: EffectiveRole) {
 }
 
 export function isJuanSuperUser(session: SessionUser) {
-  return session.is_super_user && session.full_name.trim().toLowerCase() === 'juan chávez medina';
+  return session.is_super_user;
 }
 
 export async function getServerSession() {

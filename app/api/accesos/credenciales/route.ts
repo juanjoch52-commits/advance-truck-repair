@@ -8,7 +8,34 @@ type CredentialRow = {
   role: 'mechanic' | 'admin' | 'SUPER_USER';
   is_temporary_pin: boolean;
   temporary_pin_plain: string | null;
+  access_pin: string;
 };
+
+type GenericRow = Record<string, unknown>;
+
+function mapRole(value: unknown): CredentialRow['role'] {
+  const role = String(value ?? '').trim().toLowerCase();
+  if (role === 'super_user' || role === 'superuser') return 'SUPER_USER';
+  if (role === 'mechanic' || role === 'mecanico') return 'mechanic';
+  return 'admin';
+}
+
+function mapCredentialRow(row: GenericRow): CredentialRow | null {
+  const id = String(row.id ?? row.employee_id ?? row.empleado_id ?? '').trim();
+  const fullName = String(row.full_name ?? row.nombre_completo ?? row.nombre ?? '').trim();
+  const accessPin = String(row.access_pin ?? row.pin_acceso ?? row.pin ?? '').trim();
+
+  if (!id || !fullName || !accessPin) return null;
+
+  return {
+    id,
+    full_name: fullName,
+    role: mapRole(row.role ?? row.rol ?? row.tipo),
+    is_temporary_pin: Boolean(row.is_temporary_pin ?? row.pin_temporal ?? row.requiere_cambio_pin ?? false),
+    temporary_pin_plain: row.temporary_pin_plain ? String(row.temporary_pin_plain) : null,
+    access_pin: accessPin,
+  };
+}
 
 function getClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -27,12 +54,35 @@ export async function GET() {
     }
 
     const supabase = getClient();
-    const { data, error } = await supabase
+    const primary = await supabase
       .from('employees')
-      .select('id,full_name,role,is_temporary_pin,temporary_pin_plain')
+      .select('id,full_name,role,is_temporary_pin,temporary_pin_plain,access_pin')
       .in('role', ['mechanic', 'admin', 'SUPER_USER'])
       .order('full_name', { ascending: true })
       .returns<CredentialRow[]>();
+
+    let data: CredentialRow[] = [];
+    let error: { message: string } | null = null;
+
+    if (!primary.error) {
+      data = primary.data ?? [];
+    } else if (primary.error.code === 'PGRST205') {
+      const fallback = await supabase
+        .from('empleados')
+        .select('*')
+        .returns<GenericRow[]>();
+
+      if (fallback.error) {
+        error = { message: fallback.error.message };
+      } else {
+        data = (fallback.data ?? [])
+          .map((row) => mapCredentialRow(row))
+          .filter((row): row is CredentialRow => row !== null)
+          .sort((a, b) => a.full_name.localeCompare(b.full_name, 'es'));
+      }
+    } else {
+      error = { message: primary.error.message };
+    }
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -40,9 +90,7 @@ export async function GET() {
 
     const rows = (data ?? []).map((row) => ({
       ...row,
-      pin_display: row.is_temporary_pin
-        ? row.temporary_pin_plain ?? 'Temporal (no visible)'
-        : 'Personalizado (oculto)',
+      pin_display: row.access_pin,
     }));
 
     return NextResponse.json({ credentials: rows });
