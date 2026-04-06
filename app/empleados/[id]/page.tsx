@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { BackButton } from '@/components/BackButton';
 import { EmployeeProfileEditModal } from '@/components/EmployeeProfileEditModal';
 import { PhotoEvidenceButton } from '@/components/PhotoEvidenceButton';
+import { getServerSession } from '@/lib/authSession';
 import { getSupabaseServerClient } from '@/lib/supabaseServer';
 
 type Employee = {
@@ -48,6 +49,34 @@ export default async function EmployeeProfilePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+
+  if (id === 'owner') {
+    const session = await getServerSession();
+
+    return (
+      <main className="min-h-screen bg-slate-950 px-6 py-10 text-slate-100">
+        <section className="mx-auto max-w-4xl space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <BackButton fallbackHref="/dashboard" label="Volver" />
+              <h1 className="text-3xl font-bold tracking-tight">Perfil del Dueño</h1>
+            </div>
+            <Link className="rounded-md border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800" href="/dashboard">
+              Dashboard
+            </Link>
+          </div>
+
+          <article className="rounded-xl border border-slate-800 bg-slate-900/70 p-5">
+            <h2 className="text-xl font-semibold">{session?.full_name ?? 'Owner'}</h2>
+            <p className="mt-2 text-sm text-slate-300">Rol: Dueño</p>
+            <p className="mt-2 text-sm text-slate-400">
+              Este perfil es de sesión (OWNER_PIN) y no depende de la tabla de empleados.
+            </p>
+          </article>
+        </section>
+      </main>
+    );
+  }
 
   try {
     const supabase = getSupabaseServerClient();

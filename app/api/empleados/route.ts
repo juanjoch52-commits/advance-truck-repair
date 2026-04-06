@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getEffectiveRole, getServerSession } from '@/lib/authSession';
-import { hashPin } from '@/lib/pinSecurity';
 
 type CreateEmployeeBody = {
   full_name: string;
@@ -12,26 +11,85 @@ type CreateEmployeeBody = {
   role?: 'mechanic' | 'admin' | 'SUPER_USER';
 };
 
-export async function GET() {
+type GenericRow = Record<string, unknown>;
+
+type EmployeeResponse = {
+  id: string;
+  full_name: string;
+  phone: string | null;
+  hire_date: string;
+  role: 'mechanic' | 'admin' | 'SUPER_USER';
+  notes: string | null;
+};
+
+function mapRole(value: unknown): EmployeeResponse['role'] {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized === 'super_user' || normalized === 'superuser') return 'SUPER_USER';
+  if (normalized === 'admin' || normalized === 'administrador' || normalized === 'administradora') return 'admin';
+  return 'mechanic';
+}
+
+function mapEmployeeRow(row: GenericRow): EmployeeResponse | null {
+  const id = String(row.id ?? row.employee_id ?? row.empleado_id ?? '').trim();
+  const fullName = String(row.full_name ?? row.nombre_completo ?? row.nombre ?? '').trim();
+  if (!id || !fullName) return null;
+
+  return {
+    id,
+    full_name: fullName,
+    phone: String(row.phone ?? row.telefono ?? '').trim() || null,
+    hire_date: String(row.hire_date ?? row.fecha_contratacion ?? row.fecha_ingreso ?? '').trim() || new Date().toISOString().slice(0, 10),
+    role: mapRole(row.role ?? row.rol ?? row.tipo),
+    notes: String(row.notes ?? row.notas ?? '').trim() || null,
+  };
+}
+
+function mapRoleToLegacy(role: CreateEmployeeBody['role']) {
+  return role === 'admin' ? 'admin' : role === 'SUPER_USER' ? 'SUPER_USER' : 'mechanic';
+}
+
+function getClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key, { auth: { persistSession: false } });
+}
 
-  if (!url || !key) {
+export async function GET() {
+  const supabase = getClient();
+  if (!supabase) {
     return NextResponse.json({ employees: [] });
   }
 
-  const supabase = createClient(url, key, { auth: { persistSession: false } });
-
-  const { data, error } = await supabase
+  const primary = await supabase
     .from('employees')
     .select('id,full_name,phone,hire_date,role,notes')
-    .order('full_name', { ascending: true });
+    .order('full_name', { ascending: true })
+    .returns<EmployeeResponse[]>();
 
-  if (error) {
-    return NextResponse.json({ employees: [], error: error.message }, { status: 500 });
+  if (!primary.error) {
+    return NextResponse.json({ employees: primary.data ?? [] });
   }
 
-  return NextResponse.json({ employees: data ?? [] });
+  if (primary.error.code !== 'PGRST205') {
+    return NextResponse.json({ employees: [], error: primary.error.message }, { status: 500 });
+  }
+
+  const fallback = await supabase
+    .from('empleados')
+    .select('*')
+    .returns<GenericRow[]>();
+
+  if (fallback.error) {
+    return NextResponse.json({ employees: [], error: fallback.error.message }, { status: 500 });
+  }
+
+  const mapped = (fallback.data ?? [])
+    .map((row) => mapEmployeeRow(row))
+    .filter((row): row is EmployeeResponse => row !== null)
+    .sort((a, b) => a.full_name.localeCompare(b.full_name, 'es'));
+
+  return NextResponse.json({ employees: mapped });
 }
 
 export async function POST(request: Request) {
@@ -40,10 +98,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
   }
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url || !key) {
+  const supabase = getClient();
+  if (!supabase) {
     return NextResponse.json({ error: 'Supabase no configurado' }, { status: 500 });
   }
 
@@ -63,24 +119,46 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'El PIN debe tener al menos 4 dígitos' }, { status: 400 });
   }
 
-  const supabase = createClient(url, key, { auth: { persistSession: false } });
-
-  const { data: existingEmployee } = await supabase
+  const existingPrimary = await supabase
     .from('employees')
     .select('id')
     .eq('full_name', full_name)
     .maybeSingle();
 
-  if (existingEmployee) {
+  if (existingPrimary.data) {
     return NextResponse.json({ error: 'Ese empleado ya existe' }, { status: 409 });
   }
 
-  const { data, error } = await supabase
+  if (existingPrimary.error && existingPrimary.error.code !== 'PGRST205') {
+    return NextResponse.json({ error: existingPrimary.error.message }, { status: 500 });
+  }
+
+  if (existingPrimary.error?.code === 'PGRST205') {
+    const existingFallback = await supabase
+      .from('empleados')
+      .select('*')
+      .returns<GenericRow[]>();
+
+    if (existingFallback.error) {
+      return NextResponse.json({ error: existingFallback.error.message }, { status: 500 });
+    }
+
+    const duplicate = (existingFallback.data ?? []).some((row) => {
+      const name = String(row.nombre_completo ?? row.nombre ?? row.full_name ?? '').trim().toLowerCase();
+      return name === full_name.toLowerCase();
+    });
+
+    if (duplicate) {
+      return NextResponse.json({ error: 'Ese empleado ya existe' }, { status: 409 });
+    }
+  }
+
+  const primaryInsert = await supabase
     .from('employees')
     .insert({
       full_name,
       phone,
-      access_pin: hashPin(access_pin),
+      access_pin,
       is_temporary_pin: true,
       temporary_pin_plain: access_pin,
       hire_date,
@@ -88,11 +166,61 @@ export async function POST(request: Request) {
       role,
     })
     .select('id,full_name,phone,hire_date,role,notes')
-    .single();
+    .single<EmployeeResponse>();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!primaryInsert.error) {
+    return NextResponse.json({ ok: true, employee: primaryInsert.data }, { status: 201 });
   }
 
-  return NextResponse.json({ ok: true, employee: data }, { status: 201 });
+  if (primaryInsert.error.code !== 'PGRST205') {
+    return NextResponse.json({ error: primaryInsert.error.message }, { status: 500 });
+  }
+
+  const fallbackPayloads: Array<Record<string, unknown>> = [
+    {
+      nombre_completo: full_name,
+      telefono: phone,
+      pin: access_pin,
+      fecha_contratacion: hire_date,
+      notas: notes,
+      rol: mapRoleToLegacy(role),
+      pin_temporal: true,
+    },
+    {
+      nombre: full_name,
+      telefono: phone,
+      pin: access_pin,
+      fecha_ingreso: hire_date,
+      notas: notes,
+      rol: mapRoleToLegacy(role),
+      pin_temporal: true,
+    },
+    {
+      full_name,
+      phone,
+      access_pin,
+      hire_date,
+      notes,
+      role,
+    },
+  ];
+
+  let fallbackError: string | null = null;
+
+  for (const payload of fallbackPayloads) {
+    const attempt = await supabase
+      .from('empleados')
+      .insert(payload)
+      .select('*')
+      .single<GenericRow>();
+
+    if (!attempt.error && attempt.data) {
+      const mapped = mapEmployeeRow(attempt.data);
+      return NextResponse.json({ ok: true, employee: mapped ?? attempt.data }, { status: 201 });
+    }
+
+    fallbackError = attempt.error?.message ?? 'No se pudo guardar empleado en tabla legacy.';
+  }
+
+  return NextResponse.json({ error: fallbackError ?? 'No se pudo guardar empleado.' }, { status: 500 });
 }

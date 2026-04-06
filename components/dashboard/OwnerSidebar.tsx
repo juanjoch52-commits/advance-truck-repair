@@ -85,7 +85,7 @@ export function OwnerSidebar({ role, displayName, canManageAccesses = false, pen
               </Link>
             );
           })}
-          {selfEmployeeId && (
+          {selfEmployeeId && selfEmployeeId !== 'owner' && (
             <Link
               href={`/empleados/${selfEmployeeId}`}
               className="flex items-center justify-between rounded-xl border border-fuchsia-400/20 bg-fuchsia-400/5 px-4 py-3 text-sm font-medium text-fuchsia-200 transition hover:border-fuchsia-400/40 hover:bg-fuchsia-400/10 hover:text-white"
