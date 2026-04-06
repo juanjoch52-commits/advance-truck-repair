@@ -42,7 +42,7 @@ function fromGenericRow(row: GenericRow): EmployeePinLookup | null {
   };
 }
 
-async function getEmployeeRows(supabase: ReturnType<typeof createClient>) {
+async function getEmployeeRows(supabase: ReturnType<typeof getClient>) {
   const primary = await supabase
     .from('employees')
     .select('id,full_name,role,access_pin,is_temporary_pin')
