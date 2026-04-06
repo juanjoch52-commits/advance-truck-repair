@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { getSessionCookieName, parseSession, serializeSession } from '@/lib/authSession';
-import { hashPin } from '@/lib/pinSecurity';
+
 
 type UpdatePinBody = {
   new_pin: string;
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
   const { error } = await supabase
     .from('employees')
     .update({
-      access_pin: hashPin(newPin),
+      access_pin: newPin,
       is_temporary_pin: false,
       temporary_pin_plain: null,
     })

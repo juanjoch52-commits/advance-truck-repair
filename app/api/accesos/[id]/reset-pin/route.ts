@@ -2,7 +2,7 @@ import { randomInt } from 'crypto';
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getServerSession, isJuanSuperUser } from '@/lib/authSession';
-import { hashPin } from '@/lib/pinSecurity';
+
 
 function getClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -35,7 +35,7 @@ export async function POST(
     const { error } = await supabase
       .from('employees')
       .update({
-        access_pin: hashPin(temporaryPin),
+        access_pin: temporaryPin,
         is_temporary_pin: true,
         temporary_pin_plain: temporaryPin,
       })
