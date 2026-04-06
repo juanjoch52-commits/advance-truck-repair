@@ -89,6 +89,18 @@ function mapEmployeeRow(row: GenericRow): Employee | null {
   };
 }
 
+function mapDebtRow(row: GenericRow): Debt | null {
+  const employeeId = String(row.employee_id ?? row.empleado_id ?? '').trim();
+  if (!employeeId) return null;
+
+  const remainingBalance = Number(row.remaining_balance ?? row.saldo_pendiente ?? row.balance_pendiente ?? 0);
+
+  return {
+    employee_id: employeeId,
+    remaining_balance: Number.isFinite(remainingBalance) ? remainingBalance : 0,
+  };
+}
+
 async function loadEmployeesWithFallback(supabase: ReturnType<typeof getSupabaseServerClient>) {
   const primary = await supabase
     .from('employees')
@@ -162,6 +174,29 @@ export default async function Home({
     const [{ data: employees, error: employeesError }, { data: debts, error: debtsError }, { count: pendingApprovals }] =
       await Promise.all([employeesQuery, debtsQuery, pendingCountQuery]);
 
+    let safeDebts = debts ?? [];
+    let safeDebtsError: { message: string } | null = debtsError ? { message: debtsError.message } : null;
+
+    if (debtsError?.code === 'PGRST205') {
+      const legacyDebts = await supabase
+        .from('deudas')
+        .select('*')
+        .returns<GenericRow[]>();
+
+      if (!legacyDebts.error) {
+        safeDebts = (legacyDebts.data ?? [])
+          .map((row) => mapDebtRow(row))
+          .filter((row): row is Debt => row !== null)
+          .filter((row) => row.remaining_balance > 0);
+        safeDebtsError = null;
+      } else if (legacyDebts.error.code === 'PGRST205') {
+        safeDebts = [];
+        safeDebtsError = null;
+      } else {
+        safeDebtsError = { message: legacyDebts.error.message };
+      }
+    }
+
     // Prefer approved-only totals, but gracefully support older schemas
     // where work_orders.status does not exist yet.
     let workOrders: WorkOrder[] = [];
@@ -187,6 +222,10 @@ export default async function Home({
 
       workOrders = legacy.data ?? [];
       workOrdersError = legacy.error ? { message: legacy.error.message } : null;
+    } else if (approvedOnly.error.code === 'PGRST205') {
+      // Legacy projects may not have work_orders/trabajos yet.
+      workOrders = [];
+      workOrdersError = null;
     } else {
       workOrdersError = { message: approvedOnly.error.message };
     }
@@ -199,8 +238,8 @@ export default async function Home({
       throw new Error(workOrdersError.message);
     }
 
-    if (debtsError) {
-      throw new Error(debtsError.message);
+    if (safeDebtsError) {
+      throw new Error(safeDebtsError.message);
     }
 
     const weeklyByEmployee = new Map<string, { jobs: number; labor: number; mechanicShare: number }>();
@@ -213,7 +252,7 @@ export default async function Home({
     }
 
     const pendingDebtByEmployee = new Map<string, number>();
-    for (const debt of debts ?? []) {
+    for (const debt of safeDebts) {
       const current = pendingDebtByEmployee.get(debt.employee_id) ?? 0;
       pendingDebtByEmployee.set(debt.employee_id, current + Number(debt.remaining_balance));
     }
