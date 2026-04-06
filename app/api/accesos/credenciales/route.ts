@@ -5,7 +5,7 @@ import { getServerSession, isJuanSuperUser } from '@/lib/authSession';
 type CredentialRow = {
   id: string;
   full_name: string;
-  role: 'mechanic' | 'admin' | 'SUPER_USER';
+  role: 'mechanic' | 'admin' | 'SUPER_USER' | 'owner';
   is_temporary_pin: boolean;
   temporary_pin_plain: string | null;
   access_pin: string;
@@ -17,6 +17,7 @@ function mapRole(value: unknown): CredentialRow['role'] {
   const role = String(value ?? '').trim().toLowerCase();
   if (role === 'super_user' || role === 'superuser') return 'SUPER_USER';
   if (role === 'mechanic' || role === 'mecanico') return 'mechanic';
+  if (role === 'owner' || role === 'dueno' || role === 'dueño') return 'owner';
   return 'admin';
 }
 
@@ -47,7 +48,7 @@ function getClient() {
 export async function GET() {
   try {
     const session = await getServerSession();
-    const canManageAccesses = Boolean(session && (session.role === 'owner' || isJuanSuperUser(session)));
+    const canManageAccesses = Boolean(session && (session.role === 'owner' || isJuanSuperUser(session) || session.effective_role === 'owner'));
 
     if (!canManageAccesses) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
@@ -57,7 +58,7 @@ export async function GET() {
     const primary = await supabase
       .from('employees')
       .select('id,full_name,role,is_temporary_pin,temporary_pin_plain,access_pin')
-      .in('role', ['mechanic', 'admin', 'SUPER_USER'])
+      .in('role', ['mechanic', 'admin', 'SUPER_USER', 'owner'])
       .order('full_name', { ascending: true })
       .returns<CredentialRow[]>();
 

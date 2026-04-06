@@ -8,7 +8,7 @@ type LoginBody = { pin: string };
 type EmployeePinLookup = {
   id: string;
   full_name: string;
-  role: 'mechanic' | 'admin' | 'SUPER_USER';
+  role: 'mechanic' | 'admin' | 'SUPER_USER' | 'owner';
   access_pin: string;
   is_temporary_pin: boolean;
 };
@@ -19,6 +19,7 @@ function coerceRole(raw: unknown): EmployeePinLookup['role'] {
   const normalized = String(raw ?? '').trim().toLowerCase();
   if (normalized === 'super_user' || normalized === 'superuser') return 'SUPER_USER';
   if (normalized === 'mechanic' || normalized === 'mecanico') return 'mechanic';
+  if (normalized === 'owner' || normalized === 'dueno' || normalized === 'dueño') return 'owner';
   return 'admin';
 }
 
@@ -115,12 +116,17 @@ export async function POST(request: Request) {
       }
 
       const isSuperUser = employee.role === 'SUPER_USER';
+      const isOwner = employee.role === 'owner';
+
       const mappedRole = isSuperUser
         ? 'super_user'
-        : employee.role === 'mechanic'
-          ? 'mechanic'
-          : 'admin';
-      const effectiveRole = isSuperUser
+        : isOwner
+          ? 'owner'
+          : employee.role === 'mechanic'
+            ? 'mechanic'
+            : 'admin';
+
+      const effectiveRole = (isSuperUser || isOwner)
         ? 'owner'
         : mappedRole === 'mechanic'
           ? 'mechanic'
@@ -132,6 +138,7 @@ export async function POST(request: Request) {
         role: mappedRole,
         effective_role: effectiveRole,
         requires_pin_update: Boolean(employee.is_temporary_pin),
+        // owner from DB is NOT a technical super_user — no view switching
         is_super_user: isSuperUser,
       };
     }

@@ -8,7 +8,7 @@ import { Toast } from '@/components/Toast';
 type CredentialRow = {
   id: string;
   full_name: string;
-  role: 'mechanic' | 'admin' | 'SUPER_USER';
+  role: 'mechanic' | 'admin' | 'SUPER_USER' | 'owner';
   is_temporary_pin: boolean;
   temporary_pin_plain: string | null;
   pin_display: string;
@@ -18,6 +18,7 @@ const roleLabel: Record<CredentialRow['role'], string> = {
   mechanic: 'Mecánico',
   admin: 'Administradora',
   SUPER_USER: 'Super-Usuario',
+  owner: 'Dueño',
 };
 
 type MeResponse = {

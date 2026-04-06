@@ -22,6 +22,7 @@ export async function DELETE(
 
     const canDelete =
       session.role === 'owner' ||
+      session.effective_role === 'owner' ||
       isJuanSuperUser(session);
 
     if (!canDelete) {

@@ -25,7 +25,7 @@ export async function POST(
 ) {
   try {
     const session = await getServerSession();
-    const canManageAccesses = Boolean(session && (session.role === 'owner' || isJuanSuperUser(session)));
+    const canManageAccesses = Boolean(session && (session.role === 'owner' || isJuanSuperUser(session) || session.effective_role === 'owner'));
 
     if (!canManageAccesses) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
