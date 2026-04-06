@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+type AnyRow = Record<string, unknown>;
+
 export async function GET() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -11,23 +13,37 @@ export async function GET() {
 
   const supabase = createClient(url, key, { auth: { persistSession: false } });
 
-  const { data, error } = await supabase
+  const employeesResult = await supabase
     .from('employees')
-    .select('id, full_name, role, access_pin')
-    .eq('role', 'SUPER_USER');
+    .select('*')
+    .limit(3)
+    .returns<AnyRow[]>();
 
-  if (error) {
-    return NextResponse.json({ error: error.message, code: error.code });
-  }
+  const empleadosResult = await supabase
+    .from('empleados')
+    .select('*')
+    .limit(3)
+    .returns<AnyRow[]>();
 
-  const rows = (data ?? []).map((r) => ({
-    id: r.id,
-    full_name: r.full_name,
-    role: r.role,
-    pin_prefix: String(r.access_pin ?? '').slice(0, 8),
-    pin_length: String(r.access_pin ?? '').length,
-    is_plain: /^\d{4,6}$/.test(String(r.access_pin ?? '')),
-  }));
+  const employeesRows = employeesResult.data ?? [];
+  const empleadosRows = empleadosResult.data ?? [];
 
-  return NextResponse.json({ ok: true, rows });
+  return NextResponse.json({
+    ok: true,
+    using_service_role: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    employees: {
+      error: employeesResult.error?.message ?? null,
+      code: employeesResult.error?.code ?? null,
+      count: employeesRows.length,
+      sample_keys: employeesRows[0] ? Object.keys(employeesRows[0]) : [],
+      sample: employeesRows[0] ?? null,
+    },
+    empleados: {
+      error: empleadosResult.error?.message ?? null,
+      code: empleadosResult.error?.code ?? null,
+      count: empleadosRows.length,
+      sample_keys: empleadosRows[0] ? Object.keys(empleadosRows[0]) : [],
+      sample: empleadosRows[0] ?? null,
+    },
+  });
 }
