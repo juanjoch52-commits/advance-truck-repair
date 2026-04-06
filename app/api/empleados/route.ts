@@ -255,6 +255,26 @@ export async function POST(request: Request) {
       rol: mapRoleToLegacy(role),
       notas: notes,
     },
+    {
+      nombre_completo: full_name,
+      pin: access_pin,
+      rol: mapRoleToLegacy(role),
+    },
+    {
+      nombre: full_name,
+      pin: access_pin,
+      rol: mapRoleToLegacy(role),
+    },
+    {
+      nombre_completo: full_name,
+      pin_acceso: access_pin,
+      rol: mapRoleToLegacy(role),
+    },
+    {
+      nombre: full_name,
+      pin_acceso: access_pin,
+      rol: mapRoleToLegacy(role),
+    },
   ];
 
   let fallbackError: string | null = null;
