@@ -13,6 +13,65 @@ type EmployeePinLookup = {
   is_temporary_pin: boolean;
 };
 
+type GenericRow = Record<string, unknown>;
+
+function coerceRole(raw: unknown): EmployeePinLookup['role'] {
+  const normalized = String(raw ?? '').trim().toLowerCase();
+  if (normalized === 'super_user' || normalized === 'superuser') return 'SUPER_USER';
+  if (normalized === 'mechanic' || normalized === 'mecanico') return 'mechanic';
+  return 'admin';
+}
+
+function fromGenericRow(row: GenericRow): EmployeePinLookup | null {
+  const id = String(row.id ?? row.employee_id ?? row.empleado_id ?? '').trim();
+  const fullName = String(row.full_name ?? row.nombre_completo ?? row.nombre ?? '').trim();
+  const accessPin = String(row.access_pin ?? row.pin_acceso ?? row.pin ?? '').trim();
+  const role = coerceRole(row.role ?? row.rol ?? row.tipo ?? row.cargo);
+  const isTemporaryPin = Boolean(
+    row.is_temporary_pin ?? row.pin_temporal ?? row.requiere_cambio_pin ?? false,
+  );
+
+  if (!id || !fullName || !accessPin) return null;
+
+  return {
+    id,
+    full_name: fullName,
+    role,
+    access_pin: accessPin,
+    is_temporary_pin: isTemporaryPin,
+  };
+}
+
+async function getEmployeeRows(supabase: ReturnType<typeof createClient>) {
+  const primary = await supabase
+    .from('employees')
+    .select('id,full_name,role,access_pin,is_temporary_pin')
+    .returns<EmployeePinLookup[]>();
+
+  if (!primary.error) {
+    return { data: primary.data ?? [], error: null as string | null };
+  }
+
+  if (primary.error.code !== 'PGRST205') {
+    return { data: [] as EmployeePinLookup[], error: primary.error.message };
+  }
+
+  const fallback = await supabase
+    .from('empleados')
+    .select('*')
+    .returns<GenericRow[]>();
+
+  if (fallback.error) {
+    return { data: [] as EmployeePinLookup[], error: fallback.error.message };
+  }
+
+  const mapped = (fallback.data ?? [])
+    .map((row) => fromGenericRow(row))
+    .filter((row): row is EmployeePinLookup => row !== null);
+
+  return { data: mapped, error: null as string | null };
+}
+
 function getClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -43,10 +102,7 @@ export async function POST(request: Request) {
       };
     } else {
       const supabase = getClient();
-      const { data, error } = await supabase
-        .from('employees')
-        .select('id,full_name,role,access_pin,is_temporary_pin')
-        .returns<EmployeePinLookup[]>();
+      const { data, error } = await getEmployeeRows(supabase);
 
       if (error || !data || data.length === 0) {
         return NextResponse.json({ error: 'PIN incorrecto' }, { status: 401 });
