@@ -48,6 +48,11 @@ function mapRoleToLegacy(role: CreateEmployeeBody['role']) {
   return role === 'admin' ? 'admin' : role === 'SUPER_USER' ? 'SUPER_USER' : 'mechanic';
 }
 
+function getMissingColumnFromError(message: string) {
+  const match = message.match(/Could not find the '([^']+)' column/);
+  return match?.[1] ?? null;
+}
+
 function getClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -280,18 +285,33 @@ export async function POST(request: Request) {
   let fallbackError: string | null = null;
 
   for (const payload of fallbackPayloads) {
-    const attempt = await supabase
-      .from('empleados')
-      .insert(payload)
-      .select('*')
-      .single<GenericRow>();
+    const candidate: Record<string, unknown> = { ...payload };
 
-    if (!attempt.error && attempt.data) {
-      const mapped = mapEmployeeRow(attempt.data);
-      return NextResponse.json({ ok: true, employee: mapped ?? attempt.data }, { status: 201 });
+    for (let i = 0; i < 10; i += 1) {
+      const attempt = await supabase
+        .from('empleados')
+        .insert(candidate)
+        .select('*')
+        .single<GenericRow>();
+
+      if (!attempt.error && attempt.data) {
+        const mapped = mapEmployeeRow(attempt.data);
+        return NextResponse.json({ ok: true, employee: mapped ?? attempt.data }, { status: 201 });
+      }
+
+      const message = attempt.error?.message ?? 'No se pudo guardar empleado en tabla legacy.';
+      fallbackError = message;
+
+      const missingColumn = getMissingColumnFromError(message);
+      if (!missingColumn || !(missingColumn in candidate)) {
+        break;
+      }
+
+      delete candidate[missingColumn];
+      if (Object.keys(candidate).length === 0) {
+        break;
+      }
     }
-
-    fallbackError = attempt.error?.message ?? 'No se pudo guardar empleado en tabla legacy.';
   }
 
   return NextResponse.json({ error: fallbackError ?? 'No se pudo guardar empleado.' }, { status: 500 });
