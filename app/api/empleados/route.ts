@@ -53,6 +53,13 @@ function getMissingColumnFromError(message: string) {
   return match?.[1] ?? null;
 }
 
+function normalizeSupabaseError(message: string) {
+  if (message.toLowerCase().includes('row-level security policy')) {
+    return 'Supabase bloqueó la operación por permisos (RLS). Configura SUPABASE_SERVICE_ROLE_KEY en Vercel o habilita INSERT para esta tabla.';
+  }
+  return message;
+}
+
 function getClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -135,7 +142,7 @@ export async function POST(request: Request) {
   }
 
   if (existingPrimary.error && existingPrimary.error.code !== 'PGRST205') {
-    return NextResponse.json({ error: existingPrimary.error.message }, { status: 500 });
+    return NextResponse.json({ error: normalizeSupabaseError(existingPrimary.error.message) }, { status: 500 });
   }
 
   if (existingPrimary.error?.code === 'PGRST205') {
@@ -145,7 +152,7 @@ export async function POST(request: Request) {
       .returns<GenericRow[]>();
 
     if (existingFallback.error) {
-      return NextResponse.json({ error: existingFallback.error.message }, { status: 500 });
+      return NextResponse.json({ error: normalizeSupabaseError(existingFallback.error.message) }, { status: 500 });
     }
 
     const duplicate = (existingFallback.data ?? []).some((row) => {
@@ -178,7 +185,7 @@ export async function POST(request: Request) {
   }
 
   if (primaryInsert.error.code !== 'PGRST205') {
-    return NextResponse.json({ error: primaryInsert.error.message }, { status: 500 });
+    return NextResponse.json({ error: normalizeSupabaseError(primaryInsert.error.message) }, { status: 500 });
   }
 
   const fallbackPayloads: Array<Record<string, unknown>> = [
@@ -299,7 +306,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true, employee: mapped ?? attempt.data }, { status: 201 });
       }
 
-      const message = attempt.error?.message ?? 'No se pudo guardar empleado en tabla legacy.';
+      const message = normalizeSupabaseError(attempt.error?.message ?? 'No se pudo guardar empleado en tabla legacy.');
       fallbackError = message;
 
       const missingColumn = getMissingColumnFromError(message);
@@ -314,5 +321,5 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ error: fallbackError ?? 'No se pudo guardar empleado.' }, { status: 500 });
+  return NextResponse.json({ error: normalizeSupabaseError(fallbackError ?? 'No se pudo guardar empleado.') }, { status: 500 });
 }
