@@ -1,14 +1,8 @@
 import { NextResponse } from 'next/server';
-import { getSessionCookieName } from '@/lib/authSession';
+import { getSupabaseServerClient } from '@/lib/supabaseServer';
 
 export async function POST() {
-  const response = NextResponse.json({ ok: true });
-  response.cookies.set(getSessionCookieName(), '', {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: 0,
-  });
-  return response;
+  const supabase = getSupabaseServerClient();
+  await supabase.auth.signOut();
+  return NextResponse.json({ success: true });
 }
