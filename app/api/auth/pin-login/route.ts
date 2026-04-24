@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getSessionCookieName, serializeSession, SessionUser } from '@/lib/authSession';
+import { verifyPin } from '@/lib/pinSecurity';
 
 
 type LoginBody = { pin: string };
@@ -49,34 +50,41 @@ async function getEmployeeRows(supabase: ReturnType<typeof getClient>) {
     .select('id,full_name,role,access_pin,is_temporary_pin')
     .returns<EmployeePinLookup[]>();
 
-  if (!primary.error) {
-    return { data: primary.data ?? [], error: null as string | null };
-  }
-
-  if (primary.error.code !== 'PGRST205') {
+  if (primary.error && primary.error.code !== 'PGRST205') {
     return { data: [] as EmployeePinLookup[], error: primary.error.message };
   }
+
+  const employeesRows = primary.error ? [] : (primary.data ?? []);
 
   const fallback = await supabase
     .from('empleados')
     .select('*')
     .returns<GenericRow[]>();
 
-  if (fallback.error) {
+  if (fallback.error && fallback.error.code !== 'PGRST205') {
+    if (employeesRows.length > 0) {
+      return { data: employeesRows, error: null as string | null };
+    }
     return { data: [] as EmployeePinLookup[], error: fallback.error.message };
   }
 
-  const mapped = (fallback.data ?? [])
+  const mappedFallback = (fallback.data ?? [])
     .map((row) => fromGenericRow(row))
     .filter((row): row is EmployeePinLookup => row !== null);
 
-  return { data: mapped, error: null as string | null };
+  const mergedById = new Map<string, EmployeePinLookup>();
+  for (const row of employeesRows) mergedById.set(row.id, row);
+  for (const row of mappedFallback) {
+    if (!mergedById.has(row.id)) mergedById.set(row.id, row);
+  }
+
+  return { data: Array.from(mergedById.values()), error: null as string | null };
 }
 
 function getClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) throw new Error('Supabase no configurado');
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error('Falta configurar SUPABASE_SERVICE_ROLE_KEY en el servidor');
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
@@ -99,7 +107,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'PIN incorrecto' }, { status: 401 });
     }
 
-    const employee = data.find((row) => pin === row.access_pin);
+    const employee = data.find((row) => verifyPin(pin, row.access_pin));
 
     if (!employee) {
       return NextResponse.json({ error: 'PIN incorrecto' }, { status: 401 });
