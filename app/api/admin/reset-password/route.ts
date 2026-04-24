@@ -7,9 +7,10 @@ const supabaseAdmin = createClient(
 );
 
 function generateTempPassword() {
-  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#';
+  // 6-char password: easy to communicate verbally, mix of letters and digits
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   let pass = '';
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 6; i++) {
     pass += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return pass;
@@ -35,12 +36,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: createErr?.message ?? 'Error creando usuario' }, { status: 500 });
     }
 
-    // Insertar perfil
+    // Insertar perfil con must_change_password=true
     await supabaseAdmin.from('profiles').upsert({
       id: newUser.user.id,
       email,
       full_name: name || null,
       role: role || 'admin',
+      must_change_password: true,
     });
 
     return NextResponse.json({ userId: newUser.user.id, tempPassword });
@@ -57,6 +59,9 @@ export async function POST(req: NextRequest) {
   });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Marcar que debe cambiar contraseña al siguiente inicio de sesión
+  await supabaseAdmin.from('profiles').update({ must_change_password: true }).eq('id', userId);
 
   return NextResponse.json({ tempPassword });
 }

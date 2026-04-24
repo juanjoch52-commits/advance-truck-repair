@@ -18,7 +18,7 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data: authData, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
       setError('Credenciales incorrectas. Verifique su email y contraseña.');
@@ -29,6 +29,25 @@ export default function LoginPage() {
     // Guardar cookie para que el middleware pueda verificar la sesión
     document.cookie = 'atr_auth=1; path=/; max-age=86400; SameSite=Lax';
 
+    // Verificar si el usuario debe cambiar su contraseña
+    const userId = authData.user?.id;
+    if (userId) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('must_change_password')
+        .eq('id', userId)
+        .single();
+
+      if (profile?.must_change_password) {
+        // Marcar cookie para que el middleware redirija
+        document.cookie = 'atr_force_change=1; path=/; max-age=86400; SameSite=Lax';
+        router.push('/cambiar-contrasena');
+        return;
+      }
+    }
+
+    // Limpiar bandera por si acaso
+    document.cookie = 'atr_force_change=; path=/; max-age=0';
     router.push('/dashboard');
     router.refresh();
   }
