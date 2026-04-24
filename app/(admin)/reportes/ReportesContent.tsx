@@ -256,6 +256,29 @@ export default function ReportesContent() {
       : `nomina_anual_${anio}.pdf`;
 
     doc.save(fileName);
+
+    // Guardar auditoría: quién generó este reporte
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', user.id)
+          .single();
+
+        await supabase.from('report_logs').insert({
+          generated_by: user.id,
+          generated_by_name: (profile as any)?.full_name || (profile as any)?.email || user.email,
+          tipo,
+          fecha_desde: fechaDesde,
+          fecha_hasta: fechaHasta,
+        });
+      }
+    } catch (_) {
+      // La auditoría no bloquea la generación del PDF
+    }
+
     setLoading(false);
   }
 

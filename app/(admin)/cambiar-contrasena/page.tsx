@@ -39,7 +39,7 @@ export default function CambiarContrasenaPage() {
     // 2. Limpiar la bandera must_change_password en el perfil
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      await supabase.from('profiles').update({ must_change_password: false }).eq('id', user.id);
+      await (supabase as any).from('profiles').update({ must_change_password: false }).eq('id', user.id);
     }
 
     // 3. Limpiar cookie de cambio forzado

@@ -13,6 +13,8 @@ interface Assignment {
   employee_id: string;
   mechanic_role: 'principal' | 'ayudante';
   assigned_amount: number;
+  percent_share: string;    // % del precio cobrado (vacío = monto manual)
+  work_notes: string;       // qué hizo este mecánico
 }
 
 export default function NuevaOrdenPage() {
@@ -24,13 +26,19 @@ export default function NuevaOrdenPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
+  // Datos del camión
   const [truckNumber, setTruckNumber] = useState('');
   const [company, setCompany] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [workDate, setWorkDate] = useState(new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState('');
+
+  // Precio cobrado al cliente
+  const [priceCharged, setPriceCharged] = useState('');
+
+  // Asignaciones por mecánico
   const [assignments, setAssignments] = useState<Assignment[]>([
-    { employee_id: '', mechanic_role: 'principal', assigned_amount: 0 },
+    { employee_id: '', mechanic_role: 'principal', assigned_amount: 0, percent_share: '', work_notes: '' },
   ]);
 
   function getWeekRange(dateStr: string) {
@@ -56,7 +64,7 @@ export default function NuevaOrdenPage() {
   }, []);
 
   function addAssignment() {
-    setAssignments([...assignments, { employee_id: '', mechanic_role: 'ayudante', assigned_amount: 0 }]);
+    setAssignments([...assignments, { employee_id: '', mechanic_role: 'ayudante', assigned_amount: 0, percent_share: '', work_notes: '' }]);
   }
 
   function removeAssignment(index: number) {
@@ -65,8 +73,37 @@ export default function NuevaOrdenPage() {
 
   function updateAssignment(index: number, field: keyof Assignment, value: string | number) {
     const updated = [...assignments];
-    updated[index] = { ...updated[index], [field]: value };
+    const price = parseFloat(priceCharged) || 0;
+
+    if (field === 'percent_share') {
+      const pct = parseFloat(value as string) || 0;
+      const calculated = price > 0 ? parseFloat(((price * pct) / 100).toFixed(2)) : updated[index].assigned_amount;
+      updated[index] = {
+        ...updated[index],
+        percent_share: value as string,
+        assigned_amount: price > 0 ? calculated : updated[index].assigned_amount,
+      };
+    } else if (field === 'assigned_amount') {
+      // Si cambia el monto manual, limpiar el % para no confundir
+      updated[index] = { ...updated[index], assigned_amount: Number(value), percent_share: '' };
+    } else {
+      updated[index] = { ...updated[index], [field]: value };
+    }
+
     setAssignments(updated);
+  }
+
+  // Cuando cambia el precio cobrado, recalcular los montos de quienes tienen %
+  function handlePriceChange(val: string) {
+    setPriceCharged(val);
+    const price = parseFloat(val) || 0;
+    setAssignments(prev => prev.map(a => {
+      const pct = parseFloat(a.percent_share);
+      if (!isNaN(pct) && pct > 0 && price > 0) {
+        return { ...a, assigned_amount: parseFloat(((price * pct) / 100).toFixed(2)) };
+      }
+      return a;
+    }));
   }
 
   const totalAsignado = assignments.reduce((s, a) => s + Number(a.assigned_amount || 0), 0);
@@ -78,15 +115,13 @@ export default function NuevaOrdenPage() {
     if (!truckNumber.trim()) return setError('El numero de camion es requerido.');
     if (assignments.some((a) => !a.employee_id)) return setError('Seleccione un mecanico para cada asignacion.');
     if (assignments.some((a) => Number(a.assigned_amount) <= 0)) return setError('El monto de cada mecanico debe ser mayor a $0.');
-
     const principalCount = assignments.filter((a) => a.mechanic_role === 'principal').length;
     if (principalCount !== 1) return setError('Debe haber exactamente un mecanico Principal.');
 
     setLoading(true);
 
     const { start: weekStart, end: weekEnd } = getWeekRange(workDate);
-    const principalAssignment = assignments.find((a) => a.mechanic_role === 'principal');
-    if (!principalAssignment) { setError('No hay mecanico principal.'); setLoading(false); return; }
+    const principalAssignment = assignments.find((a) => a.mechanic_role === 'principal')!;
 
     const { data: order, error: orderErr } = await (supabase as any)
       .from('work_orders')
@@ -99,6 +134,7 @@ export default function NuevaOrdenPage() {
         work_date: workDate,
         description: description.trim() || null,
         labor_amount: totalAsignado,
+        price_charged: priceCharged ? parseFloat(priceCharged) : null,
         week_start: weekStart,
         week_end: weekEnd,
         status: 'approved',
@@ -123,6 +159,8 @@ export default function NuevaOrdenPage() {
           assigned_amount: Number(a.assigned_amount),
           manual_amount: Number(a.assigned_amount),
           approved_amount: Number(a.assigned_amount),
+          percent_share: a.percent_share ? parseFloat(a.percent_share) : null,
+          work_notes: a.work_notes.trim() || null,
         })
         .select('id')
         .single();
@@ -167,6 +205,8 @@ export default function NuevaOrdenPage() {
     );
   }
 
+  const price = parseFloat(priceCharged) || 0;
+
   return (
     <div>
       <div className="mb-6">
@@ -182,15 +222,15 @@ export default function NuevaOrdenPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6 max-w-3xl">
+
+        {/* ─── Datos del camión ─── */}
         <div className="bg-slate-900/60 border border-white/5 rounded-xl p-6">
           <h2 className="display-font text-slate-300 font-semibold mb-5 tracking-wide text-lg">
-            DATOS DEL CAMION
+            DATOS DEL TRABAJO
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-slate-400 text-sm mb-2">
-                Numero de Camion / Unidad *
-              </label>
+              <label className="block text-slate-400 text-sm mb-2">Numero de Camion / Unidad *</label>
               <input
                 type="text"
                 value={truckNumber}
@@ -230,8 +270,29 @@ export default function NuevaOrdenPage() {
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 transition"
               />
             </div>
+
+            {/* Precio cobrado al cliente — campo destacado */}
             <div className="md:col-span-2">
-              <label className="block text-slate-400 text-sm mb-2">Descripcion del Trabajo</label>
+              <label className="block text-slate-400 text-sm mb-2">
+                Precio Cobrado al Cliente
+                <span className="ml-2 text-slate-600 text-xs font-normal">(opcional — usado para calcular % por mecánico)</span>
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-400 font-bold text-sm">$</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={priceCharged}
+                  onChange={(e) => handlePriceChange(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full bg-slate-800 border border-amber-500/20 rounded-lg pl-7 pr-4 py-2.5 text-amber-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/60 transition font-medium"
+                />
+              </div>
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-slate-400 text-sm mb-2">Descripcion General del Trabajo</label>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
@@ -243,6 +304,7 @@ export default function NuevaOrdenPage() {
           </div>
         </div>
 
+        {/* ─── Mecánicos asignados ─── */}
         <div className="bg-slate-900/60 border border-white/5 rounded-xl p-6">
           <div className="flex items-center justify-between mb-5">
             <h2 className="display-font text-slate-300 font-semibold tracking-wide text-lg">
@@ -260,59 +322,41 @@ export default function NuevaOrdenPage() {
             </button>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-5">
             {assignments.map((a, idx) => (
-              <div key={idx} className="grid grid-cols-12 gap-3 items-end">
-                <div className="col-span-5">
-                  {idx === 0 && <label className="block text-slate-500 text-xs mb-1.5">Mecanico</label>}
-                  <select
-                    value={a.employee_id}
-                    onChange={(e) => updateAssignment(idx, 'employee_id', e.target.value)}
-                    required
-                    className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 text-sm transition"
-                  >
-                    <option value="">Seleccionar...</option>
-                    {employees.map((emp) => (
-                      <option key={emp.id} value={emp.id}>{emp.full_name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="col-span-3">
-                  {idx === 0 && <label className="block text-slate-500 text-xs mb-1.5">Rol</label>}
-                  <select
-                    value={a.mechanic_role}
-                    onChange={(e) => updateAssignment(idx, 'mechanic_role', e.target.value)}
-                    className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 text-sm transition"
-                  >
-                    <option value="principal">Principal</option>
-                    <option value="ayudante">Ayudante</option>
-                  </select>
-                </div>
-
-                <div className="col-span-3">
-                  {idx === 0 && <label className="block text-slate-500 text-xs mb-1.5">Monto ($)</label>}
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={a.assigned_amount || ''}
-                      onChange={(e) => updateAssignment(idx, 'assigned_amount', e.target.value)}
+              <div key={idx} className="bg-slate-800/50 border border-white/5 rounded-xl p-4 space-y-3">
+                {/* Fila 1: Mecánico, Rol, X */}
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <label className="block text-slate-500 text-xs mb-1.5">Mecánico *</label>
+                    <select
+                      value={a.employee_id}
+                      onChange={(e) => updateAssignment(idx, 'employee_id', e.target.value)}
                       required
-                      placeholder="0.00"
-                      className="w-full bg-slate-800 border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 text-sm transition"
-                    />
+                      className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 text-sm transition"
+                    >
+                      <option value="">Seleccionar...</option>
+                      {employees.map((emp) => (
+                        <option key={emp.id} value={emp.id}>{emp.full_name}</option>
+                      ))}
+                    </select>
                   </div>
-                </div>
-
-                <div className="col-span-1 flex justify-end">
+                  <div className="w-36">
+                    <label className="block text-slate-500 text-xs mb-1.5">Rol</label>
+                    <select
+                      value={a.mechanic_role}
+                      onChange={(e) => updateAssignment(idx, 'mechanic_role', e.target.value)}
+                      className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 text-sm transition"
+                    >
+                      <option value="principal">Principal</option>
+                      <option value="ayudante">Ayudante</option>
+                    </select>
+                  </div>
                   {assignments.length > 1 && (
                     <button
                       type="button"
                       onClick={() => removeAssignment(idx)}
-                      className="text-slate-600 hover:text-red-400 transition p-2"
+                      className="mt-5 text-slate-600 hover:text-red-400 transition p-1.5"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -320,12 +364,76 @@ export default function NuevaOrdenPage() {
                     </button>
                   )}
                 </div>
+
+                {/* Fila 2: % y Monto */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-500 text-xs mb-1.5">
+                      % que le toca
+                      {price > 0 && <span className="text-slate-600 ml-1">(de ${price.toLocaleString('es-MX', { minimumFractionDigits: 2 })})</span>}
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        value={a.percent_share}
+                        onChange={(e) => updateAssignment(idx, 'percent_share', e.target.value)}
+                        placeholder="Ej: 40"
+                        className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 pr-8 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 text-sm transition"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">%</span>
+                    </div>
+                    {price > 0 && a.percent_share && (
+                      <p className="text-xs text-amber-400/70 mt-1">
+                        = ${((price * parseFloat(a.percent_share || '0')) / 100).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 text-xs mb-1.5">Monto a Devengar ($) *</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={a.assigned_amount || ''}
+                        onChange={(e) => updateAssignment(idx, 'assigned_amount', e.target.value)}
+                        required
+                        placeholder="0.00"
+                        className="w-full bg-slate-700 border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 text-sm transition"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Fila 3: Lo que hizo el mecánico */}
+                <div>
+                  <label className="block text-slate-500 text-xs mb-1.5">¿Qué hizo este mecánico?</label>
+                  <input
+                    type="text"
+                    value={a.work_notes}
+                    onChange={(e) => updateAssignment(idx, 'work_notes', e.target.value)}
+                    placeholder="Ej: Cambio de frenos delanteros, ajuste de suspensión..."
+                    className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 text-sm transition"
+                  />
+                </div>
               </div>
             ))}
           </div>
 
-          <div className="mt-5 pt-4 border-t border-white/5 flex justify-end">
-            <div className="text-right">
+          <div className="mt-5 pt-4 border-t border-white/5 flex items-end justify-between">
+            {price > 0 && (
+              <div>
+                <p className="text-slate-500 text-xs">Precio cobrado</p>
+                <p className="text-slate-300 font-semibold">
+                  ${price.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+            )}
+            <div className="text-right ml-auto">
               <p className="text-slate-500 text-sm">Total a Devengar</p>
               <p className="display-font text-2xl font-bold text-amber-400">
                 ${totalAsignado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
