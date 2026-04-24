@@ -27,10 +27,10 @@ export default async function CorteSemanalPage({
   const weekStart = params.semana_inicio ?? defaultStart;
   const weekEnd = params.semana_fin ?? defaultEnd;
 
-  const { data: entries } = await supabase
+  const { data: entries } = await (supabase as any)
     .from('earned_entries')
     .select(`
-      id, amount, work_date, truck_number, mechanic_role,
+      id, amount, work_date, truck_number,
       employee_id,
       employees!earned_entries_employee_id_fkey(id, full_name)
     `)

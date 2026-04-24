@@ -1,0 +1,189 @@
+{
+  "nav": {
+    "dashboard": "Panel Principal",
+    "workReports": "Órdenes de Trabajo",
+    "staff": "Personal",
+    "payroll": "Devengados",
+    "weeklyCut": "Corte Semanal",
+    "reports": "Reportes PDF",
+    "users": "Usuarios del Sistema",
+    "logout": "Cerrar Sesión"
+  },
+  "workReports": {
+    "title": "ÓRDENES DE TRABAJO",
+    "newButton": "NUEVA ORDEN",
+    "filters": {
+      "dateFrom": "Desde",
+      "dateTo": "Hasta",
+      "mechanic": "Mecánico",
+      "allMechanics": "Todos los mecánicos",
+      "filter": "Filtrar",
+      "clear": "Limpiar",
+      "globalView": "Vista Global"
+    },
+    "table": {
+      "date": "Fecha",
+      "truck": "Camión",
+      "company": "Empresa",
+      "orderNumber": "# Orden",
+      "tasks": "Tareas",
+      "totalCharged": "Total Cobrado",
+      "totalPayout": "Pago Mecánicos",
+      "companyProfit": "Ganancia Taller"
+    },
+    "empty": "No hay órdenes registradas para este período.",
+    "emptyAction": "Crear primera orden",
+    "records": "órdenes registradas"
+  },
+  "newReport": {
+    "title": "NUEVA ORDEN DE TRABAJO",
+    "back": "Volver a Órdenes",
+    "header": {
+      "sectionTitle": "DATOS DEL REPORTE",
+      "orderNumber": "# Orden Externa",
+      "orderNumberPlaceholder": "Número de la otra plataforma (opcional)",
+      "truck": "Camión / Unidad *",
+      "truckPlaceholder": "Ej: TRK-001, Unidad 42",
+      "company": "Empresa / Cliente *",
+      "companyPlaceholder": "Nombre de la empresa",
+      "date": "Fecha del Trabajo *",
+      "notes": "Notas Generales",
+      "notesPlaceholder": "Observaciones generales del reporte..."
+    },
+    "tasks": {
+      "sectionTitle": "TAREAS REALIZADAS",
+      "addTask": "Agregar Tarea",
+      "task": "Tarea",
+      "description": "Descripción de la tarea *",
+      "descriptionPlaceholder": "Ej: Cambio de frenos delanteros, ajuste de suspensión...",
+      "amountCharged": "Precio cobrado al cliente ($) *",
+      "addMechanic": "Agregar Mecánico",
+      "mechanicsTitle": "Mecánicos asignados",
+      "selectMechanic": "Seleccionar mecánico...",
+      "commission": "% Comisión",
+      "payout": "Pago",
+      "companyProfit": "Ganancia taller",
+      "removeTask": "Eliminar tarea",
+      "removeMechanic": "Quitar"
+    },
+    "summary": {
+      "title": "RESUMEN FINANCIERO",
+      "totalCharged": "Total cobrado al cliente",
+      "totalMechanicPayout": "Total pago a mecánicos",
+      "totalCompanyProfit": "Ganancia del taller"
+    },
+    "save": "GUARDAR ORDEN",
+    "saving": "GUARDANDO...",
+    "cancel": "Cancelar",
+    "success": "ORDEN CREADA",
+    "successSub": "Redirigiendo...",
+    "errors": {
+      "truckRequired": "El número de camión es requerido.",
+      "companyRequired": "La empresa/cliente es requerida.",
+      "atLeastOneTask": "Debe agregar al menos una tarea.",
+      "taskDescRequired": "Cada tarea necesita una descripción.",
+      "taskAmountRequired": "El precio cobrado por tarea debe ser mayor a $0.",
+      "atLeastOneMechanic": "Cada tarea debe tener al menos un mecánico asignado.",
+      "mechanicRequired": "Seleccione un mecánico para cada asignación.",
+      "commissionRequired": "La comisión debe ser mayor a 0%."
+    }
+  },
+  "pdf": {
+    "modalTitle": "Seleccionar idioma del PDF",
+    "modalSubtitle": "El reporte se generará en el idioma seleccionado.",
+    "spanish": "Español",
+    "english": "English",
+    "generating": "GENERANDO PDF...",
+    "download": "DESCARGAR PDF",
+    "cancel": "Cancelar",
+    "type": {
+      "semanal": "Semanal",
+      "mensual": "Mensual",
+      "anual": "Anual"
+    },
+    "period": {
+      "label": "Periodo",
+      "week": "Semana",
+      "month": "Mes",
+      "year": "Año"
+    },
+    "reportTitle": {
+      "semanal": "REPORTE SEMANAL DE NÓMINA",
+      "mensual": "REPORTE MENSUAL DE NÓMINA",
+      "anual": "REPORTE ANUAL DE NÓMINA"
+    },
+    "header": {
+      "company": "ADVANCE TRUCK REPAIR",
+      "system": "Sistema Administrativo de Nómina",
+      "issued": "Emitido"
+    },
+    "summary": {
+      "totalPayroll": "TOTAL NÓMINA",
+      "mechanics": "MECÁNICOS",
+      "records": "REGISTROS"
+    },
+    "checksTable": "TABLA DE CHEQUES",
+    "table": {
+      "num": "#",
+      "mechanic": "Mecánico",
+      "jobs": "Trabajos",
+      "amount": "Monto a Pagar",
+      "totalEarned": "Total Devengado",
+      "total": "TOTAL GENERAL",
+      "date": "Fecha",
+      "truck": "Camión",
+      "company": "Empresa",
+      "role": "Rol",
+      "principal": "Principal",
+      "assistant": "Ayudante"
+    },
+    "footer": "Advance Truck Repair | Sistema de Nómina | Página"
+  },
+  "payroll": {
+    "title": "DEVENGADOS",
+    "subtitle": "Historial de montos asignados por orden de trabajo",
+    "filters": {
+      "from": "Desde",
+      "to": "Hasta",
+      "filter": "Filtrar",
+      "clear": "Limpiar"
+    },
+    "stats": {
+      "totalEarned": "Total Devengado",
+      "records": "Registros",
+      "mechanicsWithPay": "Mecánicos con pago"
+    },
+    "table": {
+      "date": "Fecha",
+      "truck": "Camión",
+      "company": "Empresa",
+      "task": "Tarea",
+      "amount": "Monto"
+    },
+    "empty": "No hay registros para el periodo seleccionado."
+  },
+  "weeklyCut": {
+    "title": "CORTE SEMANAL",
+    "subtitle": "Resumen de pagos para emisión de cheques",
+    "prevWeek": "Semana anterior",
+    "nextWeek": "Semana siguiente",
+    "cutWeek": "SEMANA DE CORTE",
+    "generatePdf": "Generar PDF de esta semana",
+    "checksTable": "TABLA DE CHEQUES",
+    "stats": {
+      "totalToPay": "Total a Pagar",
+      "mechanicsToPay": "Mecánicos a pagar",
+      "jobsDone": "Trabajos realizados"
+    },
+    "table": {
+      "num": "#",
+      "mechanic": "Mecánico",
+      "jobs": "Trabajos",
+      "totalEarned": "Total Devengado",
+      "checkAmount": "Monto Cheque"
+    },
+    "totalPayroll": "TOTAL NÓMINA SEMANAL",
+    "empty": "No hay registros de pago para esta semana.",
+    "emptyAction": "Registrar una orden"
+  }
+}

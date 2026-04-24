@@ -4,10 +4,11 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { createClient } from '@/lib/supabase';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const NAV_ITEMS = [
   {
-    label: 'Panel Principal',
+    labelKey: 'nav.dashboard',
     href: '/dashboard',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -17,7 +18,7 @@ const NAV_ITEMS = [
     ),
   },
   {
-    label: 'Órdenes de Trabajo',
+    labelKey: 'nav.workReports',
     href: '/ordenes',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -27,7 +28,7 @@ const NAV_ITEMS = [
     ),
   },
   {
-    label: 'Personal',
+    labelKey: 'nav.staff',
     href: '/mecanicos',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -37,7 +38,7 @@ const NAV_ITEMS = [
     ),
   },
   {
-    label: 'Devengados',
+    labelKey: 'nav.payroll',
     href: '/nomina',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -47,7 +48,7 @@ const NAV_ITEMS = [
     ),
   },
   {
-    label: 'Corte Semanal',
+    labelKey: 'nav.weeklyCut',
     href: '/corte-semanal',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -57,7 +58,7 @@ const NAV_ITEMS = [
     ),
   },
   {
-    label: 'Reportes PDF',
+    labelKey: 'nav.reports',
     href: '/reportes',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -67,7 +68,7 @@ const NAV_ITEMS = [
     ),
   },
   {
-    label: 'Usuarios del Sistema',
+    labelKey: 'nav.users',
     href: '/admin',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -82,10 +83,10 @@ export default function AdminSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
+  const { t } = useLanguage();
 
   async function handleLogout() {
     await supabase.auth.signOut();
-    // Limpiar cookie de sesión
     document.cookie = 'atr_auth=; path=/; max-age=0';
     router.push('/login');
     router.refresh();
@@ -126,7 +127,7 @@ export default function AdminSidebar() {
               <span className={isActive ? 'text-amber-400' : 'text-slate-500 group-hover:text-slate-300'}>
                 {item.icon}
               </span>
-              {item.label}
+              {t(item.labelKey)}
             </Link>
           );
         })}
@@ -142,7 +143,7 @@ export default function AdminSidebar() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
               d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
           </svg>
-          Cerrar Sesión
+          {t('nav.logout')}
         </button>
       </div>
     </aside>

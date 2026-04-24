@@ -3,21 +3,50 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
+import { useLanguage } from '@/contexts/LanguageContext';
 
-interface Employee {
-  id: string;
-  full_name: string;
+interface Employee { id: string; full_name: string; }
+
+interface MechanicAssignment {
+  id: string;              // local UI key
+  employee_id: string;
+  commission_percentage: string;
 }
 
-interface Assignment {
-  employee_id: string;
-  mechanic_role: 'principal' | 'ayudante';
-  assigned_amount: number;
-  percent_share: string;    // % del precio cobrado (vacío = monto manual)
-  work_notes: string;       // qué hizo este mecánico
+interface ReportTask {
+  id: string;              // local UI key
+  description: string;
+  amount_charged_to_client: string;
+  mechanics: MechanicAssignment[];
+}
+
+function uid() {
+  return Math.random().toString(36).slice(2);
+}
+
+function getWeekRange(dateStr: string) {
+  const date = new Date(dateStr + 'T12:00:00');
+  const day = date.getDay();
+  const diffToMon = day === 0 ? -6 : 1 - day;
+  const monday = new Date(date);
+  monday.setDate(date.getDate() + diffToMon);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return {
+    start: monday.toISOString().split('T')[0],
+    end: sunday.toISOString().split('T')[0],
+  };
+}
+
+function newTask(): ReportTask {
+  return { id: uid(), description: '', amount_charged_to_client: '', mechanics: [newMechanic()] };
+}
+function newMechanic(): MechanicAssignment {
+  return { id: uid(), employee_id: '', commission_percentage: '50' };
 }
 
 export default function NuevaOrdenPage() {
+  const { t } = useLanguage();
   const router = useRouter();
   const supabase = createClient();
 
@@ -26,168 +55,177 @@ export default function NuevaOrdenPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  // Datos del camión
-  const [truckNumber, setTruckNumber] = useState('');
-  const [company, setCompany] = useState('');
-  const [invoiceNumber, setInvoiceNumber] = useState('');
-  const [workDate, setWorkDate] = useState(new Date().toISOString().split('T')[0]);
-  const [description, setDescription] = useState('');
+  // Header fields
+  const [externalOrderNumber, setExternalOrderNumber] = useState('');
+  const [truckNumber, setTruckNumber]     = useState('');
+  const [company, setCompany]             = useState('');
+  const [workDate, setWorkDate]           = useState(new Date().toISOString().split('T')[0]);
+  const [notes, setNotes]                 = useState('');
 
-  // Precio cobrado al cliente
-  const [priceCharged, setPriceCharged] = useState('');
-
-  // Asignaciones por mecánico
-  const [assignments, setAssignments] = useState<Assignment[]>([
-    { employee_id: '', mechanic_role: 'principal', assigned_amount: 0, percent_share: '', work_notes: '' },
-  ]);
-
-  function getWeekRange(dateStr: string) {
-    const date = new Date(dateStr + 'T12:00:00');
-    const day = date.getDay();
-    const diffToMon = day === 0 ? -6 : 1 - day;
-    const monday = new Date(date);
-    monday.setDate(date.getDate() + diffToMon);
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    return {
-      start: monday.toISOString().split('T')[0],
-      end: sunday.toISOString().split('T')[0],
-    };
-  }
+  // Tasks
+  const [tasks, setTasks] = useState<ReportTask[]>([newTask()]);
 
   useEffect(() => {
-    supabase
-      .from('employees')
-      .select('id, full_name')
-      .order('full_name')
-      .then(({ data }) => setEmployees(data ?? []));
+    (supabase as any).from('employees').select('id, full_name').order('full_name')
+      .then(({ data }: any) => setEmployees(data ?? []));
   }, []);
 
-  function addAssignment() {
-    setAssignments([...assignments, { employee_id: '', mechanic_role: 'ayudante', assigned_amount: 0, percent_share: '', work_notes: '' }]);
+  // ─── Task helpers ────────────────────────────────────────────────────────
+  function addTask() {
+    setTasks(prev => [...prev, newTask()]);
+  }
+  function removeTask(taskId: string) {
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+  }
+  function updateTask(taskId: string, field: keyof ReportTask, value: string) {
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, [field]: value } : t));
   }
 
-  function removeAssignment(index: number) {
-    setAssignments(assignments.filter((_, i) => i !== index));
+  // ─── Mechanic helpers ────────────────────────────────────────────────────
+  function addMechanic(taskId: string) {
+    setTasks(prev => prev.map(t =>
+      t.id === taskId ? { ...t, mechanics: [...t.mechanics, newMechanic()] } : t
+    ));
+  }
+  function removeMechanic(taskId: string, mechId: string) {
+    setTasks(prev => prev.map(t =>
+      t.id === taskId ? { ...t, mechanics: t.mechanics.filter(m => m.id !== mechId) } : t
+    ));
+  }
+  function updateMechanic(taskId: string, mechId: string, field: keyof MechanicAssignment, value: string) {
+    setTasks(prev => prev.map(t =>
+      t.id === taskId
+        ? { ...t, mechanics: t.mechanics.map(m => m.id === mechId ? { ...m, [field]: value } : m) }
+        : t
+    ));
   }
 
-  function updateAssignment(index: number, field: keyof Assignment, value: string | number) {
-    const updated = [...assignments];
-    const price = parseFloat(priceCharged) || 0;
-
-    if (field === 'percent_share') {
-      const pct = parseFloat(value as string) || 0;
-      const calculated = price > 0 ? parseFloat(((price * pct) / 100).toFixed(2)) : updated[index].assigned_amount;
-      updated[index] = {
-        ...updated[index],
-        percent_share: value as string,
-        assigned_amount: price > 0 ? calculated : updated[index].assigned_amount,
-      };
-    } else if (field === 'assigned_amount') {
-      // Si cambia el monto manual, limpiar el % para no confundir
-      updated[index] = { ...updated[index], assigned_amount: Number(value), percent_share: '' };
-    } else {
-      updated[index] = { ...updated[index], [field]: value };
-    }
-
-    setAssignments(updated);
+  // ─── Computed payout ─────────────────────────────────────────────────────
+  function mechanicPayout(amount: string, pct: string) {
+    const a = parseFloat(amount) || 0;
+    const p = parseFloat(pct) || 0;
+    return (a * p) / 100;
+  }
+  function taskProfit(task: ReportTask) {
+    const amount = parseFloat(task.amount_charged_to_client) || 0;
+    const totalPayout = task.mechanics.reduce(
+      (s, m) => s + mechanicPayout(task.amount_charged_to_client, m.commission_percentage), 0
+    );
+    return amount - totalPayout;
   }
 
-  // Cuando cambia el precio cobrado, recalcular los montos de quienes tienen %
-  function handlePriceChange(val: string) {
-    setPriceCharged(val);
-    const price = parseFloat(val) || 0;
-    setAssignments(prev => prev.map(a => {
-      const pct = parseFloat(a.percent_share);
-      if (!isNaN(pct) && pct > 0 && price > 0) {
-        return { ...a, assigned_amount: parseFloat(((price * pct) / 100).toFixed(2)) };
-      }
-      return a;
-    }));
-  }
-
-  const totalAsignado = assignments.reduce((s, a) => s + Number(a.assigned_amount || 0), 0);
-
+  // ─── Submit ──────────────────────────────────────────────────────────────
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
 
-    if (!truckNumber.trim()) return setError('El numero de camion es requerido.');
-    if (assignments.some((a) => !a.employee_id)) return setError('Seleccione un mecanico para cada asignacion.');
-    if (assignments.some((a) => Number(a.assigned_amount) <= 0)) return setError('El monto de cada mecanico debe ser mayor a $0.');
-    const principalCount = assignments.filter((a) => a.mechanic_role === 'principal').length;
-    if (principalCount !== 1) return setError('Debe haber exactamente un mecanico Principal.');
+    if (!truckNumber.trim()) return setError(t('newReport.errors.truckRequired'));
+    if (!company.trim())     return setError(t('newReport.errors.companyRequired'));
+    if (tasks.length === 0)  return setError(t('newReport.errors.atLeastOneTask'));
+
+    for (const task of tasks) {
+      if (!task.description.trim())                    return setError(t('newReport.errors.taskDescRequired'));
+      if ((parseFloat(task.amount_charged_to_client) || 0) <= 0) return setError(t('newReport.errors.taskAmountRequired'));
+      if (task.mechanics.length === 0)                 return setError(t('newReport.errors.atLeastOneMechanic'));
+      for (const m of task.mechanics) {
+        if (!m.employee_id)                          return setError(t('newReport.errors.mechanicRequired'));
+        if ((parseFloat(m.commission_percentage) || 0) <= 0) return setError(t('newReport.errors.commissionRequired'));
+      }
+    }
 
     setLoading(true);
-
     const { start: weekStart, end: weekEnd } = getWeekRange(workDate);
-    const principalAssignment = assignments.find((a) => a.mechanic_role === 'principal')!;
 
-    const { data: order, error: orderErr } = await (supabase as any)
-      .from('work_orders')
+    // 1. Insert work_report
+    const { data: report, error: reportErr } = await (supabase as any)
+      .from('work_reports')
       .insert({
-        employee_id: principalAssignment.employee_id,
+        external_order_number: externalOrderNumber.trim() || null,
         truck_number: truckNumber.trim(),
-        unit: truckNumber.trim(),
-        company: company.trim() || 'Sin empresa',
-        invoice_number: invoiceNumber.trim() || null,
+        company: company.trim(),
         work_date: workDate,
-        description: description.trim() || null,
-        labor_amount: totalAsignado,
-        price_charged: priceCharged ? parseFloat(priceCharged) : null,
-        week_start: weekStart,
-        week_end: weekEnd,
-        status: 'approved',
+        notes: notes.trim() || null,
       })
       .select('id')
       .single();
 
-    if (orderErr || !order) {
-      setError('Error al crear la orden: ' + (orderErr?.message ?? 'desconocido'));
+    if (reportErr || !report) {
+      setError('Error al crear reporte: ' + (reportErr?.message ?? 'desconocido'));
       setLoading(false);
       return;
     }
 
-    for (const a of assignments) {
-      const { data: assign, error: assignErr } = await (supabase as any)
-        .from('work_order_assignments')
+    // 2. Insert tasks + assignments + earned_entries
+    for (let sortOrder = 0; sortOrder < tasks.length; sortOrder++) {
+      const task = tasks[sortOrder];
+      const amountCharged = parseFloat(task.amount_charged_to_client);
+
+      const { data: dbTask, error: taskErr } = await (supabase as any)
+        .from('report_tasks')
         .insert({
-          work_order_id: order.id,
-          employee_id: a.employee_id,
-          mechanic_role: a.mechanic_role,
-          assignment_mode: 'manual',
-          assigned_amount: Number(a.assigned_amount),
-          manual_amount: Number(a.assigned_amount),
-          approved_amount: Number(a.assigned_amount),
-          percent_share: a.percent_share ? parseFloat(a.percent_share) : null,
-          work_notes: a.work_notes.trim() || null,
+          report_id: report.id,
+          description: task.description.trim(),
+          amount_charged_to_client: amountCharged,
+          sort_order: sortOrder,
         })
         .select('id')
         .single();
 
-      if (assignErr || !assign) {
-        setError('Error al guardar asignacion: ' + (assignErr?.message ?? 'desconocido'));
+      if (taskErr || !dbTask) {
+        setError('Error al guardar tarea: ' + (taskErr?.message ?? 'desconocido'));
         setLoading(false);
         return;
       }
 
-      await (supabase as any).from('earned_entries').upsert({
-        work_order_id: order.id,
-        assignment_id: assign.id,
-        employee_id: a.employee_id,
-        truck_number: truckNumber.trim(),
-        mechanic_role: a.mechanic_role,
-        amount: Number(a.assigned_amount),
-        work_date: workDate,
-        week_start: weekStart,
-        week_end: weekEnd,
-      }, { onConflict: 'assignment_id' });
+      for (const m of task.mechanics) {
+        const pct    = parseFloat(m.commission_percentage);
+        const payout = parseFloat(((amountCharged * pct) / 100).toFixed(2));
+
+        const { data: assignment, error: assignErr } = await (supabase as any)
+          .from('task_assignments')
+          .insert({
+            task_id: dbTask.id,
+            employee_id: m.employee_id,
+            commission_percentage: pct,
+            mechanic_payout: payout,
+          })
+          .select('id')
+          .single();
+
+        if (assignErr || !assignment) {
+          setError('Error al guardar asignación: ' + (assignErr?.message ?? 'desconocido'));
+          setLoading(false);
+          return;
+        }
+
+        // earned_entries for payroll compatibility
+        await (supabase as any).from('earned_entries').insert({
+          task_assignment_id: assignment.id,
+          work_report_id: report.id,
+          employee_id: m.employee_id,
+          amount: payout,
+          work_date: workDate,
+          truck_number: truckNumber.trim(),
+          mechanic_role: 'mechanic',
+          description: task.description.trim(),
+          week_start: weekStart,
+          week_end: weekEnd,
+        });
+      }
     }
 
     setSuccess(true);
     setLoading(false);
     setTimeout(() => router.push('/ordenes'), 1500);
   }
+
+  const grandTotalCharged = tasks.reduce((s, t) => s + (parseFloat(t.amount_charged_to_client) || 0), 0);
+  const grandTotalPayout  = tasks.reduce((s, task) =>
+    s + task.mechanics.reduce((ms, m) => ms + mechanicPayout(task.amount_charged_to_client, m.commission_percentage), 0), 0
+  );
+  const grandTotalProfit  = grandTotalCharged - grandTotalPayout;
+
+  const fmt = (n: number) => '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   if (success) {
     return (
@@ -198,14 +236,12 @@ export default function NuevaOrdenPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <p className="display-font text-xl text-emerald-400">ORDEN CREADA</p>
-          <p className="text-slate-400 text-sm mt-1">Redirigiendo...</p>
+          <p className="display-font text-xl text-emerald-400">{t('newReport.success')}</p>
+          <p className="text-slate-400 text-sm mt-1">{t('newReport.successSub')}</p>
         </div>
       </div>
     );
   }
-
-  const price = parseFloat(priceCharged) || 0;
 
   return (
     <div>
@@ -214,233 +250,214 @@ export default function NuevaOrdenPage() {
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
-          Volver a Ordenes
+          {t('newReport.back')}
         </a>
         <h1 className="display-font text-3xl font-bold text-slate-100 tracking-wide">
-          NUEVA ORDEN DE TRABAJO
+          {t('newReport.title')}
         </h1>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6 max-w-3xl">
+      <form onSubmit={handleSubmit} className="space-y-6 max-w-4xl">
 
-        {/* ─── Datos del camión ─── */}
+        {/* ─── Report Header ─── */}
         <div className="bg-slate-900/60 border border-white/5 rounded-xl p-6">
           <h2 className="display-font text-slate-300 font-semibold mb-5 tracking-wide text-lg">
-            DATOS DEL TRABAJO
+            {t('newReport.header.sectionTitle')}
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-slate-400 text-sm mb-2">Numero de Camion / Unidad *</label>
-              <input
-                type="text"
-                value={truckNumber}
-                onChange={(e) => setTruckNumber(e.target.value)}
-                required
-                placeholder="Ej: TRK-001, Unidad 42"
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition"
-              />
+              <label className="block text-slate-400 text-sm mb-2">{t('newReport.header.orderNumber')}</label>
+              <input type="text" value={externalOrderNumber} onChange={e => setExternalOrderNumber(e.target.value)}
+                placeholder={t('newReport.header.orderNumberPlaceholder')}
+                className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition" />
             </div>
             <div>
-              <label className="block text-slate-400 text-sm mb-2">Empresa / Cliente</label>
-              <input
-                type="text"
-                value={company}
-                onChange={(e) => setCompany(e.target.value)}
-                placeholder="Nombre de la empresa"
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition"
-              />
+              <label className="block text-slate-400 text-sm mb-2">{t('newReport.header.truck')}</label>
+              <input type="text" required value={truckNumber} onChange={e => setTruckNumber(e.target.value)}
+                placeholder={t('newReport.header.truckPlaceholder')}
+                className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition" />
             </div>
             <div>
-              <label className="block text-slate-400 text-sm mb-2">Numero de Factura</label>
-              <input
-                type="text"
-                value={invoiceNumber}
-                onChange={(e) => setInvoiceNumber(e.target.value)}
-                placeholder="Ej: INV-2026-001"
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition"
-              />
+              <label className="block text-slate-400 text-sm mb-2">{t('newReport.header.company')}</label>
+              <input type="text" required value={company} onChange={e => setCompany(e.target.value)}
+                placeholder={t('newReport.header.companyPlaceholder')}
+                className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition" />
             </div>
             <div>
-              <label className="block text-slate-400 text-sm mb-2">Fecha del Trabajo *</label>
-              <input
-                type="date"
-                value={workDate}
-                onChange={(e) => setWorkDate(e.target.value)}
-                required
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 transition"
-              />
+              <label className="block text-slate-400 text-sm mb-2">{t('newReport.header.date')}</label>
+              <input type="date" required value={workDate} onChange={e => setWorkDate(e.target.value)}
+                className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 transition" />
             </div>
-
-            {/* Precio cobrado al cliente — campo destacado */}
             <div className="md:col-span-2">
-              <label className="block text-slate-400 text-sm mb-2">
-                Precio Cobrado al Cliente
-                <span className="ml-2 text-slate-600 text-xs font-normal">(opcional — usado para calcular % por mecánico)</span>
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-400 font-bold text-sm">$</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={priceCharged}
-                  onChange={(e) => handlePriceChange(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full bg-slate-800 border border-amber-500/20 rounded-lg pl-7 pr-4 py-2.5 text-amber-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/60 transition font-medium"
-                />
-              </div>
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-slate-400 text-sm mb-2">Descripcion General del Trabajo</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={2}
-                placeholder="Descripcion breve del trabajo realizado..."
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition resize-none"
-              />
+              <label className="block text-slate-400 text-sm mb-2">{t('newReport.header.notes')}</label>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
+                placeholder={t('newReport.header.notesPlaceholder')}
+                className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition resize-none" />
             </div>
           </div>
         </div>
 
-        {/* ─── Mecánicos asignados ─── */}
+        {/* ─── Tasks ─── */}
         <div className="bg-slate-900/60 border border-white/5 rounded-xl p-6">
           <div className="flex items-center justify-between mb-5">
             <h2 className="display-font text-slate-300 font-semibold tracking-wide text-lg">
-              MECANICOS ASIGNADOS
+              {t('newReport.tasks.sectionTitle')}
             </h2>
-            <button
-              type="button"
-              onClick={addAssignment}
-              className="text-amber-400 hover:text-amber-300 text-sm flex items-center gap-1 border border-amber-500/30 hover:border-amber-400/50 rounded-lg px-3 py-1.5 transition"
-            >
+            <button type="button" onClick={addTask}
+              className="text-amber-400 hover:text-amber-300 text-sm flex items-center gap-1.5 border border-amber-500/30 hover:border-amber-400/50 rounded-lg px-3 py-1.5 transition">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              Agregar Mecanico
+              {t('newReport.tasks.addTask')}
             </button>
           </div>
 
-          <div className="space-y-5">
-            {assignments.map((a, idx) => (
-              <div key={idx} className="bg-slate-800/50 border border-white/5 rounded-xl p-4 space-y-3">
-                {/* Fila 1: Mecánico, Rol, X */}
-                <div className="flex items-center gap-3">
-                  <div className="flex-1">
-                    <label className="block text-slate-500 text-xs mb-1.5">Mecánico *</label>
-                    <select
-                      value={a.employee_id}
-                      onChange={(e) => updateAssignment(idx, 'employee_id', e.target.value)}
-                      required
-                      className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 text-sm transition"
-                    >
-                      <option value="">Seleccionar...</option>
-                      {employees.map((emp) => (
-                        <option key={emp.id} value={emp.id}>{emp.full_name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="w-36">
-                    <label className="block text-slate-500 text-xs mb-1.5">Rol</label>
-                    <select
-                      value={a.mechanic_role}
-                      onChange={(e) => updateAssignment(idx, 'mechanic_role', e.target.value)}
-                      className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 text-sm transition"
-                    >
-                      <option value="principal">Principal</option>
-                      <option value="ayudante">Ayudante</option>
-                    </select>
-                  </div>
-                  {assignments.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeAssignment(idx)}
-                      className="mt-5 text-slate-600 hover:text-red-400 transition p-1.5"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
+          <div className="space-y-4">
+            {tasks.map((task, taskIdx) => {
+              const amount = parseFloat(task.amount_charged_to_client) || 0;
+              const profit = taskProfit(task);
 
-                {/* Fila 2: % y Monto */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-500 text-xs mb-1.5">
-                      % que le toca
-                      {price > 0 && <span className="text-slate-600 ml-1">(de ${price.toLocaleString('es-MX', { minimumFractionDigits: 2 })})</span>}
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.1"
-                        value={a.percent_share}
-                        onChange={(e) => updateAssignment(idx, 'percent_share', e.target.value)}
-                        placeholder="Ej: 40"
-                        className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 pr-8 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 text-sm transition"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">%</span>
-                    </div>
-                    {price > 0 && a.percent_share && (
-                      <p className="text-xs text-amber-400/70 mt-1">
-                        = ${((price * parseFloat(a.percent_share || '0')) / 100).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                      </p>
+              return (
+                <div key={task.id} className="border border-white/8 rounded-xl bg-slate-800/40 overflow-hidden">
+                  {/* Task header */}
+                  <div className="flex items-center justify-between px-4 py-2.5 bg-slate-800/60 border-b border-white/5">
+                    <span className="display-font text-slate-400 text-xs tracking-widest">
+                      {t('newReport.tasks.task').toUpperCase()} {taskIdx + 1}
+                    </span>
+                    {tasks.length > 1 && (
+                      <button type="button" onClick={() => removeTask(task.id)}
+                        className="text-slate-600 hover:text-red-400 transition text-xs flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        {t('newReport.tasks.removeTask')}
+                      </button>
                     )}
                   </div>
-                  <div>
-                    <label className="block text-slate-500 text-xs mb-1.5">Monto a Devengar ($) *</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={a.assigned_amount || ''}
-                        onChange={(e) => updateAssignment(idx, 'assigned_amount', e.target.value)}
-                        required
-                        placeholder="0.00"
-                        className="w-full bg-slate-700 border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 text-sm transition"
-                      />
+
+                  <div className="p-4 space-y-4">
+                    {/* Description + Amount */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="md:col-span-2">
+                        <label className="block text-slate-500 text-xs mb-1.5">{t('newReport.tasks.description')}</label>
+                        <input type="text" required
+                          value={task.description}
+                          onChange={e => updateTask(task.id, 'description', e.target.value)}
+                          placeholder={t('newReport.tasks.descriptionPlaceholder')}
+                          className="w-full bg-slate-700/60 border border-white/10 rounded-lg px-3 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 text-sm transition" />
+                      </div>
+                      <div>
+                        <label className="block text-slate-500 text-xs mb-1.5">{t('newReport.tasks.amountCharged')}</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-400 text-sm font-bold">$</span>
+                          <input type="number" min="0" step="0.01" required
+                            value={task.amount_charged_to_client}
+                            onChange={e => updateTask(task.id, 'amount_charged_to_client', e.target.value)}
+                            placeholder="0.00"
+                            className="w-full bg-slate-700/60 border border-amber-500/20 rounded-lg pl-7 pr-3 py-2.5 text-amber-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/60 text-sm transition" />
+                        </div>
+                      </div>
                     </div>
+
+                    {/* Mechanics */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-slate-500 text-xs">{t('newReport.tasks.mechanicsTitle')}</label>
+                        <button type="button" onClick={() => addMechanic(task.id)}
+                          className="text-sky-400 hover:text-sky-300 text-xs flex items-center gap-1 border border-sky-500/20 hover:border-sky-400/30 rounded px-2 py-1 transition">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                          {t('newReport.tasks.addMechanic')}
+                        </button>
+                      </div>
+
+                      <div className="space-y-2">
+                        {task.mechanics.map((m) => {
+                          const payout = mechanicPayout(task.amount_charged_to_client, m.commission_percentage);
+                          return (
+                            <div key={m.id} className="flex items-center gap-2 bg-slate-700/30 rounded-lg px-3 py-2">
+                              {/* Employee select */}
+                              <select required value={m.employee_id}
+                                onChange={e => updateMechanic(task.id, m.id, 'employee_id', e.target.value)}
+                                className="flex-1 bg-slate-700 border border-white/10 rounded-lg px-2 py-1.5 text-slate-100 focus:outline-none focus:border-amber-400/50 text-sm transition">
+                                <option value="">{t('newReport.tasks.selectMechanic')}</option>
+                                {employees.map(emp => (
+                                  <option key={emp.id} value={emp.id}>{emp.full_name}</option>
+                                ))}
+                              </select>
+
+                              {/* Commission % */}
+                              <div className="relative w-24">
+                                <input type="number" min="0" max="100" step="0.1" required
+                                  value={m.commission_percentage}
+                                  onChange={e => updateMechanic(task.id, m.id, 'commission_percentage', e.target.value)}
+                                  placeholder="50"
+                                  className="w-full bg-slate-700 border border-white/10 rounded-lg px-2 pr-6 py-1.5 text-slate-100 focus:outline-none focus:border-amber-400/50 text-sm transition" />
+                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 text-xs">%</span>
+                              </div>
+
+                              {/* Calculated payout */}
+                              <div className="w-28 text-right">
+                                <span className="text-xs text-slate-500">{t('newReport.tasks.payout')}: </span>
+                                <span className="text-sm font-semibold text-emerald-400">{fmt(payout)}</span>
+                              </div>
+
+                              {/* Remove */}
+                              {task.mechanics.length > 1 && (
+                                <button type="button" onClick={() => removeMechanic(task.id, m.id)}
+                                  className="text-slate-600 hover:text-red-400 transition p-1 flex-shrink-0">
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Task profit */}
+                    {amount > 0 && (
+                      <div className="flex justify-end">
+                        <div className="text-right">
+                          <p className="text-slate-600 text-xs">{t('newReport.tasks.companyProfit')}</p>
+                          <p className={`text-sm font-semibold ${profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {fmt(profit)}
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-
-                {/* Fila 3: Lo que hizo el mecánico */}
-                <div>
-                  <label className="block text-slate-500 text-xs mb-1.5">¿Qué hizo este mecánico?</label>
-                  <input
-                    type="text"
-                    value={a.work_notes}
-                    onChange={(e) => updateAssignment(idx, 'work_notes', e.target.value)}
-                    placeholder="Ej: Cambio de frenos delanteros, ajuste de suspensión..."
-                    className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 text-sm transition"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-5 pt-4 border-t border-white/5 flex items-end justify-between">
-            {price > 0 && (
-              <div>
-                <p className="text-slate-500 text-xs">Precio cobrado</p>
-                <p className="text-slate-300 font-semibold">
-                  ${price.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                </p>
-              </div>
-            )}
-            <div className="text-right ml-auto">
-              <p className="text-slate-500 text-sm">Total a Devengar</p>
-              <p className="display-font text-2xl font-bold text-amber-400">
-                ${totalAsignado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-              </p>
-            </div>
+              );
+            })}
           </div>
         </div>
+
+        {/* ─── Summary ─── */}
+        {grandTotalCharged > 0 && (
+          <div className="bg-slate-900/60 border border-white/5 rounded-xl p-6">
+            <h2 className="display-font text-slate-300 font-semibold mb-4 tracking-wide text-lg">
+              {t('newReport.summary.title')}
+            </h2>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-slate-800/60 rounded-xl p-4">
+                <p className="text-slate-500 text-xs mb-1">{t('newReport.summary.totalCharged')}</p>
+                <p className="display-font text-xl font-bold text-slate-100">{fmt(grandTotalCharged)}</p>
+              </div>
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
+                <p className="text-slate-500 text-xs mb-1">{t('newReport.summary.totalMechanicPayout')}</p>
+                <p className="display-font text-xl font-bold text-amber-400">{fmt(grandTotalPayout)}</p>
+              </div>
+              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4">
+                <p className="text-slate-500 text-xs mb-1">{t('newReport.summary.totalCompanyProfit')}</p>
+                <p className="display-font text-xl font-bold text-emerald-400">{fmt(grandTotalProfit)}</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-red-400 text-sm">
@@ -449,18 +466,13 @@ export default function NuevaOrdenPage() {
         )}
 
         <div className="flex gap-3">
-          <button
-            type="submit"
-            disabled={loading}
-            className="bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-slate-950 font-bold py-3 px-8 rounded-lg transition-all display-font tracking-wide"
-          >
-            {loading ? 'GUARDANDO...' : 'GUARDAR ORDEN'}
+          <button type="submit" disabled={loading}
+            className="bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-slate-950 font-bold py-3 px-8 rounded-lg transition-all display-font tracking-wide">
+            {loading ? t('newReport.saving') : t('newReport.save')}
           </button>
-          <a
-            href="/ordenes"
-            className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-3 px-6 rounded-lg transition-all text-sm flex items-center"
-          >
-            Cancelar
+          <a href="/ordenes"
+            className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-3 px-6 rounded-lg transition-all text-sm flex items-center">
+            {t('newReport.cancel')}
           </a>
         </div>
       </form>

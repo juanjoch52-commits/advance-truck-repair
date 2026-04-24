@@ -14,12 +14,12 @@ export default async function NominaPage({
   const desde = params.desde ?? defaultDesde;
   const hasta = params.hasta ?? defaultHasta;
 
-  const { data: entries } = await supabase
+  const { data: entries } = await (supabase as any)
     .from('earned_entries')
     .select(`
-      id, amount, work_date, truck_number, mechanic_role,
+      id, amount, work_date, truck_number, description,
       employees!earned_entries_employee_id_fkey(full_name),
-      work_orders!earned_entries_work_order_id_fkey(company, invoice_number)
+      work_reports!earned_entries_work_report_id_fkey(company, external_order_number)
     `)
     .gte('work_date', desde)
     .lte('work_date', hasta)
@@ -95,9 +95,9 @@ export default async function NominaPage({
                 <thead>
                   <tr className="border-b border-white/5">
                     <th className="text-left px-5 py-2 text-slate-600 font-normal">Fecha</th>
-                    <th className="text-left px-5 py-2 text-slate-600 font-normal">Camion</th>
+                    <th className="text-left px-5 py-2 text-slate-600 font-normal">Camión</th>
                     <th className="text-left px-5 py-2 text-slate-600 font-normal">Empresa</th>
-                    <th className="text-left px-5 py-2 text-slate-600 font-normal">Rol</th>
+                    <th className="text-left px-5 py-2 text-slate-600 font-normal">Tarea</th>
                     <th className="text-right px-5 py-2 text-slate-600 font-normal">Monto</th>
                   </tr>
                 </thead>
@@ -108,16 +108,8 @@ export default async function NominaPage({
                         {new Date(e.work_date + 'T12:00:00').toLocaleDateString('es-MX')}
                       </td>
                       <td className="px-5 py-2.5 text-slate-300">{e.truck_number ?? '—'}</td>
-                      <td className="px-5 py-2.5 text-slate-400">{e.work_orders?.company ?? '—'}</td>
-                      <td className="px-5 py-2.5">
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${
-                          e.mechanic_role === 'principal'
-                            ? 'bg-amber-500/20 text-amber-400'
-                            : 'bg-slate-700 text-slate-400'
-                        }`}>
-                          {e.mechanic_role === 'principal' ? 'Principal' : 'Ayudante'}
-                        </span>
-                      </td>
+                      <td className="px-5 py-2.5 text-slate-400">{(e as any).work_reports?.company ?? '—'}</td>
+                      <td className="px-5 py-2.5 text-slate-400 italic text-xs">{(e as any).description ?? '—'}</td>
                       <td className="px-5 py-2.5 text-right text-emerald-400 font-medium">
                         ${Number(e.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                       </td>

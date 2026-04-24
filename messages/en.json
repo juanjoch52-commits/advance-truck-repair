@@ -1,0 +1,189 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "workReports": "Work Orders",
+    "staff": "Staff",
+    "payroll": "Payroll",
+    "weeklyCut": "Weekly Cut",
+    "reports": "PDF Reports",
+    "users": "System Users",
+    "logout": "Sign Out"
+  },
+  "workReports": {
+    "title": "WORK ORDERS",
+    "newButton": "NEW ORDER",
+    "filters": {
+      "dateFrom": "From",
+      "dateTo": "To",
+      "mechanic": "Mechanic",
+      "allMechanics": "All mechanics",
+      "filter": "Filter",
+      "clear": "Clear",
+      "globalView": "Global View"
+    },
+    "table": {
+      "date": "Date",
+      "truck": "Truck",
+      "company": "Company",
+      "orderNumber": "Order #",
+      "tasks": "Tasks",
+      "totalCharged": "Total Charged",
+      "totalPayout": "Mechanic Payout",
+      "companyProfit": "Shop Profit"
+    },
+    "empty": "No orders found for this period.",
+    "emptyAction": "Create first order",
+    "records": "orders registered"
+  },
+  "newReport": {
+    "title": "NEW WORK ORDER",
+    "back": "Back to Orders",
+    "header": {
+      "sectionTitle": "REPORT DETAILS",
+      "orderNumber": "External Order #",
+      "orderNumberPlaceholder": "Number from other platform (optional)",
+      "truck": "Truck / Unit *",
+      "truckPlaceholder": "E.g.: TRK-001, Unit 42",
+      "company": "Company / Client *",
+      "companyPlaceholder": "Company name",
+      "date": "Work Date *",
+      "notes": "General Notes",
+      "notesPlaceholder": "General observations about this report..."
+    },
+    "tasks": {
+      "sectionTitle": "TASKS PERFORMED",
+      "addTask": "Add Task",
+      "task": "Task",
+      "description": "Task description *",
+      "descriptionPlaceholder": "E.g.: Front brake replacement, suspension adjustment...",
+      "amountCharged": "Amount charged to client ($) *",
+      "addMechanic": "Add Mechanic",
+      "mechanicsTitle": "Assigned mechanics",
+      "selectMechanic": "Select mechanic...",
+      "commission": "% Commission",
+      "payout": "Payout",
+      "companyProfit": "Shop profit",
+      "removeTask": "Remove task",
+      "removeMechanic": "Remove"
+    },
+    "summary": {
+      "title": "FINANCIAL SUMMARY",
+      "totalCharged": "Total charged to client",
+      "totalMechanicPayout": "Total mechanic payout",
+      "totalCompanyProfit": "Shop profit"
+    },
+    "save": "SAVE ORDER",
+    "saving": "SAVING...",
+    "cancel": "Cancel",
+    "success": "ORDER CREATED",
+    "successSub": "Redirecting...",
+    "errors": {
+      "truckRequired": "Truck number is required.",
+      "companyRequired": "Company/client is required.",
+      "atLeastOneTask": "You must add at least one task.",
+      "taskDescRequired": "Each task needs a description.",
+      "taskAmountRequired": "The amount charged per task must be greater than $0.",
+      "atLeastOneMechanic": "Each task must have at least one mechanic assigned.",
+      "mechanicRequired": "Select a mechanic for each assignment.",
+      "commissionRequired": "Commission must be greater than 0%."
+    }
+  },
+  "pdf": {
+    "modalTitle": "Select PDF Language",
+    "modalSubtitle": "The report will be generated in the selected language.",
+    "spanish": "Español",
+    "english": "English",
+    "generating": "GENERATING PDF...",
+    "download": "DOWNLOAD PDF",
+    "cancel": "Cancel",
+    "type": {
+      "semanal": "Weekly",
+      "mensual": "Monthly",
+      "anual": "Annual"
+    },
+    "period": {
+      "label": "Period",
+      "week": "Week",
+      "month": "Month",
+      "year": "Year"
+    },
+    "reportTitle": {
+      "semanal": "WEEKLY PAYROLL REPORT",
+      "mensual": "MONTHLY PAYROLL REPORT",
+      "anual": "ANNUAL PAYROLL REPORT"
+    },
+    "header": {
+      "company": "ADVANCE TRUCK REPAIR",
+      "system": "Payroll Management System",
+      "issued": "Issued"
+    },
+    "summary": {
+      "totalPayroll": "TOTAL PAYROLL",
+      "mechanics": "MECHANICS",
+      "records": "RECORDS"
+    },
+    "checksTable": "PAYCHECK TABLE",
+    "table": {
+      "num": "#",
+      "mechanic": "Mechanic",
+      "jobs": "Jobs",
+      "amount": "Amount to Pay",
+      "totalEarned": "Total Earned",
+      "total": "GRAND TOTAL",
+      "date": "Date",
+      "truck": "Truck",
+      "company": "Company",
+      "role": "Role",
+      "principal": "Lead",
+      "assistant": "Assistant"
+    },
+    "footer": "Advance Truck Repair | Payroll System | Page"
+  },
+  "payroll": {
+    "title": "PAYROLL",
+    "subtitle": "History of amounts assigned per work order",
+    "filters": {
+      "from": "From",
+      "to": "To",
+      "filter": "Filter",
+      "clear": "Clear"
+    },
+    "stats": {
+      "totalEarned": "Total Earned",
+      "records": "Records",
+      "mechanicsWithPay": "Mechanics with pay"
+    },
+    "table": {
+      "date": "Date",
+      "truck": "Truck",
+      "company": "Company",
+      "task": "Task",
+      "amount": "Amount"
+    },
+    "empty": "No records for this period."
+  },
+  "weeklyCut": {
+    "title": "WEEKLY CUT",
+    "subtitle": "Payment summary for check issuance",
+    "prevWeek": "Previous week",
+    "nextWeek": "Next week",
+    "cutWeek": "CUT WEEK",
+    "generatePdf": "Generate PDF for this week",
+    "checksTable": "PAYCHECK TABLE",
+    "stats": {
+      "totalToPay": "Total to Pay",
+      "mechanicsToPay": "Mechanics to pay",
+      "jobsDone": "Jobs completed"
+    },
+    "table": {
+      "num": "#",
+      "mechanic": "Mechanic",
+      "jobs": "Jobs",
+      "totalEarned": "Total Earned",
+      "checkAmount": "Check Amount"
+    },
+    "totalPayroll": "WEEKLY PAYROLL TOTAL",
+    "empty": "No payment records for this week.",
+    "emptyAction": "Register an order"
+  }
+}

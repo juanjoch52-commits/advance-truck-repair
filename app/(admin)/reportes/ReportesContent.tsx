@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
+import { useLanguage, getTranslator, type Lang } from '@/contexts/LanguageContext';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -21,6 +22,7 @@ function getWeekRange() {
 
 export default function ReportesContent() {
   const searchParams = useSearchParams();
+  const { t: tUI } = useLanguage();
   const supabase = createClient();
 
   const now = new Date();
@@ -32,15 +34,19 @@ export default function ReportesContent() {
   const [mes, setMes] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
   const [anio, setAnio] = useState(String(now.getFullYear()));
   const [loading, setLoading] = useState(false);
+  const [showLangModal, setShowLangModal] = useState(false);
 
   const formatMoney = (n: number) =>
     '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  const formatDate = (d: string) =>
-    new Date(d + 'T12:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
+  const formatDate = (d: string, locale = 'es-MX') =>
+    new Date(d + 'T12:00:00').toLocaleDateString(locale, { day: '2-digit', month: 'long', year: 'numeric' });
 
-  async function generarPDF() {
+  async function generarPDF(pdfLang: Lang) {
+    setShowLangModal(false);
     setLoading(true);
+    const t = getTranslator(pdfLang);
+    const locale = pdfLang === 'en' ? 'en-US' : 'es-MX';
 
     let fechaDesde = desde;
     let fechaHasta = hasta;
@@ -51,25 +57,25 @@ export default function ReportesContent() {
       const [y, m] = mes.split('-').map(Number);
       fechaDesde = new Date(y, m - 1, 1).toISOString().split('T')[0];
       fechaHasta = new Date(y, m, 0).toISOString().split('T')[0];
-      const mesNombre = new Date(y, m - 1, 15).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
-      titulo = 'REPORTE MENSUAL DE NOMINA';
-      subtitulo = `Periodo: ${mesNombre.toUpperCase()}`;
+      const mesNombre = new Date(y, m - 1, 15).toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+      titulo = t('pdf.reportTitle.mensual');
+      subtitulo = `${t('pdf.period.label')}: ${mesNombre.toUpperCase()}`;
     } else if (tipo === 'anual') {
       fechaDesde = `${anio}-01-01`;
       fechaHasta = `${anio}-12-31`;
-      titulo = 'REPORTE ANUAL DE NOMINA';
-      subtitulo = `Anio: ${anio}`;
+      titulo = t('pdf.reportTitle.anual');
+      subtitulo = `${t('pdf.period.year')}: ${anio}`;
     } else {
-      titulo = 'REPORTE SEMANAL DE NOMINA';
-      subtitulo = `Semana: ${formatDate(desde)} - ${formatDate(hasta)}`;
+      titulo = t('pdf.reportTitle.semanal');
+      subtitulo = `${t('pdf.period.week')}: ${formatDate(desde, locale)} — ${formatDate(hasta, locale)}`;
     }
 
-    const { data: entries } = await supabase
+    const { data: entries } = await (supabase as any)
       .from('earned_entries')
       .select(`
-        id, amount, work_date, truck_number, mechanic_role,
+        id, amount, work_date, truck_number, description,
         employees!earned_entries_employee_id_fkey(full_name),
-        work_orders!earned_entries_work_order_id_fkey(company, invoice_number)
+        work_reports!earned_entries_work_report_id_fkey(company, external_order_number)
       `)
       .gte('work_date', fechaDesde)
       .lte('work_date', fechaHasta)
@@ -85,7 +91,7 @@ export default function ReportesContent() {
 
     const byEmployee: Record<string, { name: string; total: number; rows: any[] }> = {};
     for (const e of data) {
-      const name = (e.employees as any)?.full_name ?? 'Sin nombre';
+      const name = (e as any).employees?.full_name ?? 'Sin nombre';
       if (!byEmployee[name]) byEmployee[name] = { name, total: 0, rows: [] };
       byEmployee[name].total += Number(e.amount);
       byEmployee[name].rows.push(e);
@@ -97,28 +103,24 @@ export default function ReportesContent() {
     const pageW = doc.internal.pageSize.getWidth();
     const margin = 15;
 
-    // Encabezado oscuro
+    // Header
     doc.setFillColor(15, 23, 36);
     doc.rect(0, 0, pageW, 40, 'F');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(18);
     doc.setTextColor(251, 191, 36);
-    doc.text('ADVANCE TRUCK REPAIR', margin, 16);
+    doc.text(t('pdf.header.company'), margin, 16);
     doc.setFontSize(10);
     doc.setTextColor(148, 163, 184);
-    doc.text('Sistema Administrativo de Nomina', margin, 23);
+    doc.text(t('pdf.header.system'), margin, 23);
     doc.setFontSize(9);
     doc.setTextColor(100, 116, 139);
-    const fechaEmision = new Date().toLocaleDateString('es-MX', {
-      day: '2-digit', month: 'long', year: 'numeric',
-    });
-    doc.text(`Emitido: ${fechaEmision}`, pageW - margin, 23, { align: 'right' });
+    const fechaEmision = new Date().toLocaleDateString(locale, { day: '2-digit', month: 'long', year: 'numeric' });
+    doc.text(`${t('pdf.header.issued')}: ${fechaEmision}`, pageW - margin, 23, { align: 'right' });
 
-    // Linea dorada
     doc.setFillColor(245, 158, 11);
     doc.rect(0, 40, pageW, 1, 'F');
 
-    // Titulo
     doc.setFillColor(248, 250, 252);
     doc.rect(0, 41, pageW, 22, 'F');
     doc.setFont('helvetica', 'bold');
@@ -132,44 +134,43 @@ export default function ReportesContent() {
 
     let y = 72;
 
-    // Resumen
+    // Summary box
     doc.setFillColor(241, 245, 249);
     doc.roundedRect(margin, y, pageW - margin * 2, 20, 2, 2, 'F');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
     doc.setTextColor(71, 85, 105);
-    doc.text('TOTAL NOMINA', margin + 5, y + 7);
+    doc.text(t('pdf.summary.totalPayroll'), margin + 5, y + 7);
     doc.setFontSize(14);
     doc.setTextColor(5, 150, 105);
     doc.text(formatMoney(totalGeneral), margin + 5, y + 15);
     doc.setFontSize(9);
     doc.setTextColor(71, 85, 105);
-    doc.text('MECANICOS', pageW / 2 - 10, y + 7);
+    doc.text(t('pdf.summary.mechanics'), pageW / 2 - 10, y + 7);
     doc.setFontSize(14);
     doc.setTextColor(30, 41, 59);
     doc.text(String(mechanics.length), pageW / 2 - 10, y + 15);
     doc.setFontSize(9);
     doc.setTextColor(71, 85, 105);
-    doc.text('REGISTROS', pageW - margin - 50, y + 7);
+    doc.text(t('pdf.summary.records'), pageW - margin - 50, y + 7);
     doc.setFontSize(14);
     doc.setTextColor(30, 41, 59);
     doc.text(String(data.length), pageW - margin - 50, y + 15);
     y += 28;
 
     if (tipo === 'semanal') {
-      // Tabla de cheques
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(11);
       doc.setTextColor(30, 41, 59);
-      doc.text('TABLA DE CHEQUES', margin, y);
+      doc.text(t('pdf.checksTable'), margin, y);
       y += 6;
 
       autoTable(doc, {
         startY: y,
         margin: { left: margin, right: margin },
-        head: [['#', 'Mecanico', 'Trabajos', 'Monto a Pagar']],
+        head: [[t('pdf.table.num'), t('pdf.table.mechanic'), t('pdf.table.jobs'), t('pdf.table.amount')]],
         body: mechanics.map((m, i) => [i + 1, m.name, m.rows.length, formatMoney(m.total)]),
-        foot: [['', 'TOTAL GENERAL', mechanics.reduce((s, m) => s + m.rows.length, 0), formatMoney(totalGeneral)]],
+        foot: [['', t('pdf.table.total'), mechanics.reduce((s, m) => s + m.rows.length, 0), formatMoney(totalGeneral)]],
         headStyles: { fillColor: [15, 23, 36], textColor: [251, 191, 36], fontStyle: 'bold', fontSize: 9 },
         footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 9 },
         bodyStyles: { fontSize: 9, textColor: [51, 65, 85] },
@@ -183,7 +184,6 @@ export default function ReportesContent() {
 
       y = (doc as any).lastAutoTable.finalY + 10;
 
-      // Detalle por mecanico
       for (const m of mechanics) {
         if (y > 230) { doc.addPage(); y = 20; }
         doc.setFont('helvetica', 'bold');
@@ -199,12 +199,12 @@ export default function ReportesContent() {
         autoTable(doc, {
           startY: y,
           margin: { left: margin, right: margin },
-          head: [['Fecha', 'Camion', 'Empresa', 'Rol', 'Monto']],
+          head: [[t('pdf.table.date'), t('pdf.table.truck'), t('pdf.table.company'), 'Tarea', t('pdf.table.amount')]],
           body: m.rows.map((e: any) => [
-            new Date(e.work_date + 'T12:00:00').toLocaleDateString('es-MX'),
+            new Date(e.work_date + 'T12:00:00').toLocaleDateString(locale),
             e.truck_number ?? '-',
-            e.work_orders?.company ?? '-',
-            e.mechanic_role === 'principal' ? 'Principal' : 'Ayudante',
+            e.work_reports?.company ?? '-',
+            e.description ?? '-',
             formatMoney(Number(e.amount)),
           ]),
           headStyles: { fillColor: [51, 65, 85], textColor: [203, 213, 225], fontStyle: 'bold', fontSize: 8 },
@@ -219,9 +219,9 @@ export default function ReportesContent() {
       autoTable(doc, {
         startY: y,
         margin: { left: margin, right: margin },
-        head: [['#', 'Mecanico', 'Trabajos', 'Total Devengado']],
+        head: [[t('pdf.table.num'), t('pdf.table.mechanic'), t('pdf.table.jobs'), t('pdf.table.totalEarned')]],
         body: mechanics.map((m, i) => [i + 1, m.name, m.rows.length, formatMoney(m.total)]),
-        foot: [['', 'TOTAL GENERAL', mechanics.reduce((s, m) => s + m.rows.length, 0), formatMoney(totalGeneral)]],
+        foot: [['', t('pdf.table.total'), mechanics.reduce((s, m) => s + m.rows.length, 0), formatMoney(totalGeneral)]],
         headStyles: { fillColor: [15, 23, 36], textColor: [251, 191, 36], fontStyle: 'bold', fontSize: 10 },
         footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 10 },
         bodyStyles: { fontSize: 10, textColor: [51, 65, 85] },
@@ -234,7 +234,7 @@ export default function ReportesContent() {
       });
     }
 
-    // Pie de pagina
+    // Footer pages
     const totalPages = doc.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
       doc.setPage(i);
@@ -242,7 +242,7 @@ export default function ReportesContent() {
       doc.setFontSize(8);
       doc.setTextColor(148, 163, 184);
       doc.text(
-        `Advance Truck Repair | Sistema de Nomina | Pagina ${i} de ${totalPages}`,
+        `${t('pdf.footer')} ${i} / ${totalPages}`,
         pageW / 2,
         doc.internal.pageSize.getHeight() - 8,
         { align: 'center' }
@@ -257,27 +257,22 @@ export default function ReportesContent() {
 
     doc.save(fileName);
 
-    // Guardar auditoría: quién generó este reporte
+    // Audit log
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data: profile } = await (supabase as any)
-          .from('profiles')
-          .select('full_name, email')
-          .eq('id', user.id)
-          .single();
-
+          .from('profiles').select('full_name, email').eq('id', user.id).single();
         await (supabase as any).from('report_logs').insert({
           generated_by: user.id,
           generated_by_name: (profile as any)?.full_name || (profile as any)?.email || user.email,
           tipo,
           fecha_desde: fechaDesde,
           fecha_hasta: fechaHasta,
+          pdf_language: pdfLang,
         });
       }
-    } catch (_) {
-      // La auditoría no bloquea la generación del PDF
-    }
+    } catch (_) {}
 
     setLoading(false);
   }
@@ -286,38 +281,35 @@ export default function ReportesContent() {
     <div>
       <div className="mb-8">
         <h1 className="display-font text-3xl font-bold text-slate-100 tracking-wide">REPORTES PDF</h1>
-        <p className="text-slate-400 mt-1">Generar reportes imprimibles de nomina</p>
+        <p className="text-slate-400 mt-1">Generar reportes imprimibles de nómina</p>
       </div>
 
       <div className="max-w-2xl space-y-6">
+        {/* Tipo */}
         <div className="bg-slate-900/60 border border-white/5 rounded-xl p-6">
           <h2 className="display-font text-slate-300 font-semibold mb-4 tracking-wide">TIPO DE REPORTE</h2>
           <div className="grid grid-cols-3 gap-3">
-            {([ 
-              { key: 'semanal' as TipoReporte, label: 'Semanal', desc: 'Detalle por mecanico para cheques' },
+            {([
+              { key: 'semanal' as TipoReporte, label: 'Semanal', desc: 'Detalle por mecánico para cheques' },
               { key: 'mensual' as TipoReporte, label: 'Mensual', desc: 'Resumen de pagos del mes' },
-              { key: 'anual' as TipoReporte, label: 'Anual', desc: 'Consolidado de pagos del anio' },
-            ]).map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => setTipo(t.key)}
+              { key: 'anual'   as TipoReporte, label: 'Anual',   desc: 'Consolidado de pagos del año' },
+            ]).map((tp) => (
+              <button key={tp.key} type="button" onClick={() => setTipo(tp.key)}
                 className={`p-4 rounded-xl border text-left transition-all ${
-                  tipo === t.key
+                  tipo === tp.key
                     ? 'bg-amber-500/15 border-amber-500/40 text-amber-400'
                     : 'bg-slate-800/50 border-white/5 text-slate-400 hover:border-white/10'
-                }`}
-              >
-                <p className="display-font font-bold text-sm tracking-wide mb-1">{t.label.toUpperCase()}</p>
-                <p className="text-xs opacity-75">{t.desc}</p>
+                }`}>
+                <p className="display-font font-bold text-sm tracking-wide mb-1">{tp.label.toUpperCase()}</p>
+                <p className="text-xs opacity-75">{tp.desc}</p>
               </button>
             ))}
           </div>
         </div>
 
+        {/* Periodo */}
         <div className="bg-slate-900/60 border border-white/5 rounded-xl p-6">
           <h2 className="display-font text-slate-300 font-semibold mb-4 tracking-wide">PERIODO</h2>
-
           {tipo === 'semanal' && (
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -332,7 +324,6 @@ export default function ReportesContent() {
               </div>
             </div>
           )}
-
           {tipo === 'mensual' && (
             <div>
               <label className="block text-slate-400 text-sm mb-1.5">Mes</label>
@@ -340,22 +331,19 @@ export default function ReportesContent() {
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 transition" />
             </div>
           )}
-
           {tipo === 'anual' && (
             <div>
-              <label className="block text-slate-400 text-sm mb-1.5">Anio</label>
+              <label className="block text-slate-400 text-sm mb-1.5">Año</label>
               <select value={anio} onChange={e => setAnio(e.target.value)}
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 transition">
-                {[2024, 2025, 2026, 2027].map(y => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
+                {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
           )}
         </div>
 
         <button
-          onClick={generarPDF}
+          onClick={() => setShowLangModal(true)}
           disabled={loading}
           className="w-full bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-slate-950 font-bold py-4 rounded-xl transition display-font tracking-wide text-lg flex items-center justify-center gap-3"
         >
@@ -379,9 +367,49 @@ export default function ReportesContent() {
         </button>
 
         <p className="text-slate-600 text-xs text-center">
-          El PDF se descargara directamente en su dispositivo listo para imprimir.
+          El PDF se descargará directamente en su dispositivo listo para imprimir.
         </p>
       </div>
+
+      {/* ─── Language Modal ─── */}
+      {showLangModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl p-8 w-full max-w-sm shadow-2xl">
+            <h2 className="display-font text-slate-100 font-bold text-lg tracking-wide mb-1">
+              {tUI('pdf.modalTitle')}
+            </h2>
+            <p className="text-slate-400 text-sm mb-6">{tUI('pdf.modalSubtitle')}</p>
+
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => generarPDF('es')}
+                className="flex flex-col items-center gap-2 p-5 rounded-xl border border-white/10 hover:border-amber-500/40 hover:bg-amber-500/10 transition group"
+              >
+                <span className="text-3xl">🇲🇽</span>
+                <span className="display-font text-slate-200 group-hover:text-amber-400 font-bold tracking-wide transition">
+                  {tUI('pdf.spanish')}
+                </span>
+              </button>
+              <button
+                onClick={() => generarPDF('en')}
+                className="flex flex-col items-center gap-2 p-5 rounded-xl border border-white/10 hover:border-sky-500/40 hover:bg-sky-500/10 transition group"
+              >
+                <span className="text-3xl">🇺🇸</span>
+                <span className="display-font text-slate-200 group-hover:text-sky-400 font-bold tracking-wide transition">
+                  {tUI('pdf.english')}
+                </span>
+              </button>
+            </div>
+
+            <button
+              onClick={() => setShowLangModal(false)}
+              className="w-full mt-4 text-slate-500 hover:text-slate-300 text-sm py-2 transition"
+            >
+              {tUI('pdf.cancel')}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
