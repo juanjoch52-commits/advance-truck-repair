@@ -32,7 +32,7 @@ export default function LoginPage() {
     // Verificar si el usuario debe cambiar su contraseña
     const userId = authData.user?.id;
     if (userId) {
-      const { data: profile } = await supabase
+      const { data: profile } = await (supabase as any)
         .from('profiles')
         .select('must_change_password')
         .eq('id', userId)

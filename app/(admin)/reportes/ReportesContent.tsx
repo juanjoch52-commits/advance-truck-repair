@@ -261,13 +261,13 @@ export default function ReportesContent() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data: profile } = await supabase
+        const { data: profile } = await (supabase as any)
           .from('profiles')
           .select('full_name, email')
           .eq('id', user.id)
           .single();
 
-        await supabase.from('report_logs').insert({
+        await (supabase as any).from('report_logs').insert({
           generated_by: user.id,
           generated_by_name: (profile as any)?.full_name || (profile as any)?.email || user.email,
           tipo,
