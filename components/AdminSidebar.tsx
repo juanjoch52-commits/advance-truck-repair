@@ -75,6 +75,8 @@ export default function AdminSidebar() {
 
   async function handleLogout() {
     await supabase.auth.signOut();
+    // Limpiar cookie de sesión
+    document.cookie = 'atr_auth=; path=/; max-age=0';
     router.push('/login');
     router.refresh();
   }

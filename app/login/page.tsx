@@ -26,6 +26,9 @@ export default function LoginPage() {
       return;
     }
 
+    // Guardar cookie para que el middleware pueda verificar la sesión
+    document.cookie = 'atr_auth=1; path=/; max-age=86400; SameSite=Lax';
+
     router.push('/dashboard');
     router.refresh();
   }
