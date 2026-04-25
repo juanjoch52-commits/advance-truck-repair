@@ -152,6 +152,13 @@
     "title": "PDF REPORTS",
     "subtitle": "Generate printable payroll reports",
     "reportType": "REPORT TYPE",
+    "empType": "EMPLOYEE TYPE",
+    "empMechanics": "Mechanics",
+    "empMechanicsDesc": "Commission-based workers",
+    "empAdmin": "Administration",
+    "empAdminDesc": "Salaried / hourly staff",
+    "empAll": "Everyone",
+    "empAllDesc": "Mechanics and admin staff",
     "period": "PERIOD",
     "weekStart": "Week start",
     "weekEnd": "Week end",
@@ -161,7 +168,7 @@
     "typeSemanal": "Weekly",
     "typeMensual": "Monthly",
     "typeAnual": "Annual",
-    "typeDescSemanal": "Per-mechanic detail for paychecks",
+    "typeDescSemanal": "Per-employee detail for paychecks",
     "typeDescMensual": "Monthly payment summary",
     "typeDescAnual": "Annual payment consolidated"
   },
@@ -197,16 +204,27 @@
     "summary": {
       "totalPayroll": "TOTAL PAYROLL",
       "mechanics": "MECHANICS",
+      "admin": "ADMINISTRATION",
+      "adminStaff": "ADMIN STAFF",
       "records": "RECORDS"
+    },
+    "section": {
+      "mechanics": "Mechanics",
+      "admin": "Administration"
     },
     "checksTable": "PAYCHECK TABLE",
     "table": {
       "num": "#",
       "mechanic": "Mechanic",
+      "employee": "Employee",
       "jobs": "Jobs",
+      "records": "Records",
+      "hours": "Hours",
+      "note": "Note",
       "amount": "Amount to Pay",
       "totalEarned": "Total Earned",
       "total": "GRAND TOTAL",
+      "grandTotal": "GRAND TOTAL (MECHANICS + ADMIN)",
       "date": "Date",
       "truck": "Truck",
       "company": "Company",
@@ -330,6 +348,12 @@
       "weeklyCutDesc": "View summary for checks"
     },
     "recentActivity": "RECENT ACTIVITY",
+    "payrollSummary": "PAYROLL THIS WEEK",
+    "payroll": {
+      "mechanics": "Mechanics",
+      "admin": "Administration",
+      "total": "Total to Pay"
+    },
     "status": {
       "approved": "Approved",
       "paid": "Paid",

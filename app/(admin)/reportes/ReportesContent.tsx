@@ -8,6 +8,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 type TipoReporte = 'semanal' | 'mensual' | 'anual';
+type TipoEmp = 'mecanicos' | 'admin' | 'todos';
 
 function getWeekRange() {
   const now = new Date();
@@ -29,6 +30,7 @@ export default function ReportesContent() {
   const { start: defaultWeekStart, end: defaultWeekEnd } = getWeekRange();
 
   const [tipo, setTipo] = useState<TipoReporte>((searchParams.get('tipo') as TipoReporte) ?? 'semanal');
+  const [tipoEmp, setTipoEmp] = useState<TipoEmp>('mecanicos');
   const [desde, setDesde] = useState(searchParams.get('desde') ?? defaultWeekStart);
   const [hasta, setHasta] = useState(searchParams.get('hasta') ?? defaultWeekEnd);
   const [mes, setMes] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
@@ -70,47 +72,83 @@ export default function ReportesContent() {
       subtitulo = `${t('pdf.period.week')}: ${formatDate(desde, locale)} — ${formatDate(hasta, locale)}`;
     }
 
-    const { data: entries } = await (supabase as any)
-      .from('earned_entries')
-      .select(`
-        id, amount, work_date, truck_number, description,
-        employees!earned_entries_employee_id_fkey(full_name),
-        work_reports!earned_entries_work_report_id_fkey(company, external_order_number)
-      `)
-      .gte('work_date', fechaDesde)
-      .lte('work_date', fechaHasta)
-      .order('work_date', { ascending: true });
+    // Determine entry_type filters
+    const mechEntryTypes = ['mechanic'];
+    const adminEntryTypes = ['admin_fixed', 'admin_hourly', 'admin_manual'];
 
-    const data = entries ?? [];
+    // Fetch mechanic entries if needed
+    let mechData: any[] = [];
+    if (tipoEmp === 'mecanicos' || tipoEmp === 'todos') {
+      const { data } = await (supabase as any)
+        .from('earned_entries')
+        .select(`
+          id, amount, work_date, truck_number, description,
+          employees!earned_entries_employee_id_fkey(full_name),
+          work_reports!earned_entries_work_report_id_fkey(company, external_order_number)
+        `)
+        .gte('work_date', fechaDesde)
+        .lte('work_date', fechaHasta)
+        .in('entry_type', mechEntryTypes)
+        .order('work_date', { ascending: true });
+      mechData = data ?? [];
+    }
 
-    if (data.length === 0) {
+    // Fetch admin entries if needed
+    let adminData: any[] = [];
+    if (tipoEmp === 'admin' || tipoEmp === 'todos') {
+      const { data } = await (supabase as any)
+        .from('earned_entries')
+        .select(`
+          id, amount, work_date, hours_worked, description,
+          employees!earned_entries_employee_id_fkey(full_name)
+        `)
+        .gte('work_date', fechaDesde)
+        .lte('work_date', fechaHasta)
+        .in('entry_type', adminEntryTypes)
+        .order('work_date', { ascending: true });
+      adminData = data ?? [];
+    }
+
+    const allEmpty = mechData.length === 0 && adminData.length === 0;
+    if (allEmpty) {
       alert(tUI('payroll.empty'));
       setLoading(false);
       return;
     }
 
-    const byEmployee: Record<string, { name: string; total: number; rows: any[] }> = {};
-    for (const e of data) {
+    // Group mechanics by employee
+    const byMechanic: Record<string, { name: string; total: number; rows: any[] }> = {};
+    for (const e of mechData) {
       const name = (e as any).employees?.full_name ?? 'Sin nombre';
-      if (!byEmployee[name]) byEmployee[name] = { name, total: 0, rows: [] };
-      byEmployee[name].total += Number(e.amount);
-      byEmployee[name].rows.push(e);
+      if (!byMechanic[name]) byMechanic[name] = { name, total: 0, rows: [] };
+      byMechanic[name].total += Number(e.amount);
+      byMechanic[name].rows.push(e);
     }
-    const mechanics = Object.values(byEmployee).sort((a, b) => b.total - a.total);
-    const totalGeneral = mechanics.reduce((s, m) => s + m.total, 0);
+    const mechanics = Object.values(byMechanic).sort((a, b) => b.total - a.total);
+    const totalMechanics = mechanics.reduce((s, m) => s + m.total, 0);
+
+    // Group admin by employee
+    const byAdmin: Record<string, { name: string; total: number; rows: any[] }> = {};
+    for (const e of adminData) {
+      const name = (e as any).employees?.full_name ?? 'Sin nombre';
+      if (!byAdmin[name]) byAdmin[name] = { name, total: 0, rows: [] };
+      byAdmin[name].total += Number(e.amount);
+      byAdmin[name].rows.push(e);
+    }
+    const admins = Object.values(byAdmin).sort((a, b) => b.total - a.total);
+    const totalAdmins = admins.reduce((s, a) => s + a.total, 0);
+
+    const totalGeneral = totalMechanics + totalAdmins;
 
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
     const pageW = doc.internal.pageSize.getWidth();
     const margin = 15;
 
-    // ── Ink-friendly palette (grayscale only) ──
-    // We avoid filled backgrounds, dark headers and color highlights
-    // so the document prints with minimal toner/ink consumption.
-    const INK = 30;        // primary text (near black)
-    const SOFT = 110;      // secondary text
-    const LINE = 170;      // thin separators
+    const INK = 30;
+    const SOFT = 110;
+    const LINE = 170;
 
-    // ── Header (text only, no fills) ──
+    // Header
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(14);
     doc.setTextColor(INK, INK, INK);
@@ -124,12 +162,11 @@ export default function ReportesContent() {
     const fechaEmision = new Date().toLocaleDateString(locale, { day: '2-digit', month: 'long', year: 'numeric' });
     doc.text(`${t('pdf.header.issued')}: ${fechaEmision}`, pageW - margin, 20, { align: 'right' });
 
-    // Single thin separator line
     doc.setDrawColor(LINE, LINE, LINE);
     doc.setLineWidth(0.2);
     doc.line(margin, 24, pageW - margin, 24);
 
-    // ── Title block ──
+    // Title
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(12);
     doc.setTextColor(INK, INK, INK);
@@ -141,7 +178,7 @@ export default function ReportesContent() {
 
     let y = 46;
 
-    // ── Summary line (no boxes, plain text) ──
+    // Summary line
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(SOFT, SOFT, SOFT);
@@ -149,15 +186,27 @@ export default function ReportesContent() {
     doc.setTextColor(INK, INK, INK);
     doc.text(formatMoney(totalGeneral), margin + 50, y);
 
-    doc.setTextColor(SOFT, SOFT, SOFT);
-    doc.text(t('pdf.summary.mechanics') + ':', pageW / 2, y);
-    doc.setTextColor(INK, INK, INK);
-    doc.text(String(mechanics.length), pageW / 2 + 30, y);
-
-    doc.setTextColor(SOFT, SOFT, SOFT);
-    doc.text(t('pdf.summary.records') + ':', pageW - margin - 35, y);
-    doc.setTextColor(INK, INK, INK);
-    doc.text(String(data.length), pageW - margin - 8, y);
+    if (tipoEmp === 'todos') {
+      doc.setTextColor(SOFT, SOFT, SOFT);
+      doc.text(t('pdf.summary.mechanics') + ':', pageW / 2, y);
+      doc.setTextColor(INK, INK, INK);
+      doc.text(formatMoney(totalMechanics), pageW / 2 + 30, y);
+      y += 5;
+      doc.setTextColor(SOFT, SOFT, SOFT);
+      doc.text(t('pdf.summary.admin') + ':', pageW / 2, y);
+      doc.setTextColor(INK, INK, INK);
+      doc.text(formatMoney(totalAdmins), pageW / 2 + 30, y);
+    } else if (tipoEmp === 'mecanicos') {
+      doc.setTextColor(SOFT, SOFT, SOFT);
+      doc.text(t('pdf.summary.mechanics') + ':', pageW / 2, y);
+      doc.setTextColor(INK, INK, INK);
+      doc.text(String(mechanics.length), pageW / 2 + 30, y);
+    } else {
+      doc.setTextColor(SOFT, SOFT, SOFT);
+      doc.text(t('pdf.summary.adminStaff') + ':', pageW / 2, y);
+      doc.setTextColor(INK, INK, INK);
+      doc.text(String(admins.length), pageW / 2 + 30, y);
+    }
 
     y += 4;
     doc.setDrawColor(LINE, LINE, LINE);
@@ -165,7 +214,6 @@ export default function ReportesContent() {
     doc.line(margin, y, pageW - margin, y);
     y += 6;
 
-    // Shared minimal table styles (no fills, no alternate rows, thin grey rules)
     const baseTableStyles = {
       fontSize: 9,
       textColor: [INK, INK, INK] as [number, number, number],
@@ -186,109 +234,218 @@ export default function ReportesContent() {
       fontSize: 9,
     };
 
-    if (tipo === 'semanal') {
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      doc.setTextColor(INK, INK, INK);
-      doc.text(t('pdf.checksTable'), margin, y);
-      y += 4;
+    const underlineHeader = (hookData: any) => {
+      if (hookData.section === 'head') {
+        const { x, y: cy, width, height } = hookData.cell;
+        doc.setDrawColor(LINE, LINE, LINE);
+        doc.setLineWidth(0.2);
+        doc.line(x, cy + height, x + width, cy + height);
+      }
+    };
 
-      autoTable(doc, {
-        startY: y,
-        margin: { left: margin, right: margin },
-        theme: 'plain',
-        head: [[t('pdf.table.num'), t('pdf.table.mechanic'), t('pdf.table.jobs'), t('pdf.table.amount')]],
-        body: mechanics.map((m, i) => [i + 1, m.name, m.rows.length, formatMoney(m.total)]),
-        foot: [['', t('pdf.table.total'), mechanics.reduce((s, m) => s + m.rows.length, 0), formatMoney(totalGeneral)]],
-        styles: baseTableStyles,
-        headStyles: baseHeadStyles,
-        footStyles: baseFootStyles,
-        columnStyles: {
-          0: { halign: 'center', cellWidth: 10 },
-          2: { halign: 'center', cellWidth: 25 },
-          3: { halign: 'right', cellWidth: 40 },
-        },
-        // single thin line under header / above footer for readability
-        didDrawCell: (hookData) => {
-          if (hookData.section === 'head') {
-            const { x, y: cy, width, height } = hookData.cell;
-            doc.setDrawColor(LINE, LINE, LINE);
-            doc.setLineWidth(0.2);
-            doc.line(x, cy + height, x + width, cy + height);
-          }
-        },
-      });
+    // ── MECHANICS SECTION ──
+    if (mechanics.length > 0) {
+      if (tipoEmp === 'todos') {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(INK, INK, INK);
+        doc.text(t('pdf.section.mechanics').toUpperCase(), margin, y);
+        y += 5;
+      }
 
-      y = (doc as any).lastAutoTable.finalY + 10;
-
-      for (const m of mechanics) {
-        if (y > 230) { doc.addPage(); y = 20; }
-        // mechanic block heading: text + thin underline (no filled bar)
+      if (tipo === 'semanal') {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(10);
         doc.setTextColor(INK, INK, INK);
-        doc.text(m.name.toUpperCase(), margin, y + 4);
-        doc.text(formatMoney(m.total), pageW - margin, y + 4, { align: 'right' });
-        doc.setDrawColor(LINE, LINE, LINE);
-        doc.setLineWidth(0.2);
-        doc.line(margin, y + 6, pageW - margin, y + 6);
-        y += 9;
+        doc.text(t('pdf.checksTable'), margin, y);
+        y += 4;
 
         autoTable(doc, {
           startY: y,
           margin: { left: margin, right: margin },
           theme: 'plain',
-          head: [[t('pdf.table.date'), t('pdf.table.truck'), t('pdf.table.company'), t('pdf.table.task'), t('pdf.table.amount')]],
-          body: m.rows.map((e: any) => [
-            new Date(e.work_date + 'T12:00:00').toLocaleDateString(locale),
-            e.truck_number ?? '-',
-            e.work_reports?.company ?? '-',
-            e.description ?? '-',
-            formatMoney(Number(e.amount)),
-          ]),
-          styles: { ...baseTableStyles, fontSize: 8 },
-          headStyles: { ...baseHeadStyles, fontSize: 8 },
-          columnStyles: { 4: { halign: 'right' } },
-          didDrawCell: (hookData) => {
-            if (hookData.section === 'head') {
-              const { x, y: cy, width, height } = hookData.cell;
-              doc.setDrawColor(LINE, LINE, LINE);
-              doc.setLineWidth(0.2);
-              doc.line(x, cy + height, x + width, cy + height);
-            }
+          head: [[t('pdf.table.num'), t('pdf.table.mechanic'), t('pdf.table.jobs'), t('pdf.table.amount')]],
+          body: mechanics.map((m, i) => [i + 1, m.name, m.rows.length, formatMoney(m.total)]),
+          foot: [['', t('pdf.table.total'), mechanics.reduce((s, m) => s + m.rows.length, 0), formatMoney(totalMechanics)]],
+          styles: baseTableStyles,
+          headStyles: baseHeadStyles,
+          footStyles: baseFootStyles,
+          columnStyles: {
+            0: { halign: 'center', cellWidth: 10 },
+            2: { halign: 'center', cellWidth: 25 },
+            3: { halign: 'right', cellWidth: 40 },
           },
+          didDrawCell: underlineHeader,
         });
 
-        y = (doc as any).lastAutoTable.finalY + 8;
+        y = (doc as any).lastAutoTable.finalY + 10;
+
+        for (const m of mechanics) {
+          if (y > 230) { doc.addPage(); y = 20; }
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(10);
+          doc.setTextColor(INK, INK, INK);
+          doc.text(m.name.toUpperCase(), margin, y + 4);
+          doc.text(formatMoney(m.total), pageW - margin, y + 4, { align: 'right' });
+          doc.setDrawColor(LINE, LINE, LINE);
+          doc.setLineWidth(0.2);
+          doc.line(margin, y + 6, pageW - margin, y + 6);
+          y += 9;
+
+          autoTable(doc, {
+            startY: y,
+            margin: { left: margin, right: margin },
+            theme: 'plain',
+            head: [[t('pdf.table.date'), t('pdf.table.truck'), t('pdf.table.company'), t('pdf.table.task'), t('pdf.table.amount')]],
+            body: m.rows.map((e: any) => [
+              new Date(e.work_date + 'T12:00:00').toLocaleDateString(locale),
+              e.truck_number ?? '-',
+              e.work_reports?.company ?? '-',
+              e.description ?? '-',
+              formatMoney(Number(e.amount)),
+            ]),
+            styles: { ...baseTableStyles, fontSize: 8 },
+            headStyles: { ...baseHeadStyles, fontSize: 8 },
+            columnStyles: { 4: { halign: 'right' } },
+            didDrawCell: underlineHeader,
+          });
+
+          y = (doc as any).lastAutoTable.finalY + 8;
+        }
+      } else {
+        // Mensual / anual mechanics
+        autoTable(doc, {
+          startY: y,
+          margin: { left: margin, right: margin },
+          theme: 'plain',
+          head: [[t('pdf.table.num'), t('pdf.table.mechanic'), t('pdf.table.jobs'), t('pdf.table.totalEarned')]],
+          body: mechanics.map((m, i) => [i + 1, m.name, m.rows.length, formatMoney(m.total)]),
+          foot: [['', t('pdf.table.total'), mechanics.reduce((s, m) => s + m.rows.length, 0), formatMoney(totalMechanics)]],
+          styles: { ...baseTableStyles, fontSize: 10 },
+          headStyles: { ...baseHeadStyles, fontSize: 10 },
+          footStyles: { ...baseFootStyles, fontSize: 10 },
+          columnStyles: {
+            0: { halign: 'center', cellWidth: 12 },
+            2: { halign: 'center', cellWidth: 30 },
+            3: { halign: 'right', cellWidth: 45 },
+          },
+          didDrawCell: underlineHeader,
+        });
+        y = (doc as any).lastAutoTable.finalY + 10;
       }
-    } else {
-      autoTable(doc, {
-        startY: y,
-        margin: { left: margin, right: margin },
-        theme: 'plain',
-        head: [[t('pdf.table.num'), t('pdf.table.mechanic'), t('pdf.table.jobs'), t('pdf.table.totalEarned')]],
-        body: mechanics.map((m, i) => [i + 1, m.name, m.rows.length, formatMoney(m.total)]),
-        foot: [['', t('pdf.table.total'), mechanics.reduce((s, m) => s + m.rows.length, 0), formatMoney(totalGeneral)]],
-        styles: { ...baseTableStyles, fontSize: 10 },
-        headStyles: { ...baseHeadStyles, fontSize: 10 },
-        footStyles: { ...baseFootStyles, fontSize: 10 },
-        columnStyles: {
-          0: { halign: 'center', cellWidth: 12 },
-          2: { halign: 'center', cellWidth: 30 },
-          3: { halign: 'right', cellWidth: 45 },
-        },
-        didDrawCell: (hookData) => {
-          if (hookData.section === 'head') {
-            const { x, y: cy, width, height } = hookData.cell;
-            doc.setDrawColor(LINE, LINE, LINE);
-            doc.setLineWidth(0.2);
-            doc.line(x, cy + height, x + width, cy + height);
-          }
-        },
-      });
     }
 
-    // Footer pages — light gray, no fills
+    // ── ADMIN SECTION ──
+    if (admins.length > 0) {
+      if (y > 230) { doc.addPage(); y = 20; }
+
+      if (tipoEmp === 'todos') {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(INK, INK, INK);
+        doc.text(t('pdf.section.admin').toUpperCase(), margin, y);
+        y += 5;
+      }
+
+      if (tipo === 'semanal') {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.setTextColor(INK, INK, INK);
+        doc.text(t('pdf.checksTable'), margin, y);
+        y += 4;
+
+        autoTable(doc, {
+          startY: y,
+          margin: { left: margin, right: margin },
+          theme: 'plain',
+          head: [[t('pdf.table.num'), t('pdf.table.employee'), t('pdf.table.records'), t('pdf.table.amount')]],
+          body: admins.map((a, i) => [i + 1, a.name, a.rows.length, formatMoney(a.total)]),
+          foot: [['', t('pdf.table.total'), admins.reduce((s, a) => s + a.rows.length, 0), formatMoney(totalAdmins)]],
+          styles: baseTableStyles,
+          headStyles: baseHeadStyles,
+          footStyles: baseFootStyles,
+          columnStyles: {
+            0: { halign: 'center', cellWidth: 10 },
+            2: { halign: 'center', cellWidth: 25 },
+            3: { halign: 'right', cellWidth: 40 },
+          },
+          didDrawCell: underlineHeader,
+        });
+
+        y = (doc as any).lastAutoTable.finalY + 10;
+
+        for (const a of admins) {
+          if (y > 230) { doc.addPage(); y = 20; }
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(10);
+          doc.setTextColor(INK, INK, INK);
+          doc.text(a.name.toUpperCase(), margin, y + 4);
+          doc.text(formatMoney(a.total), pageW - margin, y + 4, { align: 'right' });
+          doc.setDrawColor(LINE, LINE, LINE);
+          doc.setLineWidth(0.2);
+          doc.line(margin, y + 6, pageW - margin, y + 6);
+          y += 9;
+
+          autoTable(doc, {
+            startY: y,
+            margin: { left: margin, right: margin },
+            theme: 'plain',
+            head: [[t('pdf.table.date'), t('pdf.table.hours'), t('pdf.table.note'), t('pdf.table.amount')]],
+            body: a.rows.map((e: any) => [
+              new Date(e.work_date + 'T12:00:00').toLocaleDateString(locale),
+              e.hours_worked != null ? String(e.hours_worked) : '—',
+              e.description ?? '—',
+              formatMoney(Number(e.amount)),
+            ]),
+            styles: { ...baseTableStyles, fontSize: 8 },
+            headStyles: { ...baseHeadStyles, fontSize: 8 },
+            columnStyles: {
+              1: { halign: 'center', cellWidth: 18 },
+              3: { halign: 'right', cellWidth: 35 },
+            },
+            didDrawCell: underlineHeader,
+          });
+
+          y = (doc as any).lastAutoTable.finalY + 8;
+        }
+      } else {
+        // Mensual / anual admin
+        autoTable(doc, {
+          startY: y,
+          margin: { left: margin, right: margin },
+          theme: 'plain',
+          head: [[t('pdf.table.num'), t('pdf.table.employee'), t('pdf.table.records'), t('pdf.table.totalEarned')]],
+          body: admins.map((a, i) => [i + 1, a.name, a.rows.length, formatMoney(a.total)]),
+          foot: [['', t('pdf.table.total'), admins.reduce((s, a) => s + a.rows.length, 0), formatMoney(totalAdmins)]],
+          styles: { ...baseTableStyles, fontSize: 10 },
+          headStyles: { ...baseHeadStyles, fontSize: 10 },
+          footStyles: { ...baseFootStyles, fontSize: 10 },
+          columnStyles: {
+            0: { halign: 'center', cellWidth: 12 },
+            2: { halign: 'center', cellWidth: 30 },
+            3: { halign: 'right', cellWidth: 45 },
+          },
+          didDrawCell: underlineHeader,
+        });
+        y = (doc as any).lastAutoTable.finalY + 10;
+      }
+    }
+
+    // Grand total line (only for "todos")
+    if (tipoEmp === 'todos' && mechanics.length > 0 && admins.length > 0) {
+      if (y > 250) { doc.addPage(); y = 20; }
+      doc.setDrawColor(LINE, LINE, LINE);
+      doc.setLineWidth(0.3);
+      doc.line(margin, y, pageW - margin, y);
+      y += 7;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(INK, INK, INK);
+      doc.text(t('pdf.table.grandTotal'), margin, y);
+      doc.text(formatMoney(totalGeneral), pageW - margin, y, { align: 'right' });
+    }
+
+    // Footer pages
     const totalPages = doc.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
       doc.setPage(i);
@@ -303,11 +460,12 @@ export default function ReportesContent() {
       );
     }
 
+    const empSuffix = tipoEmp === 'mecanicos' ? '_mecanicos' : tipoEmp === 'admin' ? '_admin' : '_todos';
     const fileName = tipo === 'semanal'
-      ? `nomina_semanal_${desde}_${hasta}.pdf`
+      ? `nomina_semanal_${desde}_${hasta}${empSuffix}.pdf`
       : tipo === 'mensual'
-      ? `nomina_mensual_${mes}.pdf`
-      : `nomina_anual_${anio}.pdf`;
+      ? `nomina_mensual_${mes}${empSuffix}.pdf`
+      : `nomina_anual_${anio}${empSuffix}.pdf`;
 
     doc.save(fileName);
 
@@ -337,6 +495,12 @@ export default function ReportesContent() {
     { key: 'anual'   as TipoReporte, labelKey: 'reports.typeAnual',   descKey: 'reports.typeDescAnual'   },
   ];
 
+  const EMP_TYPES: { key: TipoEmp; label: string; desc: string }[] = [
+    { key: 'mecanicos', label: tUI('reports.empMechanics'), desc: tUI('reports.empMechanicsDesc') },
+    { key: 'admin',     label: tUI('reports.empAdmin'),     desc: tUI('reports.empAdminDesc')     },
+    { key: 'todos',     label: tUI('reports.empAll'),       desc: tUI('reports.empAllDesc')       },
+  ];
+
   return (
     <div>
       <div className="mb-8">
@@ -345,7 +509,25 @@ export default function ReportesContent() {
       </div>
 
       <div className="max-w-2xl space-y-6">
-        {/* Tipo */}
+        {/* Tipo de empleado */}
+        <div className="bg-slate-900/60 border border-white/5 rounded-xl p-6">
+          <h2 className="display-font text-slate-300 font-semibold mb-4 tracking-wide">{tUI('reports.empType')}</h2>
+          <div className="grid grid-cols-3 gap-3">
+            {EMP_TYPES.map((et) => (
+              <button key={et.key} type="button" onClick={() => setTipoEmp(et.key)}
+                className={`p-4 rounded-xl border text-left transition-all ${
+                  tipoEmp === et.key
+                    ? 'bg-violet-500/15 border-violet-500/40 text-violet-300'
+                    : 'bg-slate-800/50 border-white/5 text-slate-400 hover:border-white/10'
+                }`}>
+                <p className="display-font font-bold text-sm tracking-wide mb-1">{et.label.toUpperCase()}</p>
+                <p className="text-xs opacity-75">{et.desc}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Tipo de reporte */}
         <div className="bg-slate-900/60 border border-white/5 rounded-xl p-6">
           <h2 className="display-font text-slate-300 font-semibold mb-4 tracking-wide">{tUI('reports.reportType')}</h2>
           <div className="grid grid-cols-3 gap-3">
@@ -425,7 +607,7 @@ export default function ReportesContent() {
         <p className="text-slate-600 text-xs text-center">{tUI('reports.downloadNote')}</p>
       </div>
 
-      {/* ─── Language Modal ─── */}
+      {/* Language Modal */}
       {showLangModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-slate-900 border border-white/10 rounded-2xl p-8 w-full max-w-sm shadow-2xl">

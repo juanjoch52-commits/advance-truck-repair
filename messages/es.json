@@ -152,6 +152,13 @@
     "title": "REPORTES PDF",
     "subtitle": "Generar reportes imprimibles de nómina",
     "reportType": "TIPO DE REPORTE",
+    "empType": "TIPO DE EMPLEADOS",
+    "empMechanics": "Mecánicos",
+    "empMechanicsDesc": "Solo comisión por trabajo",
+    "empAdmin": "Administración",
+    "empAdminDesc": "Personal con sueldo/hora",
+    "empAll": "Todos",
+    "empAllDesc": "Mecánicos y administración",
     "period": "PERIODO",
     "weekStart": "Inicio de semana",
     "weekEnd": "Fin de semana",
@@ -161,7 +168,7 @@
     "typeSemanal": "Semanal",
     "typeMensual": "Mensual",
     "typeAnual": "Anual",
-    "typeDescSemanal": "Detalle por mecánico para cheques",
+    "typeDescSemanal": "Detalle por empleado para cheques",
     "typeDescMensual": "Resumen de pagos del mes",
     "typeDescAnual": "Consolidado de pagos del año"
   },
@@ -197,16 +204,27 @@
     "summary": {
       "totalPayroll": "TOTAL NÓMINA",
       "mechanics": "MECÁNICOS",
+      "admin": "ADMINISTRACIÓN",
+      "adminStaff": "PERSONAL ADMIN",
       "records": "REGISTROS"
+    },
+    "section": {
+      "mechanics": "Mecánicos",
+      "admin": "Administración"
     },
     "checksTable": "TABLA DE CHEQUES",
     "table": {
       "num": "#",
       "mechanic": "Mecánico",
+      "employee": "Empleado",
       "jobs": "Trabajos",
+      "records": "Registros",
+      "hours": "Horas",
+      "note": "Nota",
       "amount": "Monto a Pagar",
       "totalEarned": "Total Devengado",
       "total": "TOTAL GENERAL",
+      "grandTotal": "TOTAL GENERAL (MECÁNICOS + ADMIN)",
       "date": "Fecha",
       "truck": "Camión",
       "company": "Empresa",
@@ -330,6 +348,12 @@
       "weeklyCutDesc": "Ver resumen para cheques"
     },
     "recentActivity": "ACTIVIDAD RECIENTE",
+    "payrollSummary": "NÓMINAS ESTA SEMANA",
+    "payroll": {
+      "mechanics": "Mecánicos",
+      "admin": "Administración",
+      "total": "Total a Pagar"
+    },
     "status": {
       "approved": "Aprobada",
       "paid": "Pagada",

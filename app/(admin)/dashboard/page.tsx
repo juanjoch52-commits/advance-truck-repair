@@ -23,7 +23,7 @@ export default async function DashboardPage() {
   //  - work_reports for total reports count + recent activity
   //  - employees filtered by role='mechanic' for active mechanics
   //  - earned_entries for weekly earned (mechanic-only)
-  const [reportsRes, mechanicsRes, earnedRes] = await Promise.all([
+  const [reportsRes, mechanicsRes, earnedRes, adminEarnedRes] = await Promise.all([
     (supabase as any)
       .from('work_reports')
       .select('id, work_date, company, truck_number, created_at, created_by_name', { count: 'exact' })
@@ -31,15 +31,23 @@ export default async function DashboardPage() {
     (supabase as any).from('employees').select('id', { count: 'exact' }).eq('role', 'mechanic'),
     (supabase as any)
       .from('earned_entries')
-      .select('amount, work_date, entry_type')
+      .select('amount, entry_type')
       .gte('work_date', start)
-      .lte('work_date', end),
+      .lte('work_date', end)
+      .eq('entry_type', 'mechanic'),
+    (supabase as any)
+      .from('earned_entries')
+      .select('amount')
+      .gte('work_date', start)
+      .lte('work_date', end)
+      .in('entry_type', ['admin_fixed', 'admin_hourly', 'admin_manual']),
   ]);
 
   const totalOrders = reportsRes.count ?? 0;
   const totalEmployees = mechanicsRes.count ?? 0;
   const weeklyEarned = ((earnedRes.data ?? []) as any[])
-    .filter(r => !r.entry_type || r.entry_type === 'mechanic')
+    .reduce((s: number, r: any) => s + Number(r.amount), 0);
+  const weeklyAdminEarned = ((adminEarnedRes.data ?? []) as any[])
     .reduce((s: number, r: any) => s + Number(r.amount), 0);
 
   const recentOrders = ((reportsRes.data ?? []) as any[])
@@ -56,6 +64,7 @@ export default async function DashboardPage() {
       totalOrders={totalOrders}
       totalEmployees={totalEmployees}
       weeklyEarned={weeklyEarned}
+      weeklyAdminEarned={weeklyAdminEarned}
       start={start}
       end={end}
       recentOrders={recentOrders}
