@@ -1,17 +1,18 @@
 {
   "nav": {
     "dashboard": "Panel Principal",
-    "workReports": "Órdenes de Trabajo",
+    "workReports": "Reportes de Trabajo",
     "staff": "Personal",
     "payroll": "Devengados",
     "weeklyCut": "Corte Semanal",
     "reports": "Reportes PDF",
     "users": "Usuarios del Sistema",
-    "logout": "Cerrar Sesión"
+    "logout": "Cerrar Sesión",
+    "language": "Idioma"
   },
   "workReports": {
-    "title": "ÓRDENES DE TRABAJO",
-    "newButton": "NUEVA ORDEN",
+    "title": "REPORTES DE TRABAJO",
+    "newButton": "NUEVO REPORTE",
     "filters": {
       "dateFrom": "Desde",
       "dateTo": "Hasta",
@@ -19,7 +20,8 @@
       "allMechanics": "Todos los mecánicos",
       "filter": "Filtrar",
       "clear": "Limpiar",
-      "globalView": "Vista Global"
+      "globalView": "Vista Global",
+      "search": "Buscar por camión, empresa u orden..."
     },
     "table": {
       "date": "Fecha",
@@ -29,15 +31,22 @@
       "tasks": "Tareas",
       "totalCharged": "Total Cobrado",
       "totalPayout": "Pago Mecánicos",
-      "companyProfit": "Ganancia Taller"
+      "companyProfit": "Ganancia Taller",
+      "actions": "Acciones"
     },
-    "empty": "No hay órdenes registradas para este período.",
-    "emptyAction": "Crear primera orden",
-    "records": "órdenes registradas"
+    "delete": "Eliminar reporte",
+    "deleteConfirmTitle": "¿Eliminar este reporte?",
+    "deleteConfirmMsg": "Esta acción no se puede deshacer. Se eliminarán también todas las tareas, asignaciones y devengados asociados.",
+    "deleteConfirmBtn": "Sí, eliminar",
+    "deleteCancelBtn": "Cancelar",
+    "deleting": "Eliminando...",
+    "empty": "No hay reportes registrados para este período.",
+    "emptyAction": "Crear primer reporte",
+    "records": "reportes registrados"
   },
   "newReport": {
-    "title": "NUEVA ORDEN DE TRABAJO",
-    "back": "Volver a Órdenes",
+    "title": "NUEVO REPORTE DE TRABAJO",
+    "back": "Volver a Reportes",
     "header": {
       "sectionTitle": "DATOS DEL REPORTE",
       "orderNumber": "# Orden Externa",
@@ -64,7 +73,10 @@
       "payout": "Pago",
       "companyProfit": "Ganancia taller",
       "removeTask": "Eliminar tarea",
-      "removeMechanic": "Quitar"
+      "removeMechanic": "Quitar",
+      "commissionUsed": "Comisión usada",
+      "commissionLimit": "Límite 50%",
+      "shopShare": "Ganancia taller (mín. 50%)"
     },
     "summary": {
       "title": "RESUMEN FINANCIERO",
@@ -72,10 +84,10 @@
       "totalMechanicPayout": "Total pago a mecánicos",
       "totalCompanyProfit": "Ganancia del taller"
     },
-    "save": "GUARDAR ORDEN",
+    "save": "GUARDAR REPORTE",
     "saving": "GUARDANDO...",
     "cancel": "Cancelar",
-    "success": "ORDEN CREADA",
+    "success": "REPORTE CREADO",
     "successSub": "Redirigiendo...",
     "errors": {
       "truckRequired": "El número de camión es requerido.",
@@ -85,8 +97,26 @@
       "taskAmountRequired": "El precio cobrado por tarea debe ser mayor a $0.",
       "atLeastOneMechanic": "Cada tarea debe tener al menos un mecánico asignado.",
       "mechanicRequired": "Seleccione un mecánico para cada asignación.",
-      "commissionRequired": "La comisión debe ser mayor a 0%."
+      "commissionRequired": "La comisión debe ser mayor a 0%.",
+      "commissionExceedsLimit": "La comisión total de mecánicos no puede exceder el 50% del precio cobrado."
     }
+  },
+  "reports": {
+    "title": "REPORTES PDF",
+    "subtitle": "Generar reportes imprimibles de nómina",
+    "reportType": "TIPO DE REPORTE",
+    "period": "PERIODO",
+    "weekStart": "Inicio de semana",
+    "weekEnd": "Fin de semana",
+    "month": "Mes",
+    "year": "Año",
+    "downloadNote": "El PDF se descargará directamente en su dispositivo listo para imprimir.",
+    "typeSemanal": "Semanal",
+    "typeMensual": "Mensual",
+    "typeAnual": "Anual",
+    "typeDescSemanal": "Detalle por mecánico para cheques",
+    "typeDescMensual": "Resumen de pagos del mes",
+    "typeDescAnual": "Consolidado de pagos del año"
   },
   "pdf": {
     "modalTitle": "Seleccionar idioma del PDF",
@@ -134,6 +164,7 @@
       "truck": "Camión",
       "company": "Empresa",
       "role": "Rol",
+      "task": "Tarea",
       "principal": "Principal",
       "assistant": "Ayudante"
     },
@@ -141,7 +172,7 @@
   },
   "payroll": {
     "title": "DEVENGADOS",
-    "subtitle": "Historial de montos asignados por orden de trabajo",
+    "subtitle": "Historial de montos asignados por reporte de trabajo",
     "filters": {
       "from": "Desde",
       "to": "Hasta",
@@ -184,6 +215,6 @@
     },
     "totalPayroll": "TOTAL NÓMINA SEMANAL",
     "empty": "No hay registros de pago para esta semana.",
-    "emptyAction": "Registrar una orden"
+    "emptyAction": "Registrar un reporte"
   }
 }

@@ -84,7 +84,7 @@ export default function ReportesContent() {
     const data = entries ?? [];
 
     if (data.length === 0) {
-      alert('No hay datos para el periodo seleccionado.');
+      alert(tUI('payroll.empty'));
       setLoading(false);
       return;
     }
@@ -199,7 +199,7 @@ export default function ReportesContent() {
         autoTable(doc, {
           startY: y,
           margin: { left: margin, right: margin },
-          head: [[t('pdf.table.date'), t('pdf.table.truck'), t('pdf.table.company'), 'Tarea', t('pdf.table.amount')]],
+          head: [[t('pdf.table.date'), t('pdf.table.truck'), t('pdf.table.company'), t('pdf.table.task'), t('pdf.table.amount')]],
           body: m.rows.map((e: any) => [
             new Date(e.work_date + 'T12:00:00').toLocaleDateString(locale),
             e.truck_number ?? '-',
@@ -277,31 +277,33 @@ export default function ReportesContent() {
     setLoading(false);
   }
 
+  const REPORT_TYPES = [
+    { key: 'semanal' as TipoReporte, labelKey: 'reports.typeSemanal', descKey: 'reports.typeDescSemanal' },
+    { key: 'mensual' as TipoReporte, labelKey: 'reports.typeMensual', descKey: 'reports.typeDescMensual' },
+    { key: 'anual'   as TipoReporte, labelKey: 'reports.typeAnual',   descKey: 'reports.typeDescAnual'   },
+  ];
+
   return (
     <div>
       <div className="mb-8">
-        <h1 className="display-font text-3xl font-bold text-slate-100 tracking-wide">REPORTES PDF</h1>
-        <p className="text-slate-400 mt-1">Generar reportes imprimibles de nómina</p>
+        <h1 className="display-font text-3xl font-bold text-slate-100 tracking-wide">{tUI('reports.title')}</h1>
+        <p className="text-slate-400 mt-1">{tUI('reports.subtitle')}</p>
       </div>
 
       <div className="max-w-2xl space-y-6">
         {/* Tipo */}
         <div className="bg-slate-900/60 border border-white/5 rounded-xl p-6">
-          <h2 className="display-font text-slate-300 font-semibold mb-4 tracking-wide">TIPO DE REPORTE</h2>
+          <h2 className="display-font text-slate-300 font-semibold mb-4 tracking-wide">{tUI('reports.reportType')}</h2>
           <div className="grid grid-cols-3 gap-3">
-            {([
-              { key: 'semanal' as TipoReporte, label: 'Semanal', desc: 'Detalle por mecánico para cheques' },
-              { key: 'mensual' as TipoReporte, label: 'Mensual', desc: 'Resumen de pagos del mes' },
-              { key: 'anual'   as TipoReporte, label: 'Anual',   desc: 'Consolidado de pagos del año' },
-            ]).map((tp) => (
+            {REPORT_TYPES.map((tp) => (
               <button key={tp.key} type="button" onClick={() => setTipo(tp.key)}
                 className={`p-4 rounded-xl border text-left transition-all ${
                   tipo === tp.key
                     ? 'bg-amber-500/15 border-amber-500/40 text-amber-400'
                     : 'bg-slate-800/50 border-white/5 text-slate-400 hover:border-white/10'
                 }`}>
-                <p className="display-font font-bold text-sm tracking-wide mb-1">{tp.label.toUpperCase()}</p>
-                <p className="text-xs opacity-75">{tp.desc}</p>
+                <p className="display-font font-bold text-sm tracking-wide mb-1">{tUI(tp.labelKey).toUpperCase()}</p>
+                <p className="text-xs opacity-75">{tUI(tp.descKey)}</p>
               </button>
             ))}
           </div>
@@ -309,16 +311,16 @@ export default function ReportesContent() {
 
         {/* Periodo */}
         <div className="bg-slate-900/60 border border-white/5 rounded-xl p-6">
-          <h2 className="display-font text-slate-300 font-semibold mb-4 tracking-wide">PERIODO</h2>
+          <h2 className="display-font text-slate-300 font-semibold mb-4 tracking-wide">{tUI('reports.period')}</h2>
           {tipo === 'semanal' && (
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-slate-400 text-sm mb-1.5">Inicio de semana</label>
+                <label className="block text-slate-400 text-sm mb-1.5">{tUI('reports.weekStart')}</label>
                 <input type="date" value={desde} onChange={e => setDesde(e.target.value)}
                   className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 transition" />
               </div>
               <div>
-                <label className="block text-slate-400 text-sm mb-1.5">Fin de semana</label>
+                <label className="block text-slate-400 text-sm mb-1.5">{tUI('reports.weekEnd')}</label>
                 <input type="date" value={hasta} onChange={e => setHasta(e.target.value)}
                   className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 transition" />
               </div>
@@ -326,14 +328,14 @@ export default function ReportesContent() {
           )}
           {tipo === 'mensual' && (
             <div>
-              <label className="block text-slate-400 text-sm mb-1.5">Mes</label>
+              <label className="block text-slate-400 text-sm mb-1.5">{tUI('reports.month')}</label>
               <input type="month" value={mes} onChange={e => setMes(e.target.value)}
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 transition" />
             </div>
           )}
           {tipo === 'anual' && (
             <div>
-              <label className="block text-slate-400 text-sm mb-1.5">Año</label>
+              <label className="block text-slate-400 text-sm mb-1.5">{tUI('reports.year')}</label>
               <select value={anio} onChange={e => setAnio(e.target.value)}
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 transition">
                 {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
@@ -353,7 +355,7 @@ export default function ReportesContent() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              GENERANDO PDF...
+              {tUI('pdf.generating')}
             </>
           ) : (
             <>
@@ -361,14 +363,12 @@ export default function ReportesContent() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              DESCARGAR PDF {tipo.toUpperCase()}
+              {tUI('pdf.download')} {tUI(`pdf.type.${tipo}`).toUpperCase()}
             </>
           )}
         </button>
 
-        <p className="text-slate-600 text-xs text-center">
-          El PDF se descargará directamente en su dispositivo listo para imprimir.
-        </p>
+        <p className="text-slate-600 text-xs text-center">{tUI('reports.downloadNote')}</p>
       </div>
 
       {/* ─── Language Modal ─── */}
@@ -385,7 +385,7 @@ export default function ReportesContent() {
                 onClick={() => generarPDF('es')}
                 className="flex flex-col items-center gap-2 p-5 rounded-xl border border-white/10 hover:border-amber-500/40 hover:bg-amber-500/10 transition group"
               >
-                <span className="text-3xl">🇲🇽</span>
+                <span className="text-3xl">🇪🇸</span>
                 <span className="display-font text-slate-200 group-hover:text-amber-400 font-bold tracking-wide transition">
                   {tUI('pdf.spanish')}
                 </span>

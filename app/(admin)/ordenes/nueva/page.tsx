@@ -8,13 +8,13 @@ import { useLanguage } from '@/contexts/LanguageContext';
 interface Employee { id: string; full_name: string; }
 
 interface MechanicAssignment {
-  id: string;              // local UI key
+  id: string;
   employee_id: string;
   commission_percentage: string;
 }
 
 interface ReportTask {
-  id: string;              // local UI key
+  id: string;
   description: string;
   amount_charged_to_client: string;
   mechanics: MechanicAssignment[];
@@ -38,11 +38,13 @@ function getWeekRange(dateStr: string) {
   };
 }
 
+const MAX_COMMISSION = 50; // total mechanic commission cap per task
+
 function newTask(): ReportTask {
-  return { id: uid(), description: '', amount_charged_to_client: '', mechanics: [newMechanic()] };
+  return { id: uid(), description: '', amount_charged_to_client: '', mechanics: [newMechanicWithPct(MAX_COMMISSION)] };
 }
-function newMechanic(): MechanicAssignment {
-  return { id: uid(), employee_id: '', commission_percentage: '50' };
+function newMechanicWithPct(pct: number): MechanicAssignment {
+  return { id: uid(), employee_id: '', commission_percentage: String(pct) };
 }
 
 export default function NuevaOrdenPage() {
@@ -83,9 +85,12 @@ export default function NuevaOrdenPage() {
 
   // ─── Mechanic helpers ────────────────────────────────────────────────────
   function addMechanic(taskId: string) {
-    setTasks(prev => prev.map(t =>
-      t.id === taskId ? { ...t, mechanics: [...t.mechanics, newMechanic()] } : t
-    ));
+    setTasks(prev => prev.map(t => {
+      if (t.id !== taskId) return t;
+      const usedPct = t.mechanics.reduce((s, m) => s + (parseFloat(m.commission_percentage) || 0), 0);
+      const remaining = Math.max(0, MAX_COMMISSION - usedPct);
+      return { ...t, mechanics: [...t.mechanics, newMechanicWithPct(remaining)] };
+    }));
   }
   function removeMechanic(taskId: string, mechId: string) {
     setTasks(prev => prev.map(t =>
@@ -100,7 +105,10 @@ export default function NuevaOrdenPage() {
     ));
   }
 
-  // ─── Computed payout ─────────────────────────────────────────────────────
+  // ─── Commission calculations ──────────────────────────────────────────────
+  function totalCommissionPct(task: ReportTask) {
+    return task.mechanics.reduce((s, m) => s + (parseFloat(m.commission_percentage) || 0), 0);
+  }
   function mechanicPayout(amount: string, pct: string) {
     const a = parseFloat(amount) || 0;
     const p = parseFloat(pct) || 0;
@@ -127,8 +135,10 @@ export default function NuevaOrdenPage() {
       if (!task.description.trim())                    return setError(t('newReport.errors.taskDescRequired'));
       if ((parseFloat(task.amount_charged_to_client) || 0) <= 0) return setError(t('newReport.errors.taskAmountRequired'));
       if (task.mechanics.length === 0)                 return setError(t('newReport.errors.atLeastOneMechanic'));
+      // Commission cap check
+      if (totalCommissionPct(task) > MAX_COMMISSION)   return setError(t('newReport.errors.commissionExceedsLimit'));
       for (const m of task.mechanics) {
-        if (!m.employee_id)                          return setError(t('newReport.errors.mechanicRequired'));
+        if (!m.employee_id)                            return setError(t('newReport.errors.mechanicRequired'));
         if ((parseFloat(m.commission_percentage) || 0) <= 0) return setError(t('newReport.errors.commissionRequired'));
       }
     }
@@ -316,9 +326,11 @@ export default function NuevaOrdenPage() {
             {tasks.map((task, taskIdx) => {
               const amount = parseFloat(task.amount_charged_to_client) || 0;
               const profit = taskProfit(task);
+              const usedPct = totalCommissionPct(task);
+              const overLimit = usedPct > MAX_COMMISSION;
 
               return (
-                <div key={task.id} className="border border-white/8 rounded-xl bg-slate-800/40 overflow-hidden">
+                <div key={task.id} className={`border rounded-xl bg-slate-800/40 overflow-hidden ${overLimit ? 'border-red-500/40' : 'border-white/8'}`}>
                   {/* Task header */}
                   <div className="flex items-center justify-between px-4 py-2.5 bg-slate-800/60 border-b border-white/5">
                     <span className="display-font text-slate-400 text-xs tracking-widest">
@@ -359,12 +371,34 @@ export default function NuevaOrdenPage() {
                       </div>
                     </div>
 
+                    {/* Commission progress bar */}
+                    {task.mechanics.length > 0 && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-slate-600 text-xs">{t('newReport.tasks.commissionUsed')}: <span className={overLimit ? 'text-red-400 font-bold' : 'text-slate-400'}>{usedPct.toFixed(1)}%</span> / {t('newReport.tasks.commissionLimit')}</span>
+                          {amount > 0 && (
+                            <span className="text-xs text-slate-500">{t('newReport.tasks.shopShare')}: <span className="text-emerald-400 font-medium">{(100 - usedPct).toFixed(1)}%</span></span>
+                          )}
+                        </div>
+                        <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${overLimit ? 'bg-red-500' : usedPct >= 45 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                            style={{ width: `${Math.min(100, (usedPct / MAX_COMMISSION) * 100)}%` }}
+                          />
+                        </div>
+                        {overLimit && (
+                          <p className="text-red-400 text-xs mt-1">{t('newReport.errors.commissionExceedsLimit')}</p>
+                        )}
+                      </div>
+                    )}
+
                     {/* Mechanics */}
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <label className="text-slate-500 text-xs">{t('newReport.tasks.mechanicsTitle')}</label>
                         <button type="button" onClick={() => addMechanic(task.id)}
-                          className="text-sky-400 hover:text-sky-300 text-xs flex items-center gap-1 border border-sky-500/20 hover:border-sky-400/30 rounded px-2 py-1 transition">
+                          disabled={usedPct >= MAX_COMMISSION}
+                          className="text-sky-400 hover:text-sky-300 text-xs flex items-center gap-1 border border-sky-500/20 hover:border-sky-400/30 rounded px-2 py-1 transition disabled:opacity-40 disabled:cursor-not-allowed">
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                           </svg>
@@ -375,6 +409,7 @@ export default function NuevaOrdenPage() {
                       <div className="space-y-2">
                         {task.mechanics.map((m) => {
                           const payout = mechanicPayout(task.amount_charged_to_client, m.commission_percentage);
+                          const thisPct = parseFloat(m.commission_percentage) || 0;
                           return (
                             <div key={m.id} className="flex items-center gap-2 bg-slate-700/30 rounded-lg px-3 py-2">
                               {/* Employee select */}
@@ -387,13 +422,15 @@ export default function NuevaOrdenPage() {
                                 ))}
                               </select>
 
-                              {/* Commission % */}
+                              {/* Commission % — capped at MAX_COMMISSION per mechanic display */}
                               <div className="relative w-24">
-                                <input type="number" min="0" max="100" step="0.1" required
+                                <input type="number" min="0.1" max={MAX_COMMISSION} step="0.1" required
                                   value={m.commission_percentage}
                                   onChange={e => updateMechanic(task.id, m.id, 'commission_percentage', e.target.value)}
-                                  placeholder="50"
-                                  className="w-full bg-slate-700 border border-white/10 rounded-lg px-2 pr-6 py-1.5 text-slate-100 focus:outline-none focus:border-amber-400/50 text-sm transition" />
+                                  placeholder="25"
+                                  className={`w-full border rounded-lg px-2 pr-6 py-1.5 text-slate-100 focus:outline-none text-sm transition ${
+                                    overLimit ? 'bg-red-900/20 border-red-500/40 focus:border-red-400/60' : 'bg-slate-700 border-white/10 focus:border-amber-400/50'
+                                  }`} />
                                 <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 text-xs">%</span>
                               </div>
 

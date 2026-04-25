@@ -83,7 +83,7 @@ export default function AdminSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
-  const { t } = useLanguage();
+  const { t, lang, setLang } = useLanguage();
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -133,8 +133,35 @@ export default function AdminSidebar() {
         })}
       </nav>
 
+      {/* Language toggle */}
+      <div className="px-3 pb-2 border-t border-white/5 pt-3">
+        <p className="text-slate-600 text-xs px-1 mb-2">{t('nav.language')}</p>
+        <div className="flex gap-1">
+          <button
+            onClick={() => setLang('es')}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              lang === 'es'
+                ? 'bg-amber-500/20 border border-amber-500/40 text-amber-400'
+                : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'
+            }`}
+          >
+            <span>🇪🇸</span> ES
+          </button>
+          <button
+            onClick={() => setLang('en')}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              lang === 'en'
+                ? 'bg-sky-500/20 border border-sky-500/40 text-sky-400'
+                : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'
+            }`}
+          >
+            <span>🇺🇸</span> EN
+          </button>
+        </div>
+      </div>
+
       {/* Cerrar sesión */}
-      <div className="px-3 py-4 border-t border-white/5">
+      <div className="px-3 py-3 border-t border-white/5">
         <button
           onClick={handleLogout}
           className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all duration-150"

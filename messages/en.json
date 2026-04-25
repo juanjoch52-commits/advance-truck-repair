@@ -1,17 +1,18 @@
 {
   "nav": {
     "dashboard": "Dashboard",
-    "workReports": "Work Orders",
+    "workReports": "Work Reports",
     "staff": "Staff",
     "payroll": "Payroll",
     "weeklyCut": "Weekly Cut",
     "reports": "PDF Reports",
     "users": "System Users",
-    "logout": "Sign Out"
+    "logout": "Sign Out",
+    "language": "Language"
   },
   "workReports": {
-    "title": "WORK ORDERS",
-    "newButton": "NEW ORDER",
+    "title": "WORK REPORTS",
+    "newButton": "NEW REPORT",
     "filters": {
       "dateFrom": "From",
       "dateTo": "To",
@@ -19,7 +20,8 @@
       "allMechanics": "All mechanics",
       "filter": "Filter",
       "clear": "Clear",
-      "globalView": "Global View"
+      "globalView": "Global View",
+      "search": "Search by truck, company or order..."
     },
     "table": {
       "date": "Date",
@@ -29,15 +31,22 @@
       "tasks": "Tasks",
       "totalCharged": "Total Charged",
       "totalPayout": "Mechanic Payout",
-      "companyProfit": "Shop Profit"
+      "companyProfit": "Shop Profit",
+      "actions": "Actions"
     },
-    "empty": "No orders found for this period.",
-    "emptyAction": "Create first order",
-    "records": "orders registered"
+    "delete": "Delete report",
+    "deleteConfirmTitle": "Delete this report?",
+    "deleteConfirmMsg": "This action cannot be undone. All tasks, assignments and payroll entries associated will also be deleted.",
+    "deleteConfirmBtn": "Yes, delete",
+    "deleteCancelBtn": "Cancel",
+    "deleting": "Deleting...",
+    "empty": "No work reports found for this period.",
+    "emptyAction": "Create first report",
+    "records": "reports registered"
   },
   "newReport": {
-    "title": "NEW WORK ORDER",
-    "back": "Back to Orders",
+    "title": "NEW WORK REPORT",
+    "back": "Back to Reports",
     "header": {
       "sectionTitle": "REPORT DETAILS",
       "orderNumber": "External Order #",
@@ -64,7 +73,10 @@
       "payout": "Payout",
       "companyProfit": "Shop profit",
       "removeTask": "Remove task",
-      "removeMechanic": "Remove"
+      "removeMechanic": "Remove",
+      "commissionUsed": "Commission used",
+      "commissionLimit": "50% limit",
+      "shopShare": "Shop profit (min. 50%)"
     },
     "summary": {
       "title": "FINANCIAL SUMMARY",
@@ -72,10 +84,10 @@
       "totalMechanicPayout": "Total mechanic payout",
       "totalCompanyProfit": "Shop profit"
     },
-    "save": "SAVE ORDER",
+    "save": "SAVE REPORT",
     "saving": "SAVING...",
     "cancel": "Cancel",
-    "success": "ORDER CREATED",
+    "success": "REPORT CREATED",
     "successSub": "Redirecting...",
     "errors": {
       "truckRequired": "Truck number is required.",
@@ -85,8 +97,26 @@
       "taskAmountRequired": "The amount charged per task must be greater than $0.",
       "atLeastOneMechanic": "Each task must have at least one mechanic assigned.",
       "mechanicRequired": "Select a mechanic for each assignment.",
-      "commissionRequired": "Commission must be greater than 0%."
+      "commissionRequired": "Commission must be greater than 0%.",
+      "commissionExceedsLimit": "Total mechanic commission cannot exceed 50% of the amount charged."
     }
+  },
+  "reports": {
+    "title": "PDF REPORTS",
+    "subtitle": "Generate printable payroll reports",
+    "reportType": "REPORT TYPE",
+    "period": "PERIOD",
+    "weekStart": "Week start",
+    "weekEnd": "Week end",
+    "month": "Month",
+    "year": "Year",
+    "downloadNote": "The PDF will be downloaded directly to your device, ready to print.",
+    "typeSemanal": "Weekly",
+    "typeMensual": "Monthly",
+    "typeAnual": "Annual",
+    "typeDescSemanal": "Per-mechanic detail for paychecks",
+    "typeDescMensual": "Monthly payment summary",
+    "typeDescAnual": "Annual payment consolidated"
   },
   "pdf": {
     "modalTitle": "Select PDF Language",
@@ -134,6 +164,7 @@
       "truck": "Truck",
       "company": "Company",
       "role": "Role",
+      "task": "Task",
       "principal": "Lead",
       "assistant": "Assistant"
     },
@@ -141,7 +172,7 @@
   },
   "payroll": {
     "title": "PAYROLL",
-    "subtitle": "History of amounts assigned per work order",
+    "subtitle": "History of amounts assigned per work report",
     "filters": {
       "from": "From",
       "to": "To",
@@ -184,6 +215,6 @@
     },
     "totalPayroll": "WEEKLY PAYROLL TOTAL",
     "empty": "No payment records for this week.",
-    "emptyAction": "Register an order"
+    "emptyAction": "Register a report"
   }
 }
