@@ -3,7 +3,8 @@
     "dashboard": "Panel Principal",
     "workReports": "Reportes de Trabajo",
     "staff": "Personal",
-    "payroll": "Devengados",
+    "payroll": "Nómina Mecánicos",
+    "adminPayroll": "Nómina Administración",
     "weeklyCut": "Corte Semanal",
     "reports": "Reportes PDF",
     "users": "Usuarios del Sistema",
@@ -36,6 +37,7 @@
     },
     "delete": "Eliminar reporte",
     "view": "Ver detalles",
+    "edit": "Editar reporte",
     "deleteConfirmTitle": "¿Eliminar este reporte?",
     "deleteConfirmMsg": "Esta acción no se puede deshacer. Se eliminarán también todas las tareas, asignaciones y devengados asociados.",
     "deleteConfirmBtn": "Sí, eliminar",
@@ -44,6 +46,14 @@
     "empty": "No hay reportes registrados para este período.",
     "emptyAction": "Crear primer reporte",
     "records": "reportes registrados"
+  },
+  "editReport": {
+    "title": "EDITAR REPORTE DE TRABAJO",
+    "save": "GUARDAR CAMBIOS",
+    "success": "REPORTE ACTUALIZADO",
+    "notFound": "Reporte no encontrado",
+    "notAllowedTitle": "Sin permisos",
+    "notAllowedMsg": "Solo super admin y dueño pueden editar reportes de trabajo."
   },
   "reportDetail": {
     "title": "Detalles del Reporte",
@@ -105,7 +115,8 @@
       "removeMechanic": "Quitar",
       "commissionUsed": "Comisión usada",
       "commissionLimit": "Límite 50%",
-      "shopShare": "Ganancia taller (mín. 50%)"
+      "shopShare": "Ganancia taller",
+      "warnOver50": "La comisión asignada supera el 50% del monto cobrado."
     },
     "summary": {
       "title": "RESUMEN FINANCIERO",
@@ -127,8 +138,14 @@
       "atLeastOneMechanic": "Cada tarea debe tener al menos un mecánico asignado.",
       "mechanicRequired": "Seleccione un mecánico para cada asignación.",
       "commissionRequired": "La comisión debe ser mayor a 0%.",
+      "commissionExceedsHardCap": "La suma de comisiones no puede exceder el 100% del monto cobrado.",
       "commissionExceedsLimit": "La comisión total de mecánicos no puede exceder el 50% del precio cobrado."
-    }
+    },
+    "confirmHighCommissionTitle": "Comisión arriba del 50%",
+    "confirmHighCommissionMsg": "Una o más tareas asignan más del 50% de comisión, lo que deja al taller con poca o ninguna ganancia.",
+    "confirmHighCommissionTasks": "Tareas arriba del 50%",
+    "confirmHighCommissionReview": "Revisar",
+    "confirmHighCommissionContinue": "Guardar de todos modos"
   },
   "reports": {
     "title": "REPORTES PDF",
@@ -360,7 +377,33 @@
     },
     "empty": "No hay personas registradas.",
     "deleteConfirm": "¿Eliminar a {name} de la lista? Esta acción no se puede deshacer.",
-    "deleteError": "Error al eliminar: "
+    "deleteError": "Error al eliminar: ",
+    "payment": {
+      "type": "Tipo de pago",
+      "mechanic": "Mecánico (comisión)",
+      "fixedWeekly": "Sueldo fijo semanal",
+      "hourly": "Por hora",
+      "manual": "Manual",
+      "mechanic_commissionDesc": "Cobra por comisiones de reportes",
+      "fixed_weeklyDesc": "Mismo monto cada semana",
+      "hourlyDesc": "Horas × tarifa por hora",
+      "manualDesc": "Tú defines el monto cada semana",
+      "weeklySalary": "Sueldo semanal",
+      "hourlyRate": "Tarifa por hora"
+    }
+  },
+  "adminPayroll": {
+    "title": "NÓMINA ADMINISTRACIÓN",
+    "subtitle": "Pago semanal del personal no-mecánico (administración)",
+    "totalToPay": "Total nómina admin esta semana",
+    "noAdmins": "Aún no hay personal de administración.",
+    "goToStaff": "Agrega personal admin en la página de Personal",
+    "amount": "Monto",
+    "hours": "Horas",
+    "note": "Nota",
+    "notePlaceholder": "Nota opcional...",
+    "add": "Agregar",
+    "confirmDelete": "¿Eliminar este registro?"
   },
   "changePassword": {
     "tempDetectedTitle": "Contraseña temporal detectada",

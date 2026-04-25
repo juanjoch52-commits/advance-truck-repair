@@ -48,6 +48,16 @@ const NAV_ITEMS = [
     ),
   },
   {
+    labelKey: 'nav.adminPayroll',
+    href: '/nomina-admin',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M9 17v-2a4 4 0 014-4h3M9 17a4 4 0 01-4-4V7a4 4 0 014-4h6a4 4 0 014 4v6a4 4 0 01-4 4M9 17l-2 4m10-4l2 4M12 7h.01M12 11h.01" />
+      </svg>
+    ),
+  },
+  {
     labelKey: 'nav.weeklyCut',
     href: '/corte-semanal',
     icon: (

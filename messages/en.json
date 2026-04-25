@@ -3,7 +3,8 @@
     "dashboard": "Dashboard",
     "workReports": "Work Reports",
     "staff": "Staff",
-    "payroll": "Payroll",
+    "payroll": "Mechanic Payroll",
+    "adminPayroll": "Admin Payroll",
     "weeklyCut": "Weekly Cut",
     "reports": "PDF Reports",
     "users": "System Users",
@@ -36,6 +37,7 @@
     },
     "delete": "Delete report",
     "view": "View details",
+    "edit": "Edit report",
     "deleteConfirmTitle": "Delete this report?",
     "deleteConfirmMsg": "This action cannot be undone. All tasks, assignments and payroll entries associated will also be deleted.",
     "deleteConfirmBtn": "Yes, delete",
@@ -44,6 +46,14 @@
     "empty": "No work reports found for this period.",
     "emptyAction": "Create first report",
     "records": "reports registered"
+  },
+  "editReport": {
+    "title": "EDIT WORK REPORT",
+    "save": "SAVE CHANGES",
+    "success": "REPORT UPDATED",
+    "notFound": "Report not found",
+    "notAllowedTitle": "Not allowed",
+    "notAllowedMsg": "Only super admin and owner can edit work reports."
   },
   "reportDetail": {
     "title": "Report Details",
@@ -105,7 +115,8 @@
       "removeMechanic": "Remove",
       "commissionUsed": "Commission used",
       "commissionLimit": "50% limit",
-      "shopShare": "Shop profit (min. 50%)"
+      "shopShare": "Shop share",
+      "warnOver50": "Mechanic commission exceeds 50% of the amount charged."
     },
     "summary": {
       "title": "FINANCIAL SUMMARY",
@@ -127,8 +138,14 @@
       "atLeastOneMechanic": "Each task must have at least one mechanic assigned.",
       "mechanicRequired": "Select a mechanic for each assignment.",
       "commissionRequired": "Commission must be greater than 0%.",
-      "commissionExceedsLimit": "Total mechanic commission cannot exceed 50% of the amount charged."
-    }
+      "commissionExceedsLimit": "Total mechanic commission cannot exceed 50% of the amount charged.",
+      "commissionExceedsHardCap": "Total mechanic commission cannot exceed 100% of the amount charged."
+    },
+    "confirmHighCommissionTitle": "Commission above 50%",
+    "confirmHighCommissionMsg": "One or more tasks assign more than 50% commission, which leaves the shop with little or no profit.",
+    "confirmHighCommissionTasks": "Tasks above 50%",
+    "confirmHighCommissionReview": "Review",
+    "confirmHighCommissionContinue": "Save anyway"
   },
   "reports": {
     "title": "PDF REPORTS",
@@ -360,7 +377,33 @@
     },
     "empty": "No people registered.",
     "deleteConfirm": "Remove {name} from the list? This action cannot be undone.",
-    "deleteError": "Error deleting: "
+    "deleteError": "Error deleting: ",
+    "payment": {
+      "type": "Payment type",
+      "mechanic": "Mechanic (commission)",
+      "fixedWeekly": "Fixed weekly",
+      "hourly": "Hourly",
+      "manual": "Manual",
+      "mechanic_commissionDesc": "Earns from work-report commissions",
+      "fixed_weeklyDesc": "Same amount every week",
+      "hourlyDesc": "Hours × hourly rate",
+      "manualDesc": "Set the amount each week",
+      "weeklySalary": "Weekly salary",
+      "hourlyRate": "Hourly rate"
+    }
+  },
+  "adminPayroll": {
+    "title": "ADMIN PAYROLL",
+    "subtitle": "Weekly pay for non-mechanic staff (administration)",
+    "totalToPay": "Total admin payroll this week",
+    "noAdmins": "No administration staff yet.",
+    "goToStaff": "Add admin staff in the Staff page",
+    "amount": "Amount",
+    "hours": "Hours",
+    "note": "Note",
+    "notePlaceholder": "Optional note...",
+    "add": "Add",
+    "confirmDelete": "Delete this entry?"
   },
   "changePassword": {
     "tempDetectedTitle": "Temporary password detected",
