@@ -223,10 +223,10 @@ export default function OrdenesPage() {
   // Accept both 'super_user' (PIN flow) and 'super_admin' (Supabase auth flow).
   const role = (currentUserRole || '').toLowerCase();
   const isSuper       = role === 'super_user' || role === 'super_admin';
-  const canManage     = isSuper || role === 'owner';
+  const canManage     = isSuper || role === 'owner' || role === 'admin';
   const canDelete     = canManage;
   const canEdit       = canManage;
-  const canViewDetail = canManage || role === 'admin';
+  const canViewDetail = canManage;
   const showActionsCol = canDelete || canEdit || canViewDetail;
 
   return (

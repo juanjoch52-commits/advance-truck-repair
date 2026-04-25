@@ -54,7 +54,7 @@ export default function EditarOrdenPage({ params }: { params: Promise<{ id: stri
         } catch {}
       }
 
-      setAllowed(role === 'super_user' || role === 'super_admin' || role === 'owner');
+      setAllowed(role === 'super_user' || role === 'super_admin' || role === 'owner' || role === 'admin');
     })();
 
     // Load mechanics only for the assignment dropdown
