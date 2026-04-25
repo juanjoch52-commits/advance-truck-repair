@@ -164,6 +164,11 @@
     "weekEnd": "Week end",
     "month": "Month",
     "year": "Year",
+    "specificEmployee": "SPECIFIC EMPLOYEE",
+    "specificEmployeeDesc": "Generate an individual slip with jobs and deductions for the period",
+    "allEmployees": "All employees",
+    "allEmployeesDesc": "general report",
+    "slipNote": "An individual payslip will be generated for {name} with their jobs and deductions.",
     "downloadNote": "The PDF will be downloaded directly to your device, ready to print.",
     "typeSemanal": "Weekly",
     "typeMensual": "Monthly",
@@ -179,6 +184,7 @@
     "english": "English",
     "generating": "GENERATING PDF...",
     "download": "DOWNLOAD PDF",
+    "downloadSlip": "DOWNLOAD PAYSLIP",
     "cancel": "Cancel",
     "type": {
       "semanal": "Weekly",
@@ -211,6 +217,15 @@
     "section": {
       "mechanics": "Mechanics",
       "admin": "Administration"
+    },
+    "slip": {
+      "earningsTitle": "JOBS PERFORMED / EARNINGS",
+      "deductionsTitle": "DEDUCTIONS FOR THE PERIOD",
+      "subtotal": "Subtotal",
+      "totalDeductions": "Total deductions",
+      "grossEarned": "Gross earned",
+      "netCheck": "CHECK AMOUNT",
+      "noEarnings": "No income records for this period."
     },
     "checksTable": "PAYCHECK TABLE",
     "table": {

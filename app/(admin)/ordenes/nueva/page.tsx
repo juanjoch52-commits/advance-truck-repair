@@ -41,7 +41,8 @@ export default function NuevaOrdenPage() {
     // (covers legacy rows where payment_type was never set).
     (supabase as any)
       .from('employees')
-      .select('id, full_name, role, payment_type')
+      .select('id, full_name, role, payment_type, is_active')
+      .eq('is_active', true)
       .order('full_name')
       .then(({ data }: any) => {
         const mechanics = (data ?? []).filter((e: any) =>

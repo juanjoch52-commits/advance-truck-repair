@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import { useLanguage, getTranslator, type Lang } from '@/contexts/LanguageContext';
@@ -9,6 +9,8 @@ import autoTable from 'jspdf-autotable';
 
 type TipoReporte = 'semanal' | 'mensual' | 'anual';
 type TipoEmp = 'mecanicos' | 'admin' | 'todos';
+
+interface EmpOption { id: string; full_name: string; }
 
 function getWeekRange() {
   const now = new Date();
@@ -31,12 +33,33 @@ export default function ReportesContent() {
 
   const [tipo, setTipo] = useState<TipoReporte>((searchParams.get('tipo') as TipoReporte) ?? 'semanal');
   const [tipoEmp, setTipoEmp] = useState<TipoEmp>('mecanicos');
+  const [selectedEmpId, setSelectedEmpId] = useState('');   // '' = todos
+  const [empOptions, setEmpOptions] = useState<EmpOption[]>([]);
+
   const [desde, setDesde] = useState(searchParams.get('desde') ?? defaultWeekStart);
   const [hasta, setHasta] = useState(searchParams.get('hasta') ?? defaultWeekEnd);
-  const [mes, setMes] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+  const [mes, setMes]   = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
   const [anio, setAnio] = useState(String(now.getFullYear()));
   const [loading, setLoading] = useState(false);
   const [showLangModal, setShowLangModal] = useState(false);
+
+  // Load employee list whenever tipoEmp changes
+  useEffect(() => {
+    setSelectedEmpId('');
+    if (tipoEmp === 'todos') { setEmpOptions([]); return; }
+
+    (async () => {
+      let query = (supabase as any).from('employees').select('id, full_name, payment_type, role').order('full_name');
+      const { data } = await query;
+      const all: EmpOption[] = (data ?? [])
+        .filter((e: any) => {
+          const isMech = e.payment_type === 'mechanic_commission' || e.role === 'mechanic';
+          return tipoEmp === 'mecanicos' ? isMech : !isMech;
+        })
+        .map((e: any) => ({ id: e.id, full_name: e.full_name }));
+      setEmpOptions(all);
+    })();
+  }, [tipoEmp]);
 
   const formatMoney = (n: number) =>
     '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -44,12 +67,14 @@ export default function ReportesContent() {
   const formatDate = (d: string, locale = 'es-MX') =>
     new Date(d + 'T12:00:00').toLocaleDateString(locale, { day: '2-digit', month: 'long', year: 'numeric' });
 
+  // ─── PDF generation ───────────────────────────────────────────────────────────
   async function generarPDF(pdfLang: Lang) {
     setShowLangModal(false);
     setLoading(true);
     const t = getTranslator(pdfLang);
     const locale = pdfLang === 'en' ? 'en-US' : 'es-MX';
 
+    // Resolve date range
     let fechaDesde = desde;
     let fechaHasta = hasta;
     let titulo = '';
@@ -72,51 +97,254 @@ export default function ReportesContent() {
       subtitulo = `${t('pdf.period.week')}: ${formatDate(desde, locale)} — ${formatDate(hasta, locale)}`;
     }
 
-    // Determine entry_type filters
+    const INK = 30; const SOFT = 110; const LINE = 170;
     const mechEntryTypes = ['mechanic'];
     const adminEntryTypes = ['admin_fixed', 'admin_hourly', 'admin_manual'];
 
-    // Fetch mechanic entries if needed
+    // ── Single-employee mode ───────────────────────────────────────────────────
+    if (selectedEmpId) {
+      const empName = empOptions.find(e => e.id === selectedEmpId)?.full_name ?? '—';
+      const isMech = tipoEmp === 'mecanicos';
+
+      // Fetch entries
+      const entrySelect = isMech
+        ? `id, amount, work_date, truck_number, description,
+           work_reports!earned_entries_work_report_id_fkey(company, external_order_number)`
+        : `id, amount, work_date, hours_worked, description`;
+
+      const { data: entriesRaw } = await (supabase as any)
+        .from('earned_entries')
+        .select(entrySelect)
+        .gte('work_date', fechaDesde)
+        .lte('work_date', fechaHasta)
+        .eq('employee_id', selectedEmpId)
+        .in('entry_type', isMech ? mechEntryTypes : adminEntryTypes)
+        .order('work_date', { ascending: true });
+
+      const entries = entriesRaw ?? [];
+
+      // Fetch deductions for this employee in the period
+      const { data: debtRaw } = await (supabase as any)
+        .from('debt_payments')
+        .select('amount, week_ending, debts!inner(employee_id, description)')
+        .gte('week_ending', fechaDesde)
+        .lte('week_ending', fechaHasta)
+        .eq('debts.employee_id', selectedEmpId);
+
+      const deductions: { desc: string; amount: number; weekEnding: string }[] =
+        (debtRaw ?? []).map((dp: any) => ({
+          desc: dp.debts?.description ?? 'Deducción',
+          amount: Number(dp.amount),
+          weekEnding: dp.week_ending,
+        }));
+
+      const totalEarned = entries.reduce((s: number, e: any) => s + Number(e.amount), 0);
+      const totalDed = deductions.reduce((s, d) => s + d.amount, 0);
+      const netAmount = totalEarned - totalDed;
+
+      if (entries.length === 0 && deductions.length === 0) {
+        alert(tUI('payroll.empty'));
+        setLoading(false);
+        return;
+      }
+
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
+      const pageW = doc.internal.pageSize.getWidth();
+      const margin = 15;
+
+      // Header
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(INK, INK, INK);
+      doc.text(t('pdf.header.company'), margin, 14);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(SOFT, SOFT, SOFT);
+      doc.text(t('pdf.header.system'), margin, 20);
+      const fechaEmision = new Date().toLocaleDateString(locale, { day: '2-digit', month: 'long', year: 'numeric' });
+      doc.text(`${t('pdf.header.issued')}: ${fechaEmision}`, pageW - margin, 20, { align: 'right' });
+      doc.setDrawColor(LINE, LINE, LINE); doc.setLineWidth(0.2);
+      doc.line(margin, 24, pageW - margin, 24);
+
+      // Employee name block
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(INK, INK, INK);
+      doc.text(empName.toUpperCase(), margin, 33);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(SOFT, SOFT, SOFT);
+      doc.text(isMech ? t('pdf.section.mechanics') : t('pdf.section.admin'), margin, 39);
+      doc.text(subtitulo, pageW - margin, 39, { align: 'right' });
+      doc.setDrawColor(LINE, LINE, LINE); doc.line(margin, 43, pageW - margin, 43);
+
+      let y = 51;
+
+      const baseStyles = {
+        fontSize: 9,
+        textColor: [INK, INK, INK] as [number, number, number],
+        lineColor: [LINE, LINE, LINE] as [number, number, number],
+        lineWidth: 0.15,
+        cellPadding: { top: 2.2, right: 3, bottom: 2.2, left: 3 },
+      };
+      const baseHead = {
+        fillColor: [255, 255, 255] as [number, number, number],
+        textColor: [INK, INK, INK] as [number, number, number],
+        fontStyle: 'normal' as const, fontSize: 9,
+      };
+      const underline = (h: any) => {
+        if (h.section === 'head') {
+          const { x, y: cy, width, height } = h.cell;
+          doc.setDrawColor(LINE, LINE, LINE); doc.setLineWidth(0.2);
+          doc.line(x, cy + height, x + width, cy + height);
+        }
+      };
+
+      // Earnings section header
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(INK, INK, INK);
+      doc.text(t('pdf.slip.earningsTitle'), margin, y); y += 4;
+
+      if (entries.length > 0) {
+        if (isMech) {
+          autoTable(doc, {
+            startY: y, margin: { left: margin, right: margin }, theme: 'plain',
+            head: [[t('pdf.table.date'), t('pdf.table.truck'), t('pdf.table.company'), t('pdf.table.task'), t('pdf.table.amount')]],
+            body: entries.map((e: any) => [
+              new Date(e.work_date + 'T12:00:00').toLocaleDateString(locale),
+              e.truck_number ?? '—',
+              e.work_reports?.company ?? '—',
+              e.description ?? '—',
+              formatMoney(Number(e.amount)),
+            ]),
+            foot: [['', '', '', t('pdf.slip.subtotal'), formatMoney(totalEarned)]],
+            styles: baseStyles,
+            headStyles: baseHead,
+            footStyles: { ...baseHead, fontStyle: 'normal' as const },
+            columnStyles: { 4: { halign: 'right' } },
+            didDrawCell: underline,
+          });
+        } else {
+          autoTable(doc, {
+            startY: y, margin: { left: margin, right: margin }, theme: 'plain',
+            head: [[t('pdf.table.date'), t('pdf.table.hours'), t('pdf.table.note'), t('pdf.table.amount')]],
+            body: entries.map((e: any) => [
+              new Date(e.work_date + 'T12:00:00').toLocaleDateString(locale),
+              e.hours_worked != null ? String(e.hours_worked) : '—',
+              e.description ?? '—',
+              formatMoney(Number(e.amount)),
+            ]),
+            foot: [['', '', t('pdf.slip.subtotal'), formatMoney(totalEarned)]],
+            styles: baseStyles,
+            headStyles: baseHead,
+            footStyles: { ...baseHead, fontStyle: 'normal' as const },
+            columnStyles: { 1: { halign: 'center', cellWidth: 18 }, 3: { halign: 'right', cellWidth: 35 } },
+            didDrawCell: underline,
+          });
+        }
+        y = (doc as any).lastAutoTable.finalY + 8;
+      } else {
+        doc.setFontSize(9); doc.setTextColor(SOFT, SOFT, SOFT);
+        doc.text(t('pdf.slip.noEarnings'), margin, y); y += 8;
+      }
+
+      // Deductions section
+      if (deductions.length > 0) {
+        if (y > 230) { doc.addPage(); y = 20; }
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(INK, INK, INK);
+        doc.text(t('pdf.slip.deductionsTitle'), margin, y); y += 4;
+
+        autoTable(doc, {
+          startY: y, margin: { left: margin, right: margin }, theme: 'plain',
+          head: [[t('pdf.table.date'), t('deductions.description'), t('pdf.table.amount')]],
+          body: deductions.map(d => [
+            new Date(d.weekEnding + 'T12:00:00').toLocaleDateString(locale),
+            d.desc,
+            `- ${formatMoney(d.amount)}`,
+          ]),
+          foot: [['', t('pdf.slip.totalDeductions'), `- ${formatMoney(totalDed)}`]],
+          styles: { ...baseStyles, textColor: [INK, INK, INK] as [number, number, number] },
+          headStyles: baseHead,
+          footStyles: { ...baseHead, fontStyle: 'normal' as const },
+          columnStyles: { 2: { halign: 'right' } },
+          didDrawCell: underline,
+        });
+        y = (doc as any).lastAutoTable.finalY + 8;
+      }
+
+      // Net total box
+      if (y > 240) { doc.addPage(); y = 20; }
+      doc.setDrawColor(LINE, LINE, LINE); doc.setLineWidth(0.3);
+      doc.line(margin, y, pageW - margin, y); y += 8;
+
+      if (deductions.length > 0) {
+        doc.setFontSize(9); doc.setTextColor(SOFT, SOFT, SOFT);
+        doc.text(t('pdf.slip.grossEarned'), margin, y);
+        doc.setTextColor(INK, INK, INK);
+        doc.text(formatMoney(totalEarned), pageW - margin, y, { align: 'right' }); y += 5;
+
+        doc.setTextColor(SOFT, SOFT, SOFT);
+        doc.text(t('pdf.slip.totalDeductions'), margin, y);
+        doc.setTextColor(INK, INK, INK);
+        doc.text(`- ${formatMoney(totalDed)}`, pageW - margin, y, { align: 'right' }); y += 6;
+
+        doc.setDrawColor(LINE, LINE, LINE); doc.setLineWidth(0.15);
+        doc.line(margin, y, pageW - margin, y); y += 6;
+      }
+
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(INK, INK, INK);
+      doc.text(t('pdf.slip.netCheck'), margin, y);
+      doc.text(formatMoney(netAmount), pageW - margin, y, { align: 'right' });
+
+      // Pages footer
+      const totalPages = doc.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(SOFT, SOFT, SOFT);
+        doc.text(`${t('pdf.footer')} ${i} / ${totalPages}`, pageW / 2, doc.internal.pageSize.getHeight() - 8, { align: 'center' });
+      }
+
+      const safeName = empName.replace(/\s+/g, '_').toLowerCase();
+      const suffix = tipo === 'semanal' ? `${desde}_${hasta}` : tipo === 'mensual' ? mes : anio;
+      doc.save(`comprobante_${safeName}_${suffix}.pdf`);
+      setLoading(false);
+
+      // Audit log
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await (supabase as any).from('profiles').select('full_name, email').eq('id', user.id).single();
+          await (supabase as any).from('report_logs').insert({
+            generated_by: user.id,
+            generated_by_name: (profile as any)?.full_name || (profile as any)?.email || user.email,
+            tipo, fecha_desde: fechaDesde, fecha_hasta: fechaHasta, pdf_language: pdfLang,
+          });
+        }
+      } catch (_) {}
+      return;
+    }
+
+    // ── Multi-employee mode (existing logic) ──────────────────────────────────
     let mechData: any[] = [];
     if (tipoEmp === 'mecanicos' || tipoEmp === 'todos') {
       const { data } = await (supabase as any)
         .from('earned_entries')
-        .select(`
-          id, amount, work_date, truck_number, description,
+        .select(`id, amount, work_date, truck_number, description,
           employees!earned_entries_employee_id_fkey(full_name),
-          work_reports!earned_entries_work_report_id_fkey(company, external_order_number)
-        `)
-        .gte('work_date', fechaDesde)
-        .lte('work_date', fechaHasta)
-        .in('entry_type', mechEntryTypes)
-        .order('work_date', { ascending: true });
+          work_reports!earned_entries_work_report_id_fkey(company, external_order_number)`)
+        .gte('work_date', fechaDesde).lte('work_date', fechaHasta)
+        .in('entry_type', mechEntryTypes).order('work_date', { ascending: true });
       mechData = data ?? [];
     }
 
-    // Fetch admin entries if needed
     let adminData: any[] = [];
     if (tipoEmp === 'admin' || tipoEmp === 'todos') {
       const { data } = await (supabase as any)
         .from('earned_entries')
-        .select(`
-          id, amount, work_date, hours_worked, description,
-          employees!earned_entries_employee_id_fkey(full_name)
-        `)
-        .gte('work_date', fechaDesde)
-        .lte('work_date', fechaHasta)
-        .in('entry_type', adminEntryTypes)
-        .order('work_date', { ascending: true });
+        .select(`id, amount, work_date, hours_worked, description,
+          employees!earned_entries_employee_id_fkey(full_name)`)
+        .gte('work_date', fechaDesde).lte('work_date', fechaHasta)
+        .in('entry_type', adminEntryTypes).order('work_date', { ascending: true });
       adminData = data ?? [];
     }
 
-    const allEmpty = mechData.length === 0 && adminData.length === 0;
-    if (allEmpty) {
+    if (mechData.length === 0 && adminData.length === 0) {
       alert(tUI('payroll.empty'));
       setLoading(false);
       return;
     }
 
-    // Group mechanics by employee
     const byMechanic: Record<string, { name: string; total: number; rows: any[] }> = {};
     for (const e of mechData) {
       const name = (e as any).employees?.full_name ?? 'Sin nombre';
@@ -127,7 +355,6 @@ export default function ReportesContent() {
     const mechanics = Object.values(byMechanic).sort((a, b) => b.total - a.total);
     const totalMechanics = mechanics.reduce((s, m) => s + m.total, 0);
 
-    // Group admin by employee
     const byAdmin: Record<string, { name: string; total: number; rows: any[] }> = {};
     for (const e of adminData) {
       const name = (e as any).employees?.full_name ?? 'Sin nombre';
@@ -137,51 +364,29 @@ export default function ReportesContent() {
     }
     const admins = Object.values(byAdmin).sort((a, b) => b.total - a.total);
     const totalAdmins = admins.reduce((s, a) => s + a.total, 0);
-
     const totalGeneral = totalMechanics + totalAdmins;
 
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
     const pageW = doc.internal.pageSize.getWidth();
     const margin = 15;
 
-    const INK = 30;
-    const SOFT = 110;
-    const LINE = 170;
-
-    // Header
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.setTextColor(INK, INK, INK);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(INK, INK, INK);
     doc.text(t('pdf.header.company'), margin, 14);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(SOFT, SOFT, SOFT);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(SOFT, SOFT, SOFT);
     doc.text(t('pdf.header.system'), margin, 20);
-
     const fechaEmision = new Date().toLocaleDateString(locale, { day: '2-digit', month: 'long', year: 'numeric' });
     doc.text(`${t('pdf.header.issued')}: ${fechaEmision}`, pageW - margin, 20, { align: 'right' });
-
-    doc.setDrawColor(LINE, LINE, LINE);
-    doc.setLineWidth(0.2);
+    doc.setDrawColor(LINE, LINE, LINE); doc.setLineWidth(0.2);
     doc.line(margin, 24, pageW - margin, 24);
 
-    // Title
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(12);
-    doc.setTextColor(INK, INK, INK);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(12); doc.setTextColor(INK, INK, INK);
     doc.text(titulo, margin, 32);
-
-    doc.setFontSize(9);
-    doc.setTextColor(SOFT, SOFT, SOFT);
+    doc.setFontSize(9); doc.setTextColor(SOFT, SOFT, SOFT);
     doc.text(subtitulo, margin, 38);
 
     let y = 46;
 
-    // Summary line
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(SOFT, SOFT, SOFT);
+    doc.setFontSize(9); doc.setTextColor(SOFT, SOFT, SOFT);
     doc.text(t('pdf.summary.totalPayroll') + ':', margin, y);
     doc.setTextColor(INK, INK, INK);
     doc.text(formatMoney(totalGeneral), margin + 50, y);
@@ -190,8 +395,7 @@ export default function ReportesContent() {
       doc.setTextColor(SOFT, SOFT, SOFT);
       doc.text(t('pdf.summary.mechanics') + ':', pageW / 2, y);
       doc.setTextColor(INK, INK, INK);
-      doc.text(formatMoney(totalMechanics), pageW / 2 + 30, y);
-      y += 5;
+      doc.text(formatMoney(totalMechanics), pageW / 2 + 30, y); y += 5;
       doc.setTextColor(SOFT, SOFT, SOFT);
       doc.text(t('pdf.summary.admin') + ':', pageW / 2, y);
       doc.setTextColor(INK, INK, INK);
@@ -209,255 +413,162 @@ export default function ReportesContent() {
     }
 
     y += 4;
-    doc.setDrawColor(LINE, LINE, LINE);
-    doc.setLineWidth(0.2);
-    doc.line(margin, y, pageW - margin, y);
-    y += 6;
+    doc.setDrawColor(LINE, LINE, LINE); doc.setLineWidth(0.2);
+    doc.line(margin, y, pageW - margin, y); y += 6;
 
     const baseTableStyles = {
-      fontSize: 9,
-      textColor: [INK, INK, INK] as [number, number, number],
-      lineColor: [LINE, LINE, LINE] as [number, number, number],
-      lineWidth: 0.15,
+      fontSize: 9, textColor: [INK, INK, INK] as [number, number, number],
+      lineColor: [LINE, LINE, LINE] as [number, number, number], lineWidth: 0.15,
       cellPadding: { top: 2.2, right: 3, bottom: 2.2, left: 3 },
     };
     const baseHeadStyles = {
       fillColor: [255, 255, 255] as [number, number, number],
       textColor: [INK, INK, INK] as [number, number, number],
-      fontStyle: 'normal' as const,
-      fontSize: 9,
+      fontStyle: 'normal' as const, fontSize: 9,
     };
-    const baseFootStyles = {
-      fillColor: [255, 255, 255] as [number, number, number],
-      textColor: [INK, INK, INK] as [number, number, number],
-      fontStyle: 'normal' as const,
-      fontSize: 9,
-    };
-
+    const baseFootStyles = { ...baseHeadStyles };
     const underlineHeader = (hookData: any) => {
       if (hookData.section === 'head') {
         const { x, y: cy, width, height } = hookData.cell;
-        doc.setDrawColor(LINE, LINE, LINE);
-        doc.setLineWidth(0.2);
+        doc.setDrawColor(LINE, LINE, LINE); doc.setLineWidth(0.2);
         doc.line(x, cy + height, x + width, cy + height);
       }
     };
 
-    // ── MECHANICS SECTION ──
+    // Mechanics section
     if (mechanics.length > 0) {
       if (tipoEmp === 'todos') {
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(10);
-        doc.setTextColor(INK, INK, INK);
-        doc.text(t('pdf.section.mechanics').toUpperCase(), margin, y);
-        y += 5;
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(INK, INK, INK);
+        doc.text(t('pdf.section.mechanics').toUpperCase(), margin, y); y += 5;
       }
 
       if (tipo === 'semanal') {
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(10);
-        doc.setTextColor(INK, INK, INK);
-        doc.text(t('pdf.checksTable'), margin, y);
-        y += 4;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(INK, INK, INK);
+        doc.text(t('pdf.checksTable'), margin, y); y += 4;
 
         autoTable(doc, {
-          startY: y,
-          margin: { left: margin, right: margin },
-          theme: 'plain',
+          startY: y, margin: { left: margin, right: margin }, theme: 'plain',
           head: [[t('pdf.table.num'), t('pdf.table.mechanic'), t('pdf.table.jobs'), t('pdf.table.amount')]],
           body: mechanics.map((m, i) => [i + 1, m.name, m.rows.length, formatMoney(m.total)]),
           foot: [['', t('pdf.table.total'), mechanics.reduce((s, m) => s + m.rows.length, 0), formatMoney(totalMechanics)]],
-          styles: baseTableStyles,
-          headStyles: baseHeadStyles,
-          footStyles: baseFootStyles,
-          columnStyles: {
-            0: { halign: 'center', cellWidth: 10 },
-            2: { halign: 'center', cellWidth: 25 },
-            3: { halign: 'right', cellWidth: 40 },
-          },
+          styles: baseTableStyles, headStyles: baseHeadStyles, footStyles: baseFootStyles,
+          columnStyles: { 0: { halign: 'center', cellWidth: 10 }, 2: { halign: 'center', cellWidth: 25 }, 3: { halign: 'right', cellWidth: 40 } },
           didDrawCell: underlineHeader,
         });
-
         y = (doc as any).lastAutoTable.finalY + 10;
 
         for (const m of mechanics) {
           if (y > 230) { doc.addPage(); y = 20; }
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(10);
-          doc.setTextColor(INK, INK, INK);
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(INK, INK, INK);
           doc.text(m.name.toUpperCase(), margin, y + 4);
           doc.text(formatMoney(m.total), pageW - margin, y + 4, { align: 'right' });
-          doc.setDrawColor(LINE, LINE, LINE);
-          doc.setLineWidth(0.2);
-          doc.line(margin, y + 6, pageW - margin, y + 6);
-          y += 9;
+          doc.setDrawColor(LINE, LINE, LINE); doc.setLineWidth(0.2);
+          doc.line(margin, y + 6, pageW - margin, y + 6); y += 9;
 
           autoTable(doc, {
-            startY: y,
-            margin: { left: margin, right: margin },
-            theme: 'plain',
+            startY: y, margin: { left: margin, right: margin }, theme: 'plain',
             head: [[t('pdf.table.date'), t('pdf.table.truck'), t('pdf.table.company'), t('pdf.table.task'), t('pdf.table.amount')]],
             body: m.rows.map((e: any) => [
               new Date(e.work_date + 'T12:00:00').toLocaleDateString(locale),
-              e.truck_number ?? '-',
-              e.work_reports?.company ?? '-',
-              e.description ?? '-',
+              e.truck_number ?? '-', e.work_reports?.company ?? '-', e.description ?? '-',
               formatMoney(Number(e.amount)),
             ]),
-            styles: { ...baseTableStyles, fontSize: 8 },
-            headStyles: { ...baseHeadStyles, fontSize: 8 },
-            columnStyles: { 4: { halign: 'right' } },
-            didDrawCell: underlineHeader,
+            styles: { ...baseTableStyles, fontSize: 8 }, headStyles: { ...baseHeadStyles, fontSize: 8 },
+            columnStyles: { 4: { halign: 'right' } }, didDrawCell: underlineHeader,
           });
-
           y = (doc as any).lastAutoTable.finalY + 8;
         }
       } else {
-        // Mensual / anual mechanics
         autoTable(doc, {
-          startY: y,
-          margin: { left: margin, right: margin },
-          theme: 'plain',
+          startY: y, margin: { left: margin, right: margin }, theme: 'plain',
           head: [[t('pdf.table.num'), t('pdf.table.mechanic'), t('pdf.table.jobs'), t('pdf.table.totalEarned')]],
           body: mechanics.map((m, i) => [i + 1, m.name, m.rows.length, formatMoney(m.total)]),
           foot: [['', t('pdf.table.total'), mechanics.reduce((s, m) => s + m.rows.length, 0), formatMoney(totalMechanics)]],
-          styles: { ...baseTableStyles, fontSize: 10 },
-          headStyles: { ...baseHeadStyles, fontSize: 10 },
+          styles: { ...baseTableStyles, fontSize: 10 }, headStyles: { ...baseHeadStyles, fontSize: 10 },
           footStyles: { ...baseFootStyles, fontSize: 10 },
-          columnStyles: {
-            0: { halign: 'center', cellWidth: 12 },
-            2: { halign: 'center', cellWidth: 30 },
-            3: { halign: 'right', cellWidth: 45 },
-          },
+          columnStyles: { 0: { halign: 'center', cellWidth: 12 }, 2: { halign: 'center', cellWidth: 30 }, 3: { halign: 'right', cellWidth: 45 } },
           didDrawCell: underlineHeader,
         });
         y = (doc as any).lastAutoTable.finalY + 10;
       }
     }
 
-    // ── ADMIN SECTION ──
+    // Admin section
     if (admins.length > 0) {
       if (y > 230) { doc.addPage(); y = 20; }
-
       if (tipoEmp === 'todos') {
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(10);
-        doc.setTextColor(INK, INK, INK);
-        doc.text(t('pdf.section.admin').toUpperCase(), margin, y);
-        y += 5;
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(INK, INK, INK);
+        doc.text(t('pdf.section.admin').toUpperCase(), margin, y); y += 5;
       }
 
       if (tipo === 'semanal') {
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(10);
-        doc.setTextColor(INK, INK, INK);
-        doc.text(t('pdf.checksTable'), margin, y);
-        y += 4;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(INK, INK, INK);
+        doc.text(t('pdf.checksTable'), margin, y); y += 4;
 
         autoTable(doc, {
-          startY: y,
-          margin: { left: margin, right: margin },
-          theme: 'plain',
+          startY: y, margin: { left: margin, right: margin }, theme: 'plain',
           head: [[t('pdf.table.num'), t('pdf.table.employee'), t('pdf.table.records'), t('pdf.table.amount')]],
           body: admins.map((a, i) => [i + 1, a.name, a.rows.length, formatMoney(a.total)]),
           foot: [['', t('pdf.table.total'), admins.reduce((s, a) => s + a.rows.length, 0), formatMoney(totalAdmins)]],
-          styles: baseTableStyles,
-          headStyles: baseHeadStyles,
-          footStyles: baseFootStyles,
-          columnStyles: {
-            0: { halign: 'center', cellWidth: 10 },
-            2: { halign: 'center', cellWidth: 25 },
-            3: { halign: 'right', cellWidth: 40 },
-          },
+          styles: baseTableStyles, headStyles: baseHeadStyles, footStyles: baseFootStyles,
+          columnStyles: { 0: { halign: 'center', cellWidth: 10 }, 2: { halign: 'center', cellWidth: 25 }, 3: { halign: 'right', cellWidth: 40 } },
           didDrawCell: underlineHeader,
         });
-
         y = (doc as any).lastAutoTable.finalY + 10;
 
         for (const a of admins) {
           if (y > 230) { doc.addPage(); y = 20; }
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(10);
-          doc.setTextColor(INK, INK, INK);
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(INK, INK, INK);
           doc.text(a.name.toUpperCase(), margin, y + 4);
           doc.text(formatMoney(a.total), pageW - margin, y + 4, { align: 'right' });
-          doc.setDrawColor(LINE, LINE, LINE);
-          doc.setLineWidth(0.2);
-          doc.line(margin, y + 6, pageW - margin, y + 6);
-          y += 9;
+          doc.setDrawColor(LINE, LINE, LINE); doc.setLineWidth(0.2);
+          doc.line(margin, y + 6, pageW - margin, y + 6); y += 9;
 
           autoTable(doc, {
-            startY: y,
-            margin: { left: margin, right: margin },
-            theme: 'plain',
+            startY: y, margin: { left: margin, right: margin }, theme: 'plain',
             head: [[t('pdf.table.date'), t('pdf.table.hours'), t('pdf.table.note'), t('pdf.table.amount')]],
             body: a.rows.map((e: any) => [
               new Date(e.work_date + 'T12:00:00').toLocaleDateString(locale),
-              e.hours_worked != null ? String(e.hours_worked) : '—',
-              e.description ?? '—',
+              e.hours_worked != null ? String(e.hours_worked) : '—', e.description ?? '—',
               formatMoney(Number(e.amount)),
             ]),
-            styles: { ...baseTableStyles, fontSize: 8 },
-            headStyles: { ...baseHeadStyles, fontSize: 8 },
-            columnStyles: {
-              1: { halign: 'center', cellWidth: 18 },
-              3: { halign: 'right', cellWidth: 35 },
-            },
+            styles: { ...baseTableStyles, fontSize: 8 }, headStyles: { ...baseHeadStyles, fontSize: 8 },
+            columnStyles: { 1: { halign: 'center', cellWidth: 18 }, 3: { halign: 'right', cellWidth: 35 } },
             didDrawCell: underlineHeader,
           });
-
           y = (doc as any).lastAutoTable.finalY + 8;
         }
       } else {
-        // Mensual / anual admin
         autoTable(doc, {
-          startY: y,
-          margin: { left: margin, right: margin },
-          theme: 'plain',
+          startY: y, margin: { left: margin, right: margin }, theme: 'plain',
           head: [[t('pdf.table.num'), t('pdf.table.employee'), t('pdf.table.records'), t('pdf.table.totalEarned')]],
           body: admins.map((a, i) => [i + 1, a.name, a.rows.length, formatMoney(a.total)]),
           foot: [['', t('pdf.table.total'), admins.reduce((s, a) => s + a.rows.length, 0), formatMoney(totalAdmins)]],
-          styles: { ...baseTableStyles, fontSize: 10 },
-          headStyles: { ...baseHeadStyles, fontSize: 10 },
+          styles: { ...baseTableStyles, fontSize: 10 }, headStyles: { ...baseHeadStyles, fontSize: 10 },
           footStyles: { ...baseFootStyles, fontSize: 10 },
-          columnStyles: {
-            0: { halign: 'center', cellWidth: 12 },
-            2: { halign: 'center', cellWidth: 30 },
-            3: { halign: 'right', cellWidth: 45 },
-          },
+          columnStyles: { 0: { halign: 'center', cellWidth: 12 }, 2: { halign: 'center', cellWidth: 30 }, 3: { halign: 'right', cellWidth: 45 } },
           didDrawCell: underlineHeader,
         });
         y = (doc as any).lastAutoTable.finalY + 10;
       }
     }
 
-    // Grand total line (only for "todos")
+    // Grand total for "todos"
     if (tipoEmp === 'todos' && mechanics.length > 0 && admins.length > 0) {
       if (y > 250) { doc.addPage(); y = 20; }
-      doc.setDrawColor(LINE, LINE, LINE);
-      doc.setLineWidth(0.3);
-      doc.line(margin, y, pageW - margin, y);
-      y += 7;
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
-      doc.setTextColor(INK, INK, INK);
+      doc.setDrawColor(LINE, LINE, LINE); doc.setLineWidth(0.3);
+      doc.line(margin, y, pageW - margin, y); y += 7;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(INK, INK, INK);
       doc.text(t('pdf.table.grandTotal'), margin, y);
       doc.text(formatMoney(totalGeneral), pageW - margin, y, { align: 'right' });
     }
 
-    // Footer pages
+    // Pages footer
     const totalPages = doc.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
       doc.setPage(i);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(SOFT, SOFT, SOFT);
-      doc.text(
-        `${t('pdf.footer')} ${i} / ${totalPages}`,
-        pageW / 2,
-        doc.internal.pageSize.getHeight() - 8,
-        { align: 'center' }
-      );
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(SOFT, SOFT, SOFT);
+      doc.text(`${t('pdf.footer')} ${i} / ${totalPages}`, pageW / 2, doc.internal.pageSize.getHeight() - 8, { align: 'center' });
     }
 
     const empSuffix = tipoEmp === 'mecanicos' ? '_mecanicos' : tipoEmp === 'admin' ? '_admin' : '_todos';
@@ -469,19 +580,14 @@ export default function ReportesContent() {
 
     doc.save(fileName);
 
-    // Audit log
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data: profile } = await (supabase as any)
-          .from('profiles').select('full_name, email').eq('id', user.id).single();
+        const { data: profile } = await (supabase as any).from('profiles').select('full_name, email').eq('id', user.id).single();
         await (supabase as any).from('report_logs').insert({
           generated_by: user.id,
           generated_by_name: (profile as any)?.full_name || (profile as any)?.email || user.email,
-          tipo,
-          fecha_desde: fechaDesde,
-          fecha_hasta: fechaHasta,
-          pdf_language: pdfLang,
+          tipo, fecha_desde: fechaDesde, fecha_hasta: fechaHasta, pdf_language: pdfLang,
         });
       }
     } catch (_) {}
@@ -489,6 +595,7 @@ export default function ReportesContent() {
     setLoading(false);
   }
 
+  // ─── UI ───────────────────────────────────────────────────────────────────────
   const REPORT_TYPES = [
     { key: 'semanal' as TipoReporte, labelKey: 'reports.typeSemanal', descKey: 'reports.typeDescSemanal' },
     { key: 'mensual' as TipoReporte, labelKey: 'reports.typeMensual', descKey: 'reports.typeDescMensual' },
@@ -501,6 +608,8 @@ export default function ReportesContent() {
     { key: 'todos',     label: tUI('reports.empAll'),       desc: tUI('reports.empAllDesc')       },
   ];
 
+  const selectedEmpName = empOptions.find(e => e.id === selectedEmpId)?.full_name ?? '';
+
   return (
     <div>
       <div className="mb-8">
@@ -509,6 +618,7 @@ export default function ReportesContent() {
       </div>
 
       <div className="max-w-2xl space-y-6">
+
         {/* Tipo de empleado */}
         <div className="bg-slate-900/60 border border-white/5 rounded-xl p-6">
           <h2 className="display-font text-slate-300 font-semibold mb-4 tracking-wide">{tUI('reports.empType')}</h2>
@@ -526,6 +636,62 @@ export default function ReportesContent() {
             ))}
           </div>
         </div>
+
+        {/* Empleado específico (cuando no es "todos") */}
+        {tipoEmp !== 'todos' && empOptions.length > 0 && (
+          <div className="bg-slate-900/60 border border-white/5 rounded-xl p-6">
+            <h2 className="display-font text-slate-300 font-semibold mb-1 tracking-wide">
+              {tUI('reports.specificEmployee')}
+            </h2>
+            <p className="text-slate-500 text-xs mb-4">{tUI('reports.specificEmployeeDesc')}</p>
+            <div className="grid grid-cols-1 gap-2">
+              {/* "Todos" option */}
+              <button type="button" onClick={() => setSelectedEmpId('')}
+                className={`px-4 py-2.5 rounded-lg border text-left text-sm transition-all flex items-center gap-2 ${
+                  !selectedEmpId
+                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                    : 'bg-slate-800/50 border-white/5 text-slate-400 hover:border-white/10'
+                }`}>
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span className="font-medium">{tUI('reports.allEmployees')}</span>
+                <span className="text-xs opacity-60 ml-1">— {tUI('reports.allEmployeesDesc')}</span>
+              </button>
+
+              {/* Individual employees */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+                {empOptions.map(emp => (
+                  <button key={emp.id} type="button" onClick={() => setSelectedEmpId(emp.id)}
+                    className={`px-4 py-2.5 rounded-lg border text-left text-sm transition-all flex items-center gap-2 ${
+                      selectedEmpId === emp.id
+                        ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                        : 'bg-slate-800/50 border-white/5 text-slate-400 hover:border-white/10 hover:text-slate-200'
+                    }`}>
+                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    <span className="font-medium truncate">{emp.full_name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Badge when someone is selected */}
+            {selectedEmpId && (
+              <div className="mt-3 flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+                <svg className="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-amber-300 text-xs">
+                  {tUI('reports.slipNote').replace('{name}', selectedEmpName)}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Tipo de reporte */}
         <div className="bg-slate-900/60 border border-white/5 rounded-xl p-6">
@@ -599,7 +765,9 @@ export default function ReportesContent() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              {tUI('pdf.download')} {tUI(`pdf.type.${tipo}`).toUpperCase()}
+              {selectedEmpId
+                ? `${tUI('pdf.downloadSlip')} — ${selectedEmpName}`
+                : `${tUI('pdf.download')} ${tUI(`pdf.type.${tipo}`).toUpperCase()}`}
             </>
           )}
         </button>
@@ -615,32 +783,20 @@ export default function ReportesContent() {
               {tUI('pdf.modalTitle')}
             </h2>
             <p className="text-slate-400 text-sm mb-6">{tUI('pdf.modalSubtitle')}</p>
-
             <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => generarPDF('es')}
-                className="flex flex-col items-center gap-2 p-5 rounded-xl border border-white/10 hover:border-amber-500/40 hover:bg-amber-500/10 transition group"
-              >
+              <button onClick={() => generarPDF('es')}
+                className="flex flex-col items-center gap-2 p-5 rounded-xl border border-white/10 hover:border-amber-500/40 hover:bg-amber-500/10 transition group">
                 <span className="text-3xl">🇪🇸</span>
-                <span className="display-font text-slate-200 group-hover:text-amber-400 font-bold tracking-wide transition">
-                  {tUI('pdf.spanish')}
-                </span>
+                <span className="display-font text-slate-200 group-hover:text-amber-400 font-bold tracking-wide transition">{tUI('pdf.spanish')}</span>
               </button>
-              <button
-                onClick={() => generarPDF('en')}
-                className="flex flex-col items-center gap-2 p-5 rounded-xl border border-white/10 hover:border-sky-500/40 hover:bg-sky-500/10 transition group"
-              >
+              <button onClick={() => generarPDF('en')}
+                className="flex flex-col items-center gap-2 p-5 rounded-xl border border-white/10 hover:border-sky-500/40 hover:bg-sky-500/10 transition group">
                 <span className="text-3xl">🇺🇸</span>
-                <span className="display-font text-slate-200 group-hover:text-sky-400 font-bold tracking-wide transition">
-                  {tUI('pdf.english')}
-                </span>
+                <span className="display-font text-slate-200 group-hover:text-sky-400 font-bold tracking-wide transition">{tUI('pdf.english')}</span>
               </button>
             </div>
-
-            <button
-              onClick={() => setShowLangModal(false)}
-              className="w-full mt-4 text-slate-500 hover:text-slate-300 text-sm py-2 transition"
-            >
+            <button onClick={() => setShowLangModal(false)}
+              className="w-full mt-4 text-slate-500 hover:text-slate-300 text-sm py-2 transition">
               {tUI('pdf.cancel')}
             </button>
           </div>

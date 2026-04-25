@@ -57,10 +57,11 @@ export default function EditarOrdenPage({ params }: { params: Promise<{ id: stri
       setAllowed(role === 'super_user' || role === 'super_admin' || role === 'owner' || role === 'admin');
     })();
 
-    // Load mechanics only for the assignment dropdown
+    // Load mechanics only for the assignment dropdown (exclude suspended)
     (supabase as any)
       .from('employees')
-      .select('id, full_name, role, payment_type')
+      .select('id, full_name, role, payment_type, is_active')
+      .eq('is_active', true)
       .order('full_name')
       .then(({ data }: any) => {
         const mechanics = (data ?? []).filter((e: any) =>

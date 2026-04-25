@@ -15,6 +15,7 @@ interface Employee {
   payment_type: string | null;
   weekly_salary: number | null;
   hourly_rate: number | null;
+  is_active: boolean;
 }
 
 type Profile = 'mechanic' | 'admin';
@@ -55,7 +56,7 @@ export default function PersonalPage() {
 
   async function load() {
     const { data } = await (supabase as any).from('employees')
-      .select('id, full_name, phone, email, hire_date, notes, role, payment_type, weekly_salary, hourly_rate')
+      .select('id, full_name, phone, email, hire_date, notes, role, payment_type, weekly_salary, hourly_rate, is_active')
       .order('full_name');
     setEmployees((data ?? []) as Employee[]);
     setLoading(false);
@@ -303,6 +304,21 @@ export default function PersonalPage() {
     );
   }
 
+  // ── Suspend / activate ──
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  async function handleToggleActive(emp: Employee) {
+    if (!confirm(
+      emp.is_active
+        ? `¿Suspender a ${emp.full_name}? Ya no aparecerá en los reportes de trabajo.`
+        : `¿Reactivar a ${emp.full_name}?`
+    )) return;
+    setTogglingId(emp.id);
+    await (supabase as any).from('employees').update({ is_active: !emp.is_active }).eq('id', emp.id);
+    setTogglingId(null);
+    load();
+  }
+
   // ── Row / card actions ──
   const EditBtn = ({ emp }: { emp: Employee }) => (
     <button onClick={() => openEdit(emp)}
@@ -312,6 +328,28 @@ export default function PersonalPage() {
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
           d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-1.414a2 2 0 01.586-1.414z" />
       </svg>
+    </button>
+  );
+
+  const SuspendBtn = ({ emp }: { emp: Employee }) => (
+    <button
+      onClick={() => handleToggleActive(emp)}
+      disabled={togglingId === emp.id}
+      title={emp.is_active ? 'Suspender mecánico' : 'Reactivar mecánico'}
+      className={`transition p-1.5 rounded text-xs font-semibold flex items-center gap-1 ${
+        emp.is_active
+          ? 'text-slate-500 hover:text-orange-400 hover:bg-orange-500/10'
+          : 'text-green-500 hover:text-green-400 hover:bg-green-500/10'
+      }`}>
+      {togglingId === emp.id ? <span className="text-slate-500">...</span> : emp.is_active ? (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+        </svg>
+      ) : (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      )}
     </button>
   );
 
@@ -344,7 +382,18 @@ export default function PersonalPage() {
         <tbody>
           {rows.map(emp => (
             <tr key={emp.id} className="border-b border-white/5 hover:bg-white/2 transition-colors">
-              <td className="px-5 py-3.5 text-slate-200 font-medium">{emp.full_name}</td>
+              <td className="px-5 py-3.5">
+                <div className="flex items-center gap-2">
+                  <span className={`font-medium ${emp.is_active ? 'text-slate-200' : 'text-slate-500 line-through'}`}>
+                    {emp.full_name}
+                  </span>
+                  {!emp.is_active && (
+                    <span className="text-xs px-1.5 py-0.5 rounded-full bg-orange-500/15 border border-orange-500/30 text-orange-400">
+                      Suspendido
+                    </span>
+                  )}
+                </div>
+              </td>
               <td className="px-5 py-3.5 text-slate-400">{emp.phone ?? '—'}</td>
               <td className="px-5 py-3.5 text-slate-500">
                 {new Date(emp.hire_date + 'T12:00:00').toLocaleDateString(locale)}
@@ -353,6 +402,7 @@ export default function PersonalPage() {
               <td className="px-5 py-3.5 text-right">
                 <div className="flex items-center justify-end gap-1">
                   <EditBtn emp={emp} />
+                  <SuspendBtn emp={emp} />
                   <DeleteBtn emp={emp} />
                 </div>
               </td>
@@ -372,7 +422,14 @@ export default function PersonalPage() {
           <div key={emp.id} className="bg-slate-900/60 border border-white/5 rounded-xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <p className="display-font text-slate-200 font-semibold tracking-wide">{emp.full_name}</p>
+                <p className={`display-font font-semibold tracking-wide ${emp.is_active ? 'text-slate-200' : 'text-slate-500 line-through'}`}>
+                  {emp.full_name}
+                </p>
+                {!emp.is_active && (
+                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-orange-500/15 border border-orange-500/30 text-orange-400">
+                    Suspendido
+                  </span>
+                )}
                 <span className="text-xs px-2 py-0.5 rounded-full border bg-sky-500/10 border-sky-500/30 text-sky-300">
                   {payTypeLabel(emp)}
                 </span>
@@ -389,6 +446,7 @@ export default function PersonalPage() {
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
               <EditBtn emp={emp} />
+              <SuspendBtn emp={emp} />
               <DeleteBtn emp={emp} />
             </div>
           </div>

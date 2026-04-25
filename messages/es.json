@@ -164,6 +164,11 @@
     "weekEnd": "Fin de semana",
     "month": "Mes",
     "year": "Año",
+    "specificEmployee": "EMPLEADO ESPECÍFICO",
+    "specificEmployeeDesc": "Genera un comprobante individual con trabajos y deducciones del periodo",
+    "allEmployees": "Todos los empleados",
+    "allEmployeesDesc": "reporte general",
+    "slipNote": "Se generará un comprobante individual para {name} con sus trabajos y deducciones.",
     "downloadNote": "El PDF se descargará directamente en su dispositivo listo para imprimir.",
     "typeSemanal": "Semanal",
     "typeMensual": "Mensual",
@@ -179,6 +184,7 @@
     "english": "English",
     "generating": "GENERANDO PDF...",
     "download": "DESCARGAR PDF",
+    "downloadSlip": "DESCARGAR COMPROBANTE",
     "cancel": "Cancelar",
     "type": {
       "semanal": "Semanal",
@@ -211,6 +217,15 @@
     "section": {
       "mechanics": "Mecánicos",
       "admin": "Administración"
+    },
+    "slip": {
+      "earningsTitle": "TRABAJOS REALIZADOS / INGRESOS",
+      "deductionsTitle": "DEDUCCIONES DEL PERIODO",
+      "subtotal": "Subtotal",
+      "totalDeductions": "Total deducciones",
+      "grossEarned": "Total devengado",
+      "netCheck": "MONTO DEL CHEQUE",
+      "noEarnings": "Sin registros de ingresos en este periodo."
     },
     "checksTable": "TABLA DE CHEQUES",
     "table": {
