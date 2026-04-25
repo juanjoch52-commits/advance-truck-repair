@@ -9,7 +9,8 @@
     "reports": "PDF Reports",
     "users": "System Users",
     "logout": "Sign Out",
-    "language": "Language"
+    "language": "Language",
+    "deductions": "Deductions"
   },
   "workReports": {
     "title": "WORK REPORTS",
@@ -435,6 +436,43 @@
     "errorMin": "Password must be at least 8 characters.",
     "errorMatch": "Passwords do not match.",
     "errorUpdate": "Error updating password: "
+  },
+  "deductions": {
+    "title": "DEDUCTIONS",
+    "subtitle": "Debt and weekly deduction management",
+    "newDebt": "NEW DEBT",
+    "activeDebts": "Active debts",
+    "noDebts": "No active debts registered.",
+    "form": {
+      "employee": "Employee",
+      "selectEmployee": "Select employee...",
+      "description": "Reason / Description",
+      "descriptionPlaceholder": "E.g.: Salary advance, tool damage...",
+      "totalAmount": "Total debt amount ($)",
+      "weeks": "Number of weeks to pay",
+      "weeklyInstallment": "Calculated weekly installment",
+      "submit": "REGISTER DEBT",
+      "saving": "SAVING...",
+      "errorEmployee": "Select an employee.",
+      "errorAmount": "Amount must be greater than $0.",
+      "errorWeeks": "Must be at least 1 week.",
+      "errorDescription": "Enter the reason for the debt."
+    },
+    "card": {
+      "total": "Total debt",
+      "remaining": "Remaining balance",
+      "weekly": "Weekly installment",
+      "weeksLeft": "weeks remaining",
+      "paid": "PAID",
+      "applyInstallment": "Apply this week's installment",
+      "applying": "Applying...",
+      "alreadyApplied": "Installment applied this week",
+      "cancelDebt": "Cancel debt",
+      "cancelConfirm": "Cancel this debt? It will be marked as inactive.",
+      "progress": "Progress"
+    },
+    "inPayroll": "Deductions",
+    "netAmount": "Net check"
   },
   "resetPassword": {
     "title": "RESET PASSWORD",

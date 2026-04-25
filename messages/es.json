@@ -9,7 +9,8 @@
     "reports": "Reportes PDF",
     "users": "Usuarios del Sistema",
     "logout": "Cerrar Sesión",
-    "language": "Idioma"
+    "language": "Idioma",
+    "deductions": "Deducciones"
   },
   "workReports": {
     "title": "REPORTES DE TRABAJO",
@@ -435,6 +436,43 @@
     "errorMin": "La contraseña debe tener al menos 8 caracteres.",
     "errorMatch": "Las contraseñas no coinciden.",
     "errorUpdate": "Error al actualizar contraseña: "
+  },
+  "deductions": {
+    "title": "DEDUCCIONES",
+    "subtitle": "Gestión de deudas y descuentos semanales",
+    "newDebt": "NUEVA DEUDA",
+    "activeDebts": "Deudas activas",
+    "noDebts": "No hay deudas activas registradas.",
+    "form": {
+      "employee": "Empleado",
+      "selectEmployee": "Seleccionar empleado...",
+      "description": "Motivo / Descripción",
+      "descriptionPlaceholder": "Ej: Adelanto de sueldo, daño en herramienta...",
+      "totalAmount": "Monto total de la deuda ($)",
+      "weeks": "Número de semanas para pagar",
+      "weeklyInstallment": "Cuota semanal calculada",
+      "submit": "REGISTRAR DEUDA",
+      "saving": "GUARDANDO...",
+      "errorEmployee": "Selecciona un empleado.",
+      "errorAmount": "El monto debe ser mayor a $0.",
+      "errorWeeks": "Debe ser al menos 1 semana.",
+      "errorDescription": "Escribe el motivo de la deuda."
+    },
+    "card": {
+      "total": "Deuda total",
+      "remaining": "Saldo pendiente",
+      "weekly": "Cuota semanal",
+      "weeksLeft": "semanas restantes",
+      "paid": "PAGADA",
+      "applyInstallment": "Aplicar cuota esta semana",
+      "applying": "Aplicando...",
+      "alreadyApplied": "Cuota aplicada esta semana",
+      "cancelDebt": "Cancelar deuda",
+      "cancelConfirm": "¿Cancelar esta deuda? Se marcará como inactiva.",
+      "progress": "Progreso"
+    },
+    "inPayroll": "Deducciones",
+    "netAmount": "Cheque neto"
   },
   "resetPassword": {
     "title": "RECUPERAR CONTRASEÑA",

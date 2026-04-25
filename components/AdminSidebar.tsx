@@ -69,6 +69,16 @@ const NAV_ITEMS = [
     ),
   },
   {
+    labelKey: 'nav.deductions',
+    href: '/deducciones',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+  },
+  {
     labelKey: 'nav.reports',
     href: '/reportes',
     icon: (
@@ -91,7 +101,7 @@ const NAV_ITEMS = [
 ];
 
 // Items only visible to owner / super-admin / super-user
-const PRIVILEGED_ONLY_HREFS = new Set<string>(['/nomina-admin']);
+const PRIVILEGED_ONLY_HREFS = new Set<string>(['/nomina-admin', '/deducciones']);
 
 export default function AdminSidebar() {
   const pathname = usePathname();
