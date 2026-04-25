@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Oswald, Rajdhani } from 'next/font/google';
 import './globals.css';
+import ClientProviders from '@/components/ClientProviders';
 
 const oswald = Oswald({
   subsets: ['latin'],
@@ -26,11 +27,13 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className={`${oswald.variable} ${rajdhani.variable}`}>
-        {children}
-        <footer className="border-t border-white/5 py-4 text-center text-xs text-slate-600">
-          Powered by{' '}
-          <span className="font-medium text-slate-500">JRC Smart Systems</span>
-        </footer>
+        <ClientProviders>
+          {children}
+          <footer className="border-t border-white/5 py-4 text-center text-xs text-slate-600">
+            Powered by{' '}
+            <span className="font-medium text-slate-500">JRC Smart Systems</span>
+          </footer>
+        </ClientProviders>
       </body>
     </html>
   );

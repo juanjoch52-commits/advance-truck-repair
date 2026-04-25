@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface Employee {
   id: string;
@@ -13,6 +14,7 @@ interface Employee {
 }
 
 export default function PersonalPage() {
+  const { t, lang } = useLanguage();
   const supabase = createClient();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,20 +60,22 @@ export default function PersonalPage() {
   }
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`¿Eliminar a ${name} de la lista? Esta acción no se puede deshacer.`)) return;
+    if (!confirm(t('staff.deleteConfirm').replace('{name}', name))) return;
     setDeletingId(id);
     const { error: err } = await (supabase as any).from('employees').delete().eq('id', id);
-    if (err) { alert('Error al eliminar: ' + err.message); }
+    if (err) { alert(t('staff.deleteError') + err.message); }
     setDeletingId(null);
     load();
   }
+
+  const locale = lang === 'en' ? 'en-US' : 'es-MX';
 
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="display-font text-3xl font-bold text-slate-100 tracking-wide">PERSONAL</h1>
-          <p className="text-slate-400 mt-1">{employees.length} personas registradas</p>
+          <h1 className="display-font text-3xl font-bold text-slate-100 tracking-wide">{t('staff.title')}</h1>
+          <p className="text-slate-400 mt-1">{employees.length} {t('staff.registered')}</p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
@@ -80,37 +84,37 @@ export default function PersonalPage() {
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-          AGREGAR PERSONA
+          {t('staff.addPerson')}
         </button>
       </div>
 
       {showForm && (
         <div className="bg-slate-900/80 border border-amber-500/20 rounded-xl p-6 mb-6">
-          <h2 className="display-font text-slate-200 font-semibold mb-4 tracking-wide">REGISTRAR PERSONA</h2>
+          <h2 className="display-font text-slate-200 font-semibold mb-4 tracking-wide">{t('staff.registerPerson')}</h2>
           <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-slate-400 text-sm mb-1.5">Nombre Completo *</label>
-              <input required value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Juan Perez"
+              <label className="block text-slate-400 text-sm mb-1.5">{t('staff.fullName')}</label>
+              <input required value={fullName} onChange={e => setFullName(e.target.value)} placeholder={t('staff.fullNamePlaceholder')}
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition" />
             </div>
             <div>
-              <label className="block text-slate-400 text-sm mb-1.5">Telefono</label>
-              <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="(555) 123-4567"
+              <label className="block text-slate-400 text-sm mb-1.5">{t('common.phone')}</label>
+              <input value={phone} onChange={e => setPhone(e.target.value)} placeholder={t('staff.phonePlaceholder')}
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition" />
             </div>
             <div>
-              <label className="block text-slate-400 text-sm mb-1.5">Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="persona@taller.com"
+              <label className="block text-slate-400 text-sm mb-1.5">{t('common.email')}</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder={t('staff.emailPlaceholder')}
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition" />
             </div>
             <div>
-              <label className="block text-slate-400 text-sm mb-1.5">Fecha de Ingreso</label>
+              <label className="block text-slate-400 text-sm mb-1.5">{t('staff.hireDate')}</label>
               <input type="date" value={hireDate} onChange={e => setHireDate(e.target.value)}
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 transition" />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-slate-400 text-sm mb-1.5">Notas</label>
-              <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Especialidad, cargo, observaciones..."
+              <label className="block text-slate-400 text-sm mb-1.5">{t('staff.notes')}</label>
+              <input value={notes} onChange={e => setNotes(e.target.value)} placeholder={t('staff.notesPlaceholder')}
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition" />
             </div>
             {error && (
@@ -119,11 +123,11 @@ export default function PersonalPage() {
             <div className="md:col-span-2 flex gap-3">
               <button type="submit" disabled={saving}
                 className="bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-slate-950 font-bold py-2.5 px-6 rounded-lg transition display-font tracking-wide">
-                {saving ? 'GUARDANDO...' : 'GUARDAR'}
+                {saving ? t('staff.saving') : t('staff.save')}
               </button>
               <button type="button" onClick={() => setShowForm(false)}
                 className="bg-slate-700 hover:bg-slate-600 text-slate-300 py-2.5 px-5 rounded-lg transition text-sm">
-                Cancelar
+                {t('common.cancel')}
               </button>
             </div>
           </form>
@@ -131,21 +135,21 @@ export default function PersonalPage() {
       )}
 
       {loading ? (
-        <div className="text-center py-12 text-slate-500">Cargando...</div>
+        <div className="text-center py-12 text-slate-500">{t('common.loading')}</div>
       ) : employees.length === 0 ? (
         <div className="bg-slate-900/60 border border-white/5 rounded-xl p-12 text-center">
-          <p className="text-slate-500">No hay personas registradas.</p>
+          <p className="text-slate-500">{t('staff.empty')}</p>
         </div>
       ) : (
         <div className="bg-slate-900/60 border border-white/5 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/5">
-                <th className="text-left px-5 py-3 text-slate-500 font-medium">Nombre</th>
-                <th className="text-left px-5 py-3 text-slate-500 font-medium">Telefono</th>
-                <th className="text-left px-5 py-3 text-slate-500 font-medium">Email</th>
-                <th className="text-left px-5 py-3 text-slate-500 font-medium">Ingreso</th>
-                <th className="text-left px-5 py-3 text-slate-500 font-medium">Notas</th>
+                <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('common.name')}</th>
+                <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('staff.table.phone')}</th>
+                <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('common.email')}</th>
+                <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('staff.table.hireDateCol')}</th>
+                <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('staff.notes')}</th>
                 <th className="px-5 py-3"></th>
               </tr>
             </thead>
@@ -156,7 +160,7 @@ export default function PersonalPage() {
                   <td className="px-5 py-3.5 text-slate-400">{emp.phone ?? '—'}</td>
                   <td className="px-5 py-3.5 text-slate-400">{emp.email ?? '—'}</td>
                   <td className="px-5 py-3.5 text-slate-500">
-                    {new Date(emp.hire_date + 'T12:00:00').toLocaleDateString('es-MX')}
+                    {new Date(emp.hire_date + 'T12:00:00').toLocaleDateString(locale)}
                   </td>
                   <td className="px-5 py-3.5 text-slate-500 italic">{emp.notes ?? '—'}</td>
                   <td className="px-5 py-3.5 text-right">
@@ -164,7 +168,7 @@ export default function PersonalPage() {
                       onClick={() => handleDelete(emp.id, emp.full_name)}
                       disabled={deletingId === emp.id}
                       className="text-slate-600 hover:text-red-400 transition p-1.5 rounded hover:bg-red-500/10"
-                      title="Eliminar"
+                      title={t('common.delete')}
                     >
                       {deletingId === emp.id ? (
                         <span className="text-xs text-slate-500">...</span>

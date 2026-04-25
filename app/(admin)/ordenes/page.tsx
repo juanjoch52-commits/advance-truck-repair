@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase';
 import { useLanguage } from '@/contexts/LanguageContext';
+import ReportDetailModal from '@/components/reports/ReportDetailModal';
 
 interface Employee { id: string; full_name: string; }
 
@@ -13,6 +14,8 @@ interface WorkReport {
   truck_number: string;
   company: string;
   work_date: string;
+  created_by_name: string | null;
+  created_by_role: string | null;
   task_count: number;
   total_charged: number;
   total_payout: number;
@@ -38,19 +41,22 @@ export default function OrdenesPage() {
   const [currentUserRole, setCurrentUserRole] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<WorkReport | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [detailReportId, setDetailReportId] = useState<string | null>(null);
 
   const fmt = (n: number) =>
     '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   useEffect(() => {
-    // Fetch current user role
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (user) {
-        const { data } = await (supabase as any)
-          .from('profiles').select('role').eq('id', user.id).single();
-        setCurrentUserRole((data as any)?.role ?? '');
-      }
-    });
+    // Fetch current user role from PIN-based session
+    fetch('/api/auth/me')
+      .then(r => r.ok ? r.json() : null)
+      .then(j => {
+        if (j && j.authenticated && j.user) {
+          setCurrentUserRole(j.user.role ?? '');
+        }
+      })
+      .catch(() => {});
+
     // Fetch employees
     supabase.from('employees' as any).select('id, full_name').order('full_name')
       .then(({ data }) => setEmployees((data as any) ?? []));
@@ -63,7 +69,7 @@ export default function OrdenesPage() {
 
     let query = (supabase as any)
       .from('work_reports')
-      .select('id, external_order_number, truck_number, company, work_date')
+      .select('id, external_order_number, truck_number, company, work_date, created_by_name, created_by_role')
       .order('work_date', { ascending: false });
 
     if (!globalView) {
@@ -130,6 +136,8 @@ export default function OrdenesPage() {
         truck_number: r.truck_number,
         company: r.company,
         work_date: r.work_date,
+        created_by_name: r.created_by_name ?? null,
+        created_by_role: r.created_by_role ?? null,
         task_count: tasksByReport[r.id]?.size ?? 0,
         total_charged: chargedByReport[r.id] ?? 0,
         total_payout: payoutByReport[r.id] ?? 0,
@@ -186,7 +194,13 @@ export default function OrdenesPage() {
   const totalPayout  = filtered.reduce((s, r) => s + r.total_payout, 0);
   const totalProfit  = totalCharged - totalPayout;
 
-  const isSuperAdmin = currentUserRole === 'super_admin';
+  // Role-based permissions
+  // Super user (super_admin) and admin can delete reports.
+  // Owner, super user and admin can all view full report details.
+  const role = (currentUserRole || '').toLowerCase();
+  const canDelete  = role === 'super_user' || role === 'admin';
+  const canViewDetail = role === 'super_user' || role === 'owner' || role === 'admin';
+  const showActionsCol = canDelete || canViewDetail;
 
   return (
     <div>
@@ -306,10 +320,13 @@ export default function OrdenesPage() {
                 <th className="text-left px-4 py-3 text-slate-500 font-medium">{t('workReports.table.company')}</th>
                 <th className="text-left px-4 py-3 text-slate-500 font-medium">{t('workReports.table.orderNumber')}</th>
                 <th className="text-center px-4 py-3 text-slate-500 font-medium">{t('workReports.table.tasks')}</th>
+                {canViewDetail && (
+                  <th className="text-left px-4 py-3 text-slate-500 font-medium">{t('reportDetail.createdBy')}</th>
+                )}
                 <th className="text-right px-4 py-3 text-slate-500 font-medium">{t('workReports.table.totalCharged')}</th>
                 <th className="text-right px-4 py-3 text-slate-500 font-medium">{t('workReports.table.totalPayout')}</th>
                 <th className="text-right px-4 py-3 text-slate-500 font-medium">{t('workReports.table.companyProfit')}</th>
-                {isSuperAdmin && (
+                {showActionsCol && (
                   <th className="text-center px-4 py-3 text-slate-500 font-medium">{t('workReports.table.actions')}</th>
                 )}
               </tr>
@@ -326,23 +343,57 @@ export default function OrdenesPage() {
                   <td className="px-4 py-3.5 text-center">
                     <span className="bg-slate-700 text-slate-300 text-xs px-2 py-0.5 rounded-full">{r.task_count}</span>
                   </td>
+                  {canViewDetail && (
+                    <td className="px-4 py-3.5 text-slate-300 text-xs">
+                      {r.created_by_name ? (
+                        <div>
+                          <p className="text-slate-200 font-medium">{r.created_by_name}</p>
+                          {r.created_by_role && (
+                            <p className="text-slate-500 text-[10px] uppercase tracking-wide">
+                              {r.created_by_role.replace('_', ' ')}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-600 italic">—</span>
+                      )}
+                    </td>
+                  )}
                   <td className="px-4 py-3.5 text-right text-slate-300 font-medium">{fmt(r.total_charged)}</td>
                   <td className="px-4 py-3.5 text-right text-amber-400">{fmt(r.total_payout)}</td>
                   <td className="px-4 py-3.5 text-right text-emerald-400 font-semibold">
                     {fmt(r.total_charged - r.total_payout)}
                   </td>
-                  {isSuperAdmin && (
+                  {showActionsCol && (
                     <td className="px-4 py-3.5 text-center">
-                      <button
-                        onClick={() => setDeleteTarget(r)}
-                        title={t('workReports.delete')}
-                        className="text-slate-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg p-1.5 transition"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
+                      <div className="flex items-center justify-center gap-1">
+                        {canViewDetail && (
+                          <button
+                            onClick={() => setDetailReportId(r.id)}
+                            title={t('workReports.view')}
+                            className="text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg p-1.5 transition"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={() => setDeleteTarget(r)}
+                            title={t('workReports.delete')}
+                            className="text-slate-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg p-1.5 transition"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
                     </td>
                   )}
                 </tr>
@@ -350,6 +401,14 @@ export default function OrdenesPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* Report Detail Modal */}
+      {detailReportId && (
+        <ReportDetailModal
+          reportId={detailReportId}
+          onClose={() => setDetailReportId(null)}
+        />
       )}
 
       {/* Delete Confirmation Modal */}

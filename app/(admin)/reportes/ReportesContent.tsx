@@ -103,102 +103,141 @@ export default function ReportesContent() {
     const pageW = doc.internal.pageSize.getWidth();
     const margin = 15;
 
-    // Header
-    doc.setFillColor(15, 23, 36);
-    doc.rect(0, 0, pageW, 40, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(18);
-    doc.setTextColor(251, 191, 36);
-    doc.text(t('pdf.header.company'), margin, 16);
-    doc.setFontSize(10);
-    doc.setTextColor(148, 163, 184);
-    doc.text(t('pdf.header.system'), margin, 23);
-    doc.setFontSize(9);
-    doc.setTextColor(100, 116, 139);
-    const fechaEmision = new Date().toLocaleDateString(locale, { day: '2-digit', month: 'long', year: 'numeric' });
-    doc.text(`${t('pdf.header.issued')}: ${fechaEmision}`, pageW - margin, 23, { align: 'right' });
+    // ── Ink-friendly palette (grayscale only) ──
+    // We avoid filled backgrounds, dark headers and color highlights
+    // so the document prints with minimal toner/ink consumption.
+    const INK = 30;        // primary text (near black)
+    const SOFT = 110;      // secondary text
+    const LINE = 170;      // thin separators
 
-    doc.setFillColor(245, 158, 11);
-    doc.rect(0, 40, pageW, 1, 'F');
-
-    doc.setFillColor(248, 250, 252);
-    doc.rect(0, 41, pageW, 22, 'F');
+    // ── Header (text only, no fills) ──
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(14);
-    doc.setTextColor(30, 41, 59);
-    doc.text(titulo, margin, 52);
-    doc.setFontSize(10);
+    doc.setTextColor(INK, INK, INK);
+    doc.text(t('pdf.header.company'), margin, 14);
+
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(100, 116, 139);
-    doc.text(subtitulo, margin, 59);
+    doc.setFontSize(9);
+    doc.setTextColor(SOFT, SOFT, SOFT);
+    doc.text(t('pdf.header.system'), margin, 20);
 
-    let y = 72;
+    const fechaEmision = new Date().toLocaleDateString(locale, { day: '2-digit', month: 'long', year: 'numeric' });
+    doc.text(`${t('pdf.header.issued')}: ${fechaEmision}`, pageW - margin, 20, { align: 'right' });
 
-    // Summary box
-    doc.setFillColor(241, 245, 249);
-    doc.roundedRect(margin, y, pageW - margin * 2, 20, 2, 2, 'F');
-    doc.setFont('helvetica', 'bold');
+    // Single thin separator line
+    doc.setDrawColor(LINE, LINE, LINE);
+    doc.setLineWidth(0.2);
+    doc.line(margin, 24, pageW - margin, 24);
+
+    // ── Title block ──
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(12);
+    doc.setTextColor(INK, INK, INK);
+    doc.text(titulo, margin, 32);
+
     doc.setFontSize(9);
-    doc.setTextColor(71, 85, 105);
-    doc.text(t('pdf.summary.totalPayroll'), margin + 5, y + 7);
-    doc.setFontSize(14);
-    doc.setTextColor(5, 150, 105);
-    doc.text(formatMoney(totalGeneral), margin + 5, y + 15);
+    doc.setTextColor(SOFT, SOFT, SOFT);
+    doc.text(subtitulo, margin, 38);
+
+    let y = 46;
+
+    // ── Summary line (no boxes, plain text) ──
+    doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
-    doc.setTextColor(71, 85, 105);
-    doc.text(t('pdf.summary.mechanics'), pageW / 2 - 10, y + 7);
-    doc.setFontSize(14);
-    doc.setTextColor(30, 41, 59);
-    doc.text(String(mechanics.length), pageW / 2 - 10, y + 15);
-    doc.setFontSize(9);
-    doc.setTextColor(71, 85, 105);
-    doc.text(t('pdf.summary.records'), pageW - margin - 50, y + 7);
-    doc.setFontSize(14);
-    doc.setTextColor(30, 41, 59);
-    doc.text(String(data.length), pageW - margin - 50, y + 15);
-    y += 28;
+    doc.setTextColor(SOFT, SOFT, SOFT);
+    doc.text(t('pdf.summary.totalPayroll') + ':', margin, y);
+    doc.setTextColor(INK, INK, INK);
+    doc.text(formatMoney(totalGeneral), margin + 50, y);
+
+    doc.setTextColor(SOFT, SOFT, SOFT);
+    doc.text(t('pdf.summary.mechanics') + ':', pageW / 2, y);
+    doc.setTextColor(INK, INK, INK);
+    doc.text(String(mechanics.length), pageW / 2 + 30, y);
+
+    doc.setTextColor(SOFT, SOFT, SOFT);
+    doc.text(t('pdf.summary.records') + ':', pageW - margin - 35, y);
+    doc.setTextColor(INK, INK, INK);
+    doc.text(String(data.length), pageW - margin - 8, y);
+
+    y += 4;
+    doc.setDrawColor(LINE, LINE, LINE);
+    doc.setLineWidth(0.2);
+    doc.line(margin, y, pageW - margin, y);
+    y += 6;
+
+    // Shared minimal table styles (no fills, no alternate rows, thin grey rules)
+    const baseTableStyles = {
+      fontSize: 9,
+      textColor: [INK, INK, INK] as [number, number, number],
+      lineColor: [LINE, LINE, LINE] as [number, number, number],
+      lineWidth: 0.15,
+      cellPadding: { top: 2.2, right: 3, bottom: 2.2, left: 3 },
+    };
+    const baseHeadStyles = {
+      fillColor: [255, 255, 255] as [number, number, number],
+      textColor: [INK, INK, INK] as [number, number, number],
+      fontStyle: 'normal' as const,
+      fontSize: 9,
+    };
+    const baseFootStyles = {
+      fillColor: [255, 255, 255] as [number, number, number],
+      textColor: [INK, INK, INK] as [number, number, number],
+      fontStyle: 'normal' as const,
+      fontSize: 9,
+    };
 
     if (tipo === 'semanal') {
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
-      doc.setTextColor(30, 41, 59);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(INK, INK, INK);
       doc.text(t('pdf.checksTable'), margin, y);
-      y += 6;
+      y += 4;
 
       autoTable(doc, {
         startY: y,
         margin: { left: margin, right: margin },
+        theme: 'plain',
         head: [[t('pdf.table.num'), t('pdf.table.mechanic'), t('pdf.table.jobs'), t('pdf.table.amount')]],
         body: mechanics.map((m, i) => [i + 1, m.name, m.rows.length, formatMoney(m.total)]),
         foot: [['', t('pdf.table.total'), mechanics.reduce((s, m) => s + m.rows.length, 0), formatMoney(totalGeneral)]],
-        headStyles: { fillColor: [15, 23, 36], textColor: [251, 191, 36], fontStyle: 'bold', fontSize: 9 },
-        footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 9 },
-        bodyStyles: { fontSize: 9, textColor: [51, 65, 85] },
+        styles: baseTableStyles,
+        headStyles: baseHeadStyles,
+        footStyles: baseFootStyles,
         columnStyles: {
           0: { halign: 'center', cellWidth: 10 },
           2: { halign: 'center', cellWidth: 25 },
-          3: { halign: 'right', cellWidth: 40, textColor: [5, 150, 105], fontStyle: 'bold' },
+          3: { halign: 'right', cellWidth: 40 },
         },
-        alternateRowStyles: { fillColor: [248, 250, 252] },
+        // single thin line under header / above footer for readability
+        didDrawCell: (hookData) => {
+          if (hookData.section === 'head') {
+            const { x, y: cy, width, height } = hookData.cell;
+            doc.setDrawColor(LINE, LINE, LINE);
+            doc.setLineWidth(0.2);
+            doc.line(x, cy + height, x + width, cy + height);
+          }
+        },
       });
 
       y = (doc as any).lastAutoTable.finalY + 10;
 
       for (const m of mechanics) {
         if (y > 230) { doc.addPage(); y = 20; }
-        doc.setFont('helvetica', 'bold');
+        // mechanic block heading: text + thin underline (no filled bar)
+        doc.setFont('helvetica', 'normal');
         doc.setFontSize(10);
-        doc.setTextColor(30, 41, 59);
-        doc.setFillColor(241, 245, 249);
-        doc.rect(margin, y, pageW - margin * 2, 8, 'F');
-        doc.text(m.name.toUpperCase(), margin + 3, y + 5.5);
-        doc.setTextColor(5, 150, 105);
-        doc.text(formatMoney(m.total), pageW - margin - 3, y + 5.5, { align: 'right' });
-        y += 10;
+        doc.setTextColor(INK, INK, INK);
+        doc.text(m.name.toUpperCase(), margin, y + 4);
+        doc.text(formatMoney(m.total), pageW - margin, y + 4, { align: 'right' });
+        doc.setDrawColor(LINE, LINE, LINE);
+        doc.setLineWidth(0.2);
+        doc.line(margin, y + 6, pageW - margin, y + 6);
+        y += 9;
 
         autoTable(doc, {
           startY: y,
           margin: { left: margin, right: margin },
+          theme: 'plain',
           head: [[t('pdf.table.date'), t('pdf.table.truck'), t('pdf.table.company'), t('pdf.table.task'), t('pdf.table.amount')]],
           body: m.rows.map((e: any) => [
             new Date(e.work_date + 'T12:00:00').toLocaleDateString(locale),
@@ -207,10 +246,17 @@ export default function ReportesContent() {
             e.description ?? '-',
             formatMoney(Number(e.amount)),
           ]),
-          headStyles: { fillColor: [51, 65, 85], textColor: [203, 213, 225], fontStyle: 'bold', fontSize: 8 },
-          bodyStyles: { fontSize: 8, textColor: [71, 85, 105] },
-          columnStyles: { 4: { halign: 'right', textColor: [5, 150, 105] } },
-          alternateRowStyles: { fillColor: [248, 250, 252] },
+          styles: { ...baseTableStyles, fontSize: 8 },
+          headStyles: { ...baseHeadStyles, fontSize: 8 },
+          columnStyles: { 4: { halign: 'right' } },
+          didDrawCell: (hookData) => {
+            if (hookData.section === 'head') {
+              const { x, y: cy, width, height } = hookData.cell;
+              doc.setDrawColor(LINE, LINE, LINE);
+              doc.setLineWidth(0.2);
+              doc.line(x, cy + height, x + width, cy + height);
+            }
+          },
         });
 
         y = (doc as any).lastAutoTable.finalY + 8;
@@ -219,28 +265,36 @@ export default function ReportesContent() {
       autoTable(doc, {
         startY: y,
         margin: { left: margin, right: margin },
+        theme: 'plain',
         head: [[t('pdf.table.num'), t('pdf.table.mechanic'), t('pdf.table.jobs'), t('pdf.table.totalEarned')]],
         body: mechanics.map((m, i) => [i + 1, m.name, m.rows.length, formatMoney(m.total)]),
         foot: [['', t('pdf.table.total'), mechanics.reduce((s, m) => s + m.rows.length, 0), formatMoney(totalGeneral)]],
-        headStyles: { fillColor: [15, 23, 36], textColor: [251, 191, 36], fontStyle: 'bold', fontSize: 10 },
-        footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 10 },
-        bodyStyles: { fontSize: 10, textColor: [51, 65, 85] },
+        styles: { ...baseTableStyles, fontSize: 10 },
+        headStyles: { ...baseHeadStyles, fontSize: 10 },
+        footStyles: { ...baseFootStyles, fontSize: 10 },
         columnStyles: {
           0: { halign: 'center', cellWidth: 12 },
           2: { halign: 'center', cellWidth: 30 },
-          3: { halign: 'right', cellWidth: 45, textColor: [5, 150, 105], fontStyle: 'bold' },
+          3: { halign: 'right', cellWidth: 45 },
         },
-        alternateRowStyles: { fillColor: [248, 250, 252] },
+        didDrawCell: (hookData) => {
+          if (hookData.section === 'head') {
+            const { x, y: cy, width, height } = hookData.cell;
+            doc.setDrawColor(LINE, LINE, LINE);
+            doc.setLineWidth(0.2);
+            doc.line(x, cy + height, x + width, cy + height);
+          }
+        },
       });
     }
 
-    // Footer pages
+    // Footer pages — light gray, no fills
     const totalPages = doc.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
       doc.setPage(i);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
-      doc.setTextColor(148, 163, 184);
+      doc.setTextColor(SOFT, SOFT, SOFT);
       doc.text(
         `${t('pdf.footer')} ${i} / ${totalPages}`,
         pageW / 2,

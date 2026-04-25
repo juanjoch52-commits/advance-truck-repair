@@ -3,8 +3,10 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export default function CambiarContrasenaPage() {
+  const { t } = useLanguage();
   const supabase = createClient();
   const router = useRouter();
 
@@ -18,11 +20,11 @@ export default function CambiarContrasenaPage() {
     setError('');
 
     if (newPassword.length < 8) {
-      setError('La contraseña debe tener al menos 8 caracteres.');
+      setError(t('changePassword.errorMin'));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError('Las contraseñas no coinciden.');
+      setError(t('changePassword.errorMatch'));
       return;
     }
 
@@ -31,7 +33,7 @@ export default function CambiarContrasenaPage() {
     // 1. Actualizar contraseña en Supabase Auth
     const { error: authError } = await supabase.auth.updateUser({ password: newPassword });
     if (authError) {
-      setError('Error al actualizar contraseña: ' + authError.message);
+      setError(t('changePassword.errorUpdate') + authError.message);
       setSaving(false);
       return;
     }
@@ -56,7 +58,7 @@ export default function CambiarContrasenaPage() {
         {/* Logo / encabezado */}
         <div className="text-center mb-8">
           <p className="display-font text-amber-400 font-bold text-2xl tracking-widest">ADVANCE TRUCK REPAIR</p>
-          <p className="text-slate-400 text-sm mt-1">Panel Administrativo</p>
+          <p className="text-slate-400 text-sm mt-1">{t('sidebar.subtitle')}</p>
         </div>
 
         <div className="bg-slate-900 border border-amber-500/20 rounded-2xl p-8">
@@ -67,38 +69,38 @@ export default function CambiarContrasenaPage() {
                 d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
             </svg>
             <div>
-              <p className="text-amber-400 text-sm font-semibold">Contraseña temporal detectada</p>
+              <p className="text-amber-400 text-sm font-semibold">{t('changePassword.tempDetectedTitle')}</p>
               <p className="text-amber-300/70 text-xs mt-0.5">
-                Por seguridad, debes establecer una nueva contraseña antes de continuar.
+                {t('changePassword.tempDetectedMsg')}
               </p>
             </div>
           </div>
 
           <h1 className="display-font text-slate-100 font-bold text-lg tracking-wide mb-6">
-            NUEVA CONTRASEÑA
+            {t('changePassword.title')}
           </h1>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-slate-400 text-sm mb-1.5">Nueva contraseña</label>
+              <label className="block text-slate-400 text-sm mb-1.5">{t('changePassword.newPassword')}</label>
               <input
                 type="password"
                 required
                 value={newPassword}
                 onChange={e => setNewPassword(e.target.value)}
-                placeholder="Mínimo 8 caracteres"
+                placeholder={t('changePassword.newPasswordPlaceholder')}
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition"
               />
             </div>
 
             <div>
-              <label className="block text-slate-400 text-sm mb-1.5">Confirmar contraseña</label>
+              <label className="block text-slate-400 text-sm mb-1.5">{t('changePassword.confirmPassword')}</label>
               <input
                 type="password"
                 required
                 value={confirmPassword}
                 onChange={e => setConfirmPassword(e.target.value)}
-                placeholder="Repite la contraseña"
+                placeholder={t('changePassword.confirmPlaceholder')}
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition"
               />
             </div>
@@ -114,7 +116,7 @@ export default function CambiarContrasenaPage() {
               disabled={saving}
               className="w-full bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-slate-950 font-bold py-3 rounded-lg transition display-font tracking-wide mt-2"
             >
-              {saving ? 'GUARDANDO...' : 'ESTABLECER CONTRASEÑA'}
+              {saving ? t('changePassword.saving') : t('changePassword.submit')}
             </button>
           </form>
         </div>

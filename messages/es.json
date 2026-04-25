@@ -35,6 +35,7 @@
       "actions": "Acciones"
     },
     "delete": "Eliminar reporte",
+    "view": "Ver detalles",
     "deleteConfirmTitle": "¿Eliminar este reporte?",
     "deleteConfirmMsg": "Esta acción no se puede deshacer. Se eliminarán también todas las tareas, asignaciones y devengados asociados.",
     "deleteConfirmBtn": "Sí, eliminar",
@@ -43,6 +44,34 @@
     "empty": "No hay reportes registrados para este período.",
     "emptyAction": "Crear primer reporte",
     "records": "reportes registrados"
+  },
+  "reportDetail": {
+    "title": "Detalles del Reporte",
+    "close": "Cerrar",
+    "loading": "Cargando detalles...",
+    "notFound": "Reporte no encontrado",
+    "audit": "Auditoría / Creador",
+    "createdBy": "Creado por",
+    "createdAt": "Fecha de creación",
+    "unknownUser": "Usuario desconocido",
+    "headerSection": "Información del Reporte",
+    "workDate": "Fecha del trabajo",
+    "truck": "Camión",
+    "company": "Empresa",
+    "orderNumber": "# Orden",
+    "notes": "Notas",
+    "tasksSection": "Tareas Realizadas",
+    "task": "Tarea",
+    "mechanic": "Mecánico",
+    "commission": "Comisión",
+    "payout": "Pago",
+    "noMechanics": "No hay mecánicos asignados a esta tarea.",
+    "noTasks": "No hay tareas registradas.",
+    "taskPayout": "Pago a mecánicos",
+    "taskProfit": "Ganancia de la tarea",
+    "totalCharged": "Total cobrado",
+    "totalPayout": "Pago mecánicos",
+    "totalProfit": "Ganancia taller"
   },
   "newReport": {
     "title": "NUEVO REPORTE DE TRABAJO",
@@ -215,6 +244,136 @@
     },
     "totalPayroll": "TOTAL NÓMINA SEMANAL",
     "empty": "No hay registros de pago para esta semana.",
-    "emptyAction": "Registrar un reporte"
+    "emptyAction": "Registrar un reporte",
+    "go": "Ir"
+  },
+  "common": {
+    "loading": "Cargando...",
+    "save": "Guardar",
+    "saving": "Guardando...",
+    "cancel": "Cancelar",
+    "delete": "Eliminar",
+    "deleting": "Eliminando...",
+    "edit": "Editar",
+    "back": "Volver",
+    "yes": "Sí",
+    "no": "No",
+    "confirm": "Confirmar",
+    "close": "Cerrar",
+    "search": "Buscar",
+    "submit": "Enviar",
+    "error": "Error",
+    "success": "Éxito",
+    "create": "Crear",
+    "creating": "Creando...",
+    "actions": "Acciones",
+    "name": "Nombre",
+    "email": "Email",
+    "phone": "Teléfono",
+    "role": "Rol",
+    "address": "Dirección",
+    "date": "Fecha",
+    "amount": "Monto",
+    "total": "Total",
+    "from": "Desde",
+    "to": "Hasta",
+    "noName": "Sin nombre",
+    "you": "tú",
+    "copy": "Copiar",
+    "connectionError": "Error de conexión",
+    "filter": "Filtrar",
+    "clear": "Limpiar"
+  },
+  "sidebar": {
+    "subtitle": "Panel Administrativo"
+  },
+  "login": {
+    "subtitle": "Sistema Administrativo",
+    "title": "INICIAR SESIÓN",
+    "email": "Correo Electrónico",
+    "password": "Contraseña",
+    "submit": "INGRESAR",
+    "verifying": "Verificando...",
+    "errorWrong": "Credenciales incorrectas. Verifique su email y contraseña.",
+    "emailPlaceholder": "admin@taller.com"
+  },
+  "dashboard": {
+    "title": "PANEL PRINCIPAL",
+    "weekRange": "Semana",
+    "stats": {
+      "totalOrders": "Órdenes Totales",
+      "activeMechanics": "Mecánicos Activos",
+      "weeklyEarned": "Devengado Esta Semana"
+    },
+    "shortcuts": {
+      "newOrder": "NUEVA ORDEN",
+      "newOrderDesc": "Registrar trabajo de camión",
+      "weeklyCut": "CORTE SEMANAL",
+      "weeklyCutDesc": "Ver resumen para cheques"
+    },
+    "recentActivity": "ACTIVIDAD RECIENTE",
+    "status": {
+      "approved": "Aprobada",
+      "paid": "Pagada",
+      "rejected": "Rechazada",
+      "pending": "Pendiente"
+    }
+  },
+  "users": {
+    "title": "USUARIOS DEL SISTEMA",
+    "registered": "usuarios registrados",
+    "newUser": "NUEVO USUARIO",
+    "createUser": "CREAR USUARIO",
+    "createAndGenerate": "CREAR Y GENERAR CONTRASEÑA",
+    "namePlaceholder": "Nombre completo",
+    "tempPasswordsTitle": "Contraseñas Temporales",
+    "tempPasswordsHint": "Cópielas ahora — desaparecen al salir de esta página.",
+    "copyPassword": "Copiar contraseña",
+    "tempPasswordBtn": "Contraseña temp.",
+    "generating": "Generando...",
+    "createdAt": "Creado",
+    "protectedNote": "El rol Super Admin está protegido y no puede ser modificado por otros usuarios.",
+    "errorChangeRole": "Error al cambiar rol: ",
+    "roles": {
+      "super_admin": "Super Admin",
+      "owner": "Dueño",
+      "admin": "Administrador"
+    }
+  },
+  "staff": {
+    "title": "PERSONAL",
+    "registered": "personas registradas",
+    "addPerson": "AGREGAR PERSONA",
+    "registerPerson": "REGISTRAR PERSONA",
+    "fullName": "Nombre Completo *",
+    "fullNamePlaceholder": "Juan Pérez",
+    "phonePlaceholder": "(555) 123-4567",
+    "emailPlaceholder": "persona@taller.com",
+    "hireDate": "Fecha de Ingreso",
+    "notes": "Notas",
+    "notesPlaceholder": "Especialidad, cargo, observaciones...",
+    "save": "GUARDAR",
+    "saving": "GUARDANDO...",
+    "table": {
+      "phone": "Teléfono",
+      "hireDateCol": "Ingreso"
+    },
+    "empty": "No hay personas registradas.",
+    "deleteConfirm": "¿Eliminar a {name} de la lista? Esta acción no se puede deshacer.",
+    "deleteError": "Error al eliminar: "
+  },
+  "changePassword": {
+    "tempDetectedTitle": "Contraseña temporal detectada",
+    "tempDetectedMsg": "Por seguridad, debes establecer una nueva contraseña antes de continuar.",
+    "title": "NUEVA CONTRASEÑA",
+    "newPassword": "Nueva contraseña",
+    "newPasswordPlaceholder": "Mínimo 8 caracteres",
+    "confirmPassword": "Confirmar contraseña",
+    "confirmPlaceholder": "Repite la contraseña",
+    "submit": "ESTABLECER CONTRASEÑA",
+    "saving": "GUARDANDO...",
+    "errorMin": "La contraseña debe tener al menos 8 caracteres.",
+    "errorMatch": "Las contraseñas no coinciden.",
+    "errorUpdate": "Error al actualizar contraseña: "
   }
 }

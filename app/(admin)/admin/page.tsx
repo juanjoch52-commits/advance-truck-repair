@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface UserProfile {
   id: string;
@@ -16,18 +17,6 @@ interface TempPasswordResult {
   password: string;
 }
 
-// Roles disponibles para asignar (super_admin solo puede asignarlo otro super_admin)
-const ASSIGNABLE_ROLES = [
-  { value: 'admin', label: 'Administrador' },
-  { value: 'owner', label: 'Dueño' },
-];
-
-const ROLE_LABELS: Record<string, string> = {
-  super_admin: 'Super Admin',
-  owner: 'Dueño',
-  admin: 'Administrador',
-};
-
 const ROLE_COLORS: Record<string, string> = {
   super_admin: 'text-amber-400 bg-amber-500/15 border-amber-500/30',
   owner: 'text-purple-400 bg-purple-500/15 border-purple-500/30',
@@ -35,7 +24,22 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 export default function AdminPage() {
+  const { t, lang } = useLanguage();
   const supabase = createClient();
+  const locale = lang === 'en' ? 'en-US' : 'es-MX';
+
+  // Roles available to assign (super_admin can only be set by another super_admin)
+  const ASSIGNABLE_ROLES = [
+    { value: 'admin', label: t('users.roles.admin') },
+    { value: 'owner', label: t('users.roles.owner') },
+  ];
+
+  function roleLabel(role: string) {
+    if (role === 'super_admin') return t('users.roles.super_admin');
+    if (role === 'owner') return t('users.roles.owner');
+    if (role === 'admin') return t('users.roles.admin');
+    return role;
+  }
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [currentUserRole, setCurrentUserRole] = useState<string>('');
   const [currentUserId, setCurrentUserId] = useState<string>('');
@@ -95,7 +99,7 @@ export default function AdminPage() {
       .from('profiles')
       .update({ role: newRole })
       .eq('id', userId);
-    if (error) alert('Error al cambiar rol: ' + error.message);
+    if (error) alert(t('users.errorChangeRole') + error.message);
     setChangingRole(null);
     load();
   }
@@ -110,7 +114,7 @@ export default function AdminPage() {
       });
       const data = await res.json();
       if (data.error) {
-        alert('Error: ' + data.error);
+        alert(t('common.error') + ': ' + data.error);
       } else {
         setTempPasswords(prev => {
           const filtered = prev.filter(p => p.userId !== userId);
@@ -118,7 +122,7 @@ export default function AdminPage() {
         });
       }
     } catch {
-      alert('Error de conexión');
+      alert(t('common.connectionError'));
     }
     setResetting(null);
   }
@@ -143,7 +147,7 @@ export default function AdminPage() {
         load();
       }
     } catch {
-      setCreateError('Error de conexión');
+      setCreateError(t('common.connectionError'));
     }
     setCreating(false);
   }
@@ -158,11 +162,11 @@ export default function AdminPage() {
         <div>
           <div className="flex items-center gap-3 mb-1">
             <span className={`text-xs font-bold px-2.5 py-1 rounded-full display-font tracking-wide border ${ROLE_COLORS[currentUserRole] ?? 'text-slate-400 bg-slate-500/15 border-slate-500/30'}`}>
-              {ROLE_LABELS[currentUserRole] ?? currentUserRole.toUpperCase()}
+              {roleLabel(currentUserRole) || currentUserRole.toUpperCase()}
             </span>
           </div>
-          <h1 className="display-font text-3xl font-bold text-slate-100 tracking-wide">USUARIOS DEL SISTEMA</h1>
-          <p className="text-slate-400 mt-1">{users.length} usuarios registrados</p>
+          <h1 className="display-font text-3xl font-bold text-slate-100 tracking-wide">{t('users.title')}</h1>
+          <p className="text-slate-400 mt-1">{users.length} {t('users.registered')}</p>
         </div>
         {canManage && (
           <button
@@ -172,7 +176,7 @@ export default function AdminPage() {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            NUEVO USUARIO
+            {t('users.newUser')}
           </button>
         )}
       </div>
@@ -180,22 +184,22 @@ export default function AdminPage() {
       {/* Crear usuario */}
       {showForm && canManage && (
         <div className="bg-slate-900/80 border border-amber-500/20 rounded-xl p-6 mb-6">
-          <h2 className="display-font text-slate-200 font-semibold mb-4 tracking-wide">CREAR USUARIO</h2>
+          <h2 className="display-font text-slate-200 font-semibold mb-4 tracking-wide">{t('users.createUser')}</h2>
           <form onSubmit={handleCreateUser} className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-slate-400 text-sm mb-1.5">Email *</label>
+              <label className="block text-slate-400 text-sm mb-1.5">{t('common.email')} *</label>
               <input required type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)}
-                placeholder="usuario@taller.com"
+                placeholder={t('login.emailPlaceholder')}
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition" />
             </div>
             <div>
-              <label className="block text-slate-400 text-sm mb-1.5">Nombre</label>
+              <label className="block text-slate-400 text-sm mb-1.5">{t('common.name')}</label>
               <input value={newName} onChange={e => setNewName(e.target.value)}
-                placeholder="Nombre completo"
+                placeholder={t('users.namePlaceholder')}
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition" />
             </div>
             <div>
-              <label className="block text-slate-400 text-sm mb-1.5">Rol</label>
+              <label className="block text-slate-400 text-sm mb-1.5">{t('common.role')}</label>
               <select value={newRole} onChange={e => setNewRole(e.target.value as any)}
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 transition">
                 {ASSIGNABLE_ROLES.map(r => (
@@ -209,11 +213,11 @@ export default function AdminPage() {
             <div className="md:col-span-3 flex gap-3">
               <button type="submit" disabled={creating}
                 className="bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-slate-950 font-bold py-2.5 px-6 rounded-lg transition display-font tracking-wide">
-                {creating ? 'CREANDO...' : 'CREAR Y GENERAR CONTRASEÑA'}
+                {creating ? t('common.creating') : t('users.createAndGenerate')}
               </button>
               <button type="button" onClick={() => setShowForm(false)}
                 className="bg-slate-700 hover:bg-slate-600 text-slate-300 py-2.5 px-5 rounded-lg transition text-sm">
-                Cancelar
+                {t('common.cancel')}
               </button>
             </div>
           </form>
@@ -227,9 +231,9 @@ export default function AdminPage() {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
             </svg>
-            Contraseñas Temporales
+            {t('users.tempPasswordsTitle')}
           </h3>
-          <p className="text-emerald-300/60 text-xs mb-3">Cópielas ahora — desaparecen al salir de esta página.</p>
+          <p className="text-emerald-300/60 text-xs mb-3">{t('users.tempPasswordsHint')}</p>
           <div className="space-y-2">
             {tempPasswords.map(tp => {
               const user = users.find(u => u.id === tp.userId);
@@ -240,7 +244,7 @@ export default function AdminPage() {
                   <button
                     onClick={() => navigator.clipboard.writeText(tp.password)}
                     className="text-slate-500 hover:text-emerald-400 transition"
-                    title="Copiar contraseña"
+                    title={t('users.copyPassword')}
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -255,17 +259,17 @@ export default function AdminPage() {
 
       {/* Lista de usuarios */}
       {loading ? (
-        <div className="text-center py-12 text-slate-500">Cargando...</div>
+        <div className="text-center py-12 text-slate-500">{t('common.loading')}</div>
       ) : (
         <div className="bg-slate-900/60 border border-white/5 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/5">
-                <th className="text-left px-5 py-3 text-slate-500 font-medium">Nombre</th>
-                <th className="text-left px-5 py-3 text-slate-500 font-medium">Email</th>
-                <th className="text-left px-5 py-3 text-slate-500 font-medium">Rol</th>
-                <th className="text-left px-5 py-3 text-slate-500 font-medium">Creado</th>
-                <th className="px-5 py-3 text-right text-slate-500 font-medium">Acciones</th>
+                <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('common.name')}</th>
+                <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('common.email')}</th>
+                <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('common.role')}</th>
+                <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('users.createdAt')}</th>
+                <th className="px-5 py-3 text-right text-slate-500 font-medium">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -278,8 +282,8 @@ export default function AdminPage() {
                 return (
                   <tr key={user.id} className={`border-b border-white/5 transition-colors ${isMe ? 'bg-amber-500/5' : 'hover:bg-white/2'}`}>
                     <td className="px-5 py-3.5 text-slate-200 font-medium">
-                      {user.full_name ?? <span className="text-slate-600 italic">Sin nombre</span>}
-                      {isMe && <span className="ml-2 text-xs text-amber-500/70">(tú)</span>}
+                      {user.full_name ?? <span className="text-slate-600 italic">{t('common.noName')}</span>}
+                      {isMe && <span className="ml-2 text-xs text-amber-500/70">({t('common.you')})</span>}
                     </td>
                     <td className="px-5 py-3.5 text-slate-400 font-mono text-xs">{user.email}</td>
                     <td className="px-5 py-3.5">
@@ -296,13 +300,13 @@ export default function AdminPage() {
                         </select>
                       ) : (
                         <span className={`text-xs font-bold px-2.5 py-1 rounded-full border display-font tracking-wide ${ROLE_COLORS[user.role] ?? 'text-slate-400 bg-slate-500/15 border-slate-500/30'}`}>
-                          {ROLE_LABELS[user.role] ?? user.role}
+                          {roleLabel(user.role) || user.role}
                           {isSuperAdminTarget && <span className="ml-1">🔒</span>}
                         </span>
                       )}
                     </td>
                     <td className="px-5 py-3.5 text-slate-500 text-xs">
-                      {new Date(user.created_at).toLocaleDateString('es-MX')}
+                      {new Date(user.created_at).toLocaleDateString(locale)}
                     </td>
                     <td className="px-5 py-3.5 text-right">
                       {showReset ? (
@@ -312,13 +316,13 @@ export default function AdminPage() {
                           className="bg-slate-800 hover:bg-amber-500/20 hover:text-amber-400 hover:border-amber-500/30 border border-white/10 text-slate-400 text-xs font-medium py-1.5 px-3 rounded-lg transition flex items-center gap-1.5 ml-auto"
                         >
                           {resetting === user.id ? (
-                            <span>Generando...</span>
+                            <span>{t('users.generating')}</span>
                           ) : (
                             <>
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                               </svg>
-                              Contraseña temp.
+                              {t('users.tempPasswordBtn')}
                             </>
                           )}
                         </button>
@@ -336,7 +340,7 @@ export default function AdminPage() {
 
       {/* Nota de protección */}
       <p className="text-slate-600 text-xs mt-4 text-center">
-        🔒 El rol Super Admin está protegido y no puede ser modificado por otros usuarios.
+        🔒 {t('users.protectedNote')}
       </p>
     </div>
   );

@@ -35,6 +35,7 @@
       "actions": "Actions"
     },
     "delete": "Delete report",
+    "view": "View details",
     "deleteConfirmTitle": "Delete this report?",
     "deleteConfirmMsg": "This action cannot be undone. All tasks, assignments and payroll entries associated will also be deleted.",
     "deleteConfirmBtn": "Yes, delete",
@@ -43,6 +44,34 @@
     "empty": "No work reports found for this period.",
     "emptyAction": "Create first report",
     "records": "reports registered"
+  },
+  "reportDetail": {
+    "title": "Report Details",
+    "close": "Close",
+    "loading": "Loading details...",
+    "notFound": "Report not found",
+    "audit": "Audit / Creator",
+    "createdBy": "Created by",
+    "createdAt": "Created on",
+    "unknownUser": "Unknown user",
+    "headerSection": "Report Information",
+    "workDate": "Work date",
+    "truck": "Truck",
+    "company": "Company",
+    "orderNumber": "Order #",
+    "notes": "Notes",
+    "tasksSection": "Tasks Performed",
+    "task": "Task",
+    "mechanic": "Mechanic",
+    "commission": "Commission",
+    "payout": "Payout",
+    "noMechanics": "No mechanics assigned to this task.",
+    "noTasks": "No tasks recorded.",
+    "taskPayout": "Mechanic payout",
+    "taskProfit": "Task profit",
+    "totalCharged": "Total charged",
+    "totalPayout": "Mechanic payout",
+    "totalProfit": "Shop profit"
   },
   "newReport": {
     "title": "NEW WORK REPORT",
@@ -215,6 +244,136 @@
     },
     "totalPayroll": "WEEKLY PAYROLL TOTAL",
     "empty": "No payment records for this week.",
-    "emptyAction": "Register a report"
+    "emptyAction": "Register a report",
+    "go": "Go"
+  },
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "saving": "Saving...",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "deleting": "Deleting...",
+    "edit": "Edit",
+    "back": "Back",
+    "yes": "Yes",
+    "no": "No",
+    "confirm": "Confirm",
+    "close": "Close",
+    "search": "Search",
+    "submit": "Submit",
+    "error": "Error",
+    "success": "Success",
+    "create": "Create",
+    "creating": "Creating...",
+    "actions": "Actions",
+    "name": "Name",
+    "email": "Email",
+    "phone": "Phone",
+    "role": "Role",
+    "address": "Address",
+    "date": "Date",
+    "amount": "Amount",
+    "total": "Total",
+    "from": "From",
+    "to": "To",
+    "noName": "No name",
+    "you": "you",
+    "copy": "Copy",
+    "connectionError": "Connection error",
+    "filter": "Filter",
+    "clear": "Clear"
+  },
+  "sidebar": {
+    "subtitle": "Administrative Panel"
+  },
+  "login": {
+    "subtitle": "Administrative System",
+    "title": "SIGN IN",
+    "email": "Email",
+    "password": "Password",
+    "submit": "SIGN IN",
+    "verifying": "Verifying...",
+    "errorWrong": "Invalid credentials. Check your email and password.",
+    "emailPlaceholder": "admin@shop.com"
+  },
+  "dashboard": {
+    "title": "MAIN PANEL",
+    "weekRange": "Week",
+    "stats": {
+      "totalOrders": "Total Orders",
+      "activeMechanics": "Active Mechanics",
+      "weeklyEarned": "Earned This Week"
+    },
+    "shortcuts": {
+      "newOrder": "NEW ORDER",
+      "newOrderDesc": "Register truck job",
+      "weeklyCut": "WEEKLY CUT",
+      "weeklyCutDesc": "View summary for checks"
+    },
+    "recentActivity": "RECENT ACTIVITY",
+    "status": {
+      "approved": "Approved",
+      "paid": "Paid",
+      "rejected": "Rejected",
+      "pending": "Pending"
+    }
+  },
+  "users": {
+    "title": "SYSTEM USERS",
+    "registered": "users registered",
+    "newUser": "NEW USER",
+    "createUser": "CREATE USER",
+    "createAndGenerate": "CREATE AND GENERATE PASSWORD",
+    "namePlaceholder": "Full name",
+    "tempPasswordsTitle": "Temporary Passwords",
+    "tempPasswordsHint": "Copy them now — they disappear when you leave this page.",
+    "copyPassword": "Copy password",
+    "tempPasswordBtn": "Temp password",
+    "generating": "Generating...",
+    "createdAt": "Created",
+    "protectedNote": "The Super Admin role is protected and cannot be modified by other users.",
+    "errorChangeRole": "Error changing role: ",
+    "roles": {
+      "super_admin": "Super Admin",
+      "owner": "Owner",
+      "admin": "Administrator"
+    }
+  },
+  "staff": {
+    "title": "STAFF",
+    "registered": "people registered",
+    "addPerson": "ADD PERSON",
+    "registerPerson": "REGISTER PERSON",
+    "fullName": "Full Name *",
+    "fullNamePlaceholder": "John Doe",
+    "phonePlaceholder": "(555) 123-4567",
+    "emailPlaceholder": "person@shop.com",
+    "hireDate": "Hire Date",
+    "notes": "Notes",
+    "notesPlaceholder": "Specialty, position, observations...",
+    "save": "SAVE",
+    "saving": "SAVING...",
+    "table": {
+      "phone": "Phone",
+      "hireDateCol": "Hired"
+    },
+    "empty": "No people registered.",
+    "deleteConfirm": "Remove {name} from the list? This action cannot be undone.",
+    "deleteError": "Error deleting: "
+  },
+  "changePassword": {
+    "tempDetectedTitle": "Temporary password detected",
+    "tempDetectedMsg": "For security, you must set a new password before continuing.",
+    "title": "NEW PASSWORD",
+    "newPassword": "New password",
+    "newPasswordPlaceholder": "Minimum 8 characters",
+    "confirmPassword": "Confirm password",
+    "confirmPlaceholder": "Repeat the password",
+    "submit": "SET PASSWORD",
+    "saving": "SAVING...",
+    "errorMin": "Password must be at least 8 characters.",
+    "errorMatch": "Passwords do not match.",
+    "errorUpdate": "Error updating password: "
   }
 }

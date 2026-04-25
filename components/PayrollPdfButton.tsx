@@ -37,25 +37,6 @@ type PayrollPdfButtonProps = {
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 
-async function loadLogoAsDataUrl() {
-  try {
-    const response = await fetch('/logo.png');
-    if (!response.ok) {
-      return null;
-    }
-
-    const blob = await response.blob();
-    return await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(String(reader.result));
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return null;
-  }
-}
-
 export function PayrollPdfButton({
   periodStart,
   periodEnd,
@@ -72,33 +53,38 @@ export function PayrollPdfButton({
       // ── Page constants ──────────────────────────────────────────────────────
       const PAGE_W  = 612;
       const PAGE_H  = 792;
-      const M       = 30;           // tighter margin
+      const M       = 30;
       const CONTENT_W = PAGE_W - M * 2;
       const FOOTER_Y  = PAGE_H - 18;
-      const USABLE_H  = PAGE_H - M - 36; // usable bottom before footer
+      const USABLE_H  = PAGE_H - M - 36;
 
       const doc  = new jsPDF({ unit: 'pt', format: 'letter' });
-      const logo = await loadLogoAsDataUrl();
 
       const now   = new Date();
       const stamp = `${now.toLocaleDateString('en-US')} ${now.toLocaleTimeString('en-US')}`;
       const dateSlug = now.toISOString().slice(0, 10).replace(/-/g, '');
 
+      // ── Ink-friendly palette (grayscale only) ──
+      // No filled backgrounds, no dark headers, no color highlights.
+      // Document prints with minimal toner / ink consumption.
+      const INK  = 30;
+      const SOFT = 110;
+      const LINE = 170;
+
       // ── Helpers ─────────────────────────────────────────────────────────────
       function drawFooter() {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(7);
-        doc.setTextColor(170, 170, 170);
+        doc.setTextColor(SOFT, SOFT, SOFT);
         doc.text(`Impreso: ${stamp}`, M, FOOTER_Y);
         doc.text('Powered by JRC Smart Systems', PAGE_W - M - 120, FOOTER_Y);
         doc.setTextColor(0, 0, 0);
       }
 
-      // Estimate the height a mechanic block will take (conservative, in pt)
       function estimateBlockHeight(row: PayrollReportRow): number {
-        const ROW_H   = 16;   // approx row height at compact padding
-        const HEAD_H  = 14;   // table header row
-        const LABEL_H = 12;   // section label
+        const ROW_H   = 16;
+        const HEAD_H  = 14;
+        const LABEL_H = 12;
         const jobRows = Math.max(row.jobs.length, 1);
         const dedRows = Math.max(row.deductions.length, 1);
         const BANNER  = 20;
@@ -113,39 +99,56 @@ export function PayrollPdfButton({
         );
       }
 
+      // Shared minimal table styles (no fills, no alternate rows, thin grey rules)
+      const tableStyles = {
+        fontSize: 8,
+        textColor: [INK, INK, INK] as [number, number, number],
+        cellPadding: { top: 3, right: 5, bottom: 3, left: 5 },
+        lineColor: [LINE, LINE, LINE] as [number, number, number],
+        lineWidth: 0.15,
+      };
+      const headStyles = {
+        fillColor: [255, 255, 255] as [number, number, number],
+        textColor: [INK, INK, INK] as [number, number, number],
+        fontStyle: 'normal' as const,
+        fontSize: 8,
+        cellPadding: { top: 3, right: 5, bottom: 3, left: 5 },
+      };
+      // Underline header row only — gives readability without filling cells
+      function underlineHeader(hookData: any) {
+        if (hookData.section === 'head') {
+          const { x, y: cy, width, height } = hookData.cell;
+          doc.setDrawColor(LINE, LINE, LINE);
+          doc.setLineWidth(0.2);
+          doc.line(x, cy + height, x + width, cy + height);
+        }
+      }
+
       let y = M;
 
-      // ── Document header (page 1, compact) ───────────────────────────────────
-      const LOGO_SIZE = 44;
-      if (logo) {
-        doc.addImage(logo, 'PNG', M, y, LOGO_SIZE, LOGO_SIZE);
-      }
-      const hx = logo ? M + LOGO_SIZE + 8 : M;
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(13);
-      doc.setTextColor(18, 20, 28);
-      doc.text('Advance Truck Repair', hx, y + 13);
+      // ── Document header (text only, no fills) ───────────────────────────────
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8.5);
-      doc.setTextColor(70, 70, 70);
-      doc.text(`Nómina Semanal  ·  Periodo: ${periodStart} al ${periodEnd}`, hx, y + 26);
-      doc.text(`Empleado(s): ${employeeFilterLabel}`, hx, y + 38);
-
-      // Right-side summary box on same row
-      const SB_X = PAGE_W - M - 140;
-      doc.setFillColor(240, 242, 245);
-      doc.rect(SB_X, y, 140, 44, 'F');
-      doc.setFontSize(7);
-      doc.setTextColor(100, 100, 100);
-      doc.text('TOTAL A PAGAR', SB_X + 70, y + 11, { align: 'center' });
-      doc.setFont('helvetica', 'bold');
       doc.setFontSize(13);
-      doc.setTextColor(20, 130, 70);
-      doc.text(money.format(totalNetPay), SB_X + 70, y + 32, { align: 'center' });
+      doc.setTextColor(INK, INK, INK);
+      doc.text('Advance Truck Repair', M, y + 12);
 
-      y += Math.max(LOGO_SIZE, 44) + 4;
-      doc.setDrawColor(180, 180, 190);
-      doc.setLineWidth(0.5);
+      doc.setFontSize(9);
+      doc.setTextColor(SOFT, SOFT, SOFT);
+      doc.text(`Nómina Semanal  ·  Periodo: ${periodStart} al ${periodEnd}`, M, y + 26);
+      doc.text(`Empleado(s): ${employeeFilterLabel}`, M, y + 38);
+
+      // Total summary on the right (plain text, no filled box, no color)
+      const SB_X = PAGE_W - M - 140;
+      doc.setFontSize(8);
+      doc.setTextColor(SOFT, SOFT, SOFT);
+      doc.text('TOTAL A PAGAR', SB_X + 140, y + 12, { align: 'right' });
+      doc.setFontSize(13);
+      doc.setTextColor(INK, INK, INK);
+      doc.text(money.format(totalNetPay), SB_X + 140, y + 30, { align: 'right' });
+
+      y += 48;
+      doc.setDrawColor(LINE, LINE, LINE);
+      doc.setLineWidth(0.2);
       doc.line(M, y, PAGE_W - M, y);
       y += 8;
       drawFooter();
@@ -155,7 +158,6 @@ export function PayrollPdfButton({
         const blockH = estimateBlockHeight(row);
         const gap    = index === 0 ? 0 : 10;
 
-        // Anti-orphan: if full block won't fit, start new page
         if (y + gap + blockH > USABLE_H) {
           doc.addPage();
           drawFooter();
@@ -164,27 +166,26 @@ export function PayrollPdfButton({
           y += gap;
         }
 
-        // ── Employee label box ──────────────────────────────────────────────
-        doc.setFillColor(232, 234, 238);
-        doc.setDrawColor(190, 193, 200);
-        doc.setLineWidth(0.4);
-        doc.rect(M, y, CONTENT_W, 20, 'FD');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9);
-        doc.setTextColor(30, 35, 50);
-        doc.text(row.employeeName.toUpperCase(), M + 6, y + 13);
-        doc.setTextColor(0, 0, 0);
+        // ── Employee label (text + thin underline, no filled banner) ────────
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.setTextColor(INK, INK, INK);
+        doc.text(row.employeeName.toUpperCase(), M, y + 12);
+        doc.setDrawColor(LINE, LINE, LINE);
+        doc.setLineWidth(0.2);
+        doc.line(M, y + 16, PAGE_W - M, y + 16);
         y += 22;
 
         // ── Jobs table ───────────────────────────────────────────────────────
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7.5);
-        doc.setTextColor(80, 80, 80);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(SOFT, SOFT, SOFT);
         doc.text('TRABAJOS REALIZADOS', M, y);
-        y += 3;
+        y += 4;
 
         autoTable(doc, {
           startY: y,
+          theme: 'plain',
           head: [['Fecha', 'Unidad / Camión', 'Invoice #', 'Labor', 'Mecánico']],
           body: row.jobs.length > 0
             ? row.jobs.map((job) => [
@@ -196,114 +197,82 @@ export function PayrollPdfButton({
               ])
             : [['—', '—', '—', '—', '—']],
           showHead: 'everyPage',
-          styles: {
-            fontSize: 8,
-            cellPadding: { top: 3, right: 5, bottom: 3, left: 5 },
-            lineColor: [220, 220, 220],
-            lineWidth: 0.25,
-          },
-          headStyles: {
-            fillColor: [40, 44, 58],
-            textColor: [248, 191, 53],
-            fontStyle: 'bold',
-            fontSize: 7.5,
-            cellPadding: { top: 3, right: 5, bottom: 3, left: 5 },
-          },
-          alternateRowStyles: { fillColor: [247, 248, 250] },
+          styles: tableStyles,
+          headStyles: headStyles,
           columnStyles: {
             0: { cellWidth: 58 },
             3: { halign: 'right', cellWidth: 62 },
-            4: { halign: 'right', fontStyle: 'bold', cellWidth: 68 },
+            4: { halign: 'right', cellWidth: 68 },
           },
+          didDrawCell: underlineHeader,
           didDrawPage: () => { drawFooter(); },
         });
 
         y = ((doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y + 24) + 6;
 
         // ── Deductions table ─────────────────────────────────────────────────
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7.5);
-        doc.setTextColor(80, 80, 80);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(SOFT, SOFT, SOFT);
         doc.text('DEDUCCIONES', M, y);
-        y += 3;
+        y += 4;
 
         autoTable(doc, {
           startY: y,
+          theme: 'plain',
           head: [['Descripción', 'Monto']],
           body: row.deductions.length > 0
             ? row.deductions.map((d) => [d.label, money.format(d.amount)])
             : [['Sin deducciones este período', '—']],
           showHead: 'everyPage',
-          styles: {
-            fontSize: 8,
-            cellPadding: { top: 3, right: 5, bottom: 3, left: 5 },
-            lineColor: [220, 220, 220],
-            lineWidth: 0.25,
-          },
-          headStyles: {
-            fillColor: [55, 58, 70],
-            textColor: [230, 230, 230],
-            fontStyle: 'bold',
-            fontSize: 7.5,
-            cellPadding: { top: 3, right: 5, bottom: 3, left: 5 },
-          },
-          alternateRowStyles: { fillColor: [247, 248, 250] },
+          styles: tableStyles,
+          headStyles: headStyles,
           columnStyles: {
             1: { halign: 'right', cellWidth: 80 },
           },
+          didDrawCell: underlineHeader,
           didDrawPage: () => { drawFooter(); },
         });
 
         y = ((doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y + 18) + 6;
 
-        // ── Compact summary strip ────────────────────────────────────────────
-        const STRIP_H = 22;
+        // ── Compact summary strip (text only, thin separators) ──────────────
+        const STRIP_H = 26;
         const colW    = CONTENT_W / 3;
 
-        doc.setFillColor(244, 246, 250);
-        doc.setDrawColor(200, 205, 215);
-        doc.setLineWidth(0.4);
-        doc.rect(M, y, CONTENT_W, STRIP_H, 'FD');
+        // Top + bottom rules only
+        doc.setDrawColor(LINE, LINE, LINE);
+        doc.setLineWidth(0.2);
+        doc.line(M, y, PAGE_W - M, y);
+        doc.line(M, y + STRIP_H, PAGE_W - M, y + STRIP_H);
 
-        // Dividers
-        doc.line(M + colW,     y, M + colW,     y + STRIP_H);
-        doc.line(M + colW * 2, y, M + colW * 2, y + STRIP_H);
-
-        const lY = y + 8;
-        const vY = y + 17;
+        const lY = y + 9;
+        const vY = y + 21;
 
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(6.5);
-        doc.setTextColor(110, 110, 110);
+        doc.setFontSize(7);
+        doc.setTextColor(SOFT, SOFT, SOFT);
         doc.text('BRUTO', M + colW * 0 + colW / 2, lY, { align: 'center' });
         doc.text('DEDUCCIONES', M + colW * 1 + colW / 2, lY, { align: 'center' });
         doc.text('NETO A PAGAR', M + colW * 2 + colW / 2, lY, { align: 'center' });
 
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9);
-        doc.setTextColor(30, 30, 30);
-        doc.text(money.format(row.gross), M + colW * 0 + colW / 2, vY, { align: 'center' });
-
-        doc.setTextColor(170, 35, 35);
-        doc.text(money.format(row.totalDeductions), M + colW * 1 + colW / 2, vY, { align: 'center' });
-
         doc.setFontSize(10);
-        doc.setTextColor(15, 120, 60);
+        doc.setTextColor(INK, INK, INK);
+        doc.text(money.format(row.gross), M + colW * 0 + colW / 2, vY, { align: 'center' });
+        doc.text(money.format(row.totalDeductions), M + colW * 1 + colW / 2, vY, { align: 'center' });
         doc.text(money.format(row.net), M + colW * 2 + colW / 2, vY, { align: 'center' });
 
-        doc.setTextColor(0, 0, 0);
-        y += STRIP_H + 6;
+        y += STRIP_H + 8;
 
         // ── Compact signature line ───────────────────────────────────────────
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
-        doc.setTextColor(90, 90, 90);
+        doc.setTextColor(SOFT, SOFT, SOFT);
         doc.text('Firma:', M, y + 7);
-        doc.setDrawColor(120, 120, 120);
-        doc.setLineWidth(0.5);
+        doc.setDrawColor(LINE, LINE, LINE);
+        doc.setLineWidth(0.3);
         doc.line(M + 30, y + 8, M + 200, y + 8);
         doc.setFontSize(7);
-        doc.setTextColor(160, 160, 160);
         doc.text(`Fecha: ${now.toLocaleDateString('en-US')}`, PAGE_W - M - 80, y + 7);
         doc.setTextColor(0, 0, 0);
         y += 14;
@@ -315,24 +284,23 @@ export function PayrollPdfButton({
         drawFooter();
         let sy = M;
 
-        if (logo) doc.addImage(logo, 'PNG', M, sy, 36, 36);
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(12);
-        doc.setTextColor(18, 20, 28);
-        doc.text('Resumen General de Nómina', logo ? M + 44 : M, sy + 14);
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8.5);
-        doc.setTextColor(80, 80, 80);
-        doc.text(`Periodo: ${periodStart} al ${periodEnd}`, logo ? M + 44 : M, sy + 27);
-        sy += 44;
+        doc.setFontSize(12);
+        doc.setTextColor(INK, INK, INK);
+        doc.text('Resumen General de Nómina', M, sy + 14);
+        doc.setFontSize(9);
+        doc.setTextColor(SOFT, SOFT, SOFT);
+        doc.text(`Periodo: ${periodStart} al ${periodEnd}`, M, sy + 28);
+        sy += 38;
 
-        doc.setDrawColor(190, 190, 200);
-        doc.setLineWidth(0.4);
+        doc.setDrawColor(LINE, LINE, LINE);
+        doc.setLineWidth(0.2);
         doc.line(M, sy, PAGE_W - M, sy);
         sy += 8;
 
         autoTable(doc, {
           startY: sy,
+          theme: 'plain',
           head: [['Mecánico', 'Bruto', 'Deducciones', 'Neto']],
           body: rows.map((r) => [
             r.employeeName,
@@ -342,29 +310,23 @@ export function PayrollPdfButton({
           ]),
           foot: [['TOTAL GENERAL', '', '', money.format(totalNetPay)]],
           styles: {
-            fontSize: 8.5,
+            ...tableStyles,
+            fontSize: 9,
             cellPadding: { top: 4, right: 6, bottom: 4, left: 6 },
-            lineColor: [220, 220, 220],
-            lineWidth: 0.25,
           },
-          headStyles: {
-            fillColor: [30, 34, 48],
-            textColor: [248, 191, 53],
-            fontStyle: 'bold',
-            fontSize: 8,
-          },
+          headStyles: { ...headStyles, fontSize: 9 },
           footStyles: {
-            fillColor: [15, 120, 60],
-            textColor: [255, 255, 255],
-            fontStyle: 'bold',
+            fillColor: [255, 255, 255] as [number, number, number],
+            textColor: [INK, INK, INK] as [number, number, number],
+            fontStyle: 'normal' as const,
             fontSize: 9,
           },
-          alternateRowStyles: { fillColor: [247, 248, 250] },
           columnStyles: {
             1: { halign: 'right' },
             2: { halign: 'right' },
-            3: { halign: 'right', fontStyle: 'bold' },
+            3: { halign: 'right' },
           },
+          didDrawCell: underlineHeader,
         });
       }
 

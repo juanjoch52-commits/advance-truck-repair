@@ -7,6 +7,13 @@ import { useLanguage } from '@/contexts/LanguageContext';
 
 interface Employee { id: string; full_name: string; }
 
+interface CurrentUser {
+  id: string;
+  full_name: string;
+  role: string;
+  effective_role: string;
+}
+
 interface MechanicAssignment {
   id: string;
   employee_id: string;
@@ -53,6 +60,7 @@ export default function NuevaOrdenPage() {
   const supabase = createClient();
 
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -70,6 +78,21 @@ export default function NuevaOrdenPage() {
   useEffect(() => {
     (supabase as any).from('employees').select('id, full_name').order('full_name')
       .then(({ data }: any) => setEmployees(data ?? []));
+
+    // Fetch the current logged-in user (for creator tracking)
+    fetch('/api/auth/me')
+      .then(r => r.ok ? r.json() : null)
+      .then(j => {
+        if (j && j.authenticated && j.user) {
+          setCurrentUser({
+            id: j.user.id,
+            full_name: j.user.full_name,
+            role: j.user.role,
+            effective_role: j.user.effective_role,
+          });
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // ─── Task helpers ────────────────────────────────────────────────────────
@@ -146,7 +169,7 @@ export default function NuevaOrdenPage() {
     setLoading(true);
     const { start: weekStart, end: weekEnd } = getWeekRange(workDate);
 
-    // 1. Insert work_report
+    // 1. Insert work_report (with creator info if available)
     const { data: report, error: reportErr } = await (supabase as any)
       .from('work_reports')
       .insert({
@@ -155,6 +178,9 @@ export default function NuevaOrdenPage() {
         company: company.trim(),
         work_date: workDate,
         notes: notes.trim() || null,
+        created_by: currentUser?.id ?? null,
+        created_by_name: currentUser?.full_name ?? null,
+        created_by_role: currentUser?.role ?? null,
       })
       .select('id')
       .single();

@@ -106,7 +106,7 @@ export default function AdminSidebar() {
           <p className="display-font text-amber-400 font-bold text-sm leading-tight tracking-wide">
             REPAIR
           </p>
-          <p className="text-slate-500 text-xs">Panel Administrativo</p>
+          <p className="text-slate-500 text-xs">{t('sidebar.subtitle')}</p>
         </div>
       </div>
 
