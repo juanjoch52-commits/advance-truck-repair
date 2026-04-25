@@ -435,5 +435,35 @@
     "errorMin": "Password must be at least 8 characters.",
     "errorMatch": "Passwords do not match.",
     "errorUpdate": "Error updating password: "
+  },
+  "resetPassword": {
+    "title": "RESET PASSWORD",
+    "subtitle": "Enter your email and we'll send you a link to reset your password.",
+    "email": "Email",
+    "emailPlaceholder": "admin@shop.com",
+    "submit": "SEND LINK",
+    "sending": "SENDING...",
+    "backToLogin": "Back to sign in",
+    "successTitle": "Email sent!",
+    "successMsg": "Check your inbox. The link expires in 1 hour.",
+    "errorNotFound": "No account found with that email.",
+    "errorGeneric": "Error sending email. Please try again.",
+    "forgotPassword": "Forgot your password?"
+  },
+  "newPassword": {
+    "title": "NEW PASSWORD",
+    "subtitle": "Set your new access password.",
+    "newPassword": "New password",
+    "newPasswordPlaceholder": "Minimum 8 characters",
+    "confirmPassword": "Confirm password",
+    "confirmPlaceholder": "Repeat the password",
+    "submit": "SAVE PASSWORD",
+    "saving": "SAVING...",
+    "errorMin": "Password must be at least 8 characters.",
+    "errorMatch": "Passwords do not match.",
+    "errorUpdate": "Error updating password: ",
+    "errorInvalidLink": "The link is invalid or has expired. Please request a new one.",
+    "successTitle": "Password updated!",
+    "successMsg": "Your password was changed. Redirecting to sign in..."
   }
 }

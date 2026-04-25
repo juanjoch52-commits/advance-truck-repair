@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 // Rutas públicas que no requieren autenticación
-const PUBLIC_ROUTES = ['/login'];
+const PUBLIC_ROUTES = ['/login', '/recuperar-contrasena', '/nueva-contrasena'];
 
 // Rutas permitidas cuando must_change_password está activo
 const CHANGE_PASSWORD_ROUTE = '/cambiar-contrasena';

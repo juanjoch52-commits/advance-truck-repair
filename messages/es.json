@@ -435,5 +435,35 @@
     "errorMin": "La contraseña debe tener al menos 8 caracteres.",
     "errorMatch": "Las contraseñas no coinciden.",
     "errorUpdate": "Error al actualizar contraseña: "
+  },
+  "resetPassword": {
+    "title": "RECUPERAR CONTRASEÑA",
+    "subtitle": "Ingresa tu correo y te enviaremos un enlace para restablecer tu contraseña.",
+    "email": "Correo Electrónico",
+    "emailPlaceholder": "admin@taller.com",
+    "submit": "ENVIAR ENLACE",
+    "sending": "ENVIANDO...",
+    "backToLogin": "Volver al inicio de sesión",
+    "successTitle": "¡Correo enviado!",
+    "successMsg": "Revisa tu bandeja de entrada. El enlace expira en 1 hora.",
+    "errorNotFound": "No existe una cuenta con ese correo.",
+    "errorGeneric": "Error al enviar el correo. Inténtalo de nuevo.",
+    "forgotPassword": "¿Olvidaste tu contraseña?"
+  },
+  "newPassword": {
+    "title": "NUEVA CONTRASEÑA",
+    "subtitle": "Establece tu nueva contraseña de acceso.",
+    "newPassword": "Nueva contraseña",
+    "newPasswordPlaceholder": "Mínimo 8 caracteres",
+    "confirmPassword": "Confirmar contraseña",
+    "confirmPlaceholder": "Repite la contraseña",
+    "submit": "GUARDAR CONTRASEÑA",
+    "saving": "GUARDANDO...",
+    "errorMin": "La contraseña debe tener al menos 8 caracteres.",
+    "errorMatch": "Las contraseñas no coinciden.",
+    "errorUpdate": "Error al actualizar contraseña: ",
+    "errorInvalidLink": "El enlace es inválido o ya expiró. Solicita uno nuevo.",
+    "successTitle": "¡Contraseña actualizada!",
+    "successMsg": "Tu contraseña fue cambiada. Redirigiendo al inicio de sesión..."
   }
 }

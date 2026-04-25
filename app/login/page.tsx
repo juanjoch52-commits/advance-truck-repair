@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { createClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 export default function LoginPage() {
@@ -152,6 +153,15 @@ export default function LoginPage() {
             >
               {loading ? t('login.verifying') : t('login.submit')}
             </button>
+
+            <div className="text-center pt-1">
+              <Link
+                href="/recuperar-contrasena"
+                className="text-slate-500 hover:text-amber-400 text-sm transition"
+              >
+                {t('resetPassword.forgotPassword')}
+              </Link>
+            </div>
           </form>
         </div>
 
