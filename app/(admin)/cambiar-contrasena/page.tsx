@@ -1,14 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 export default function CambiarContrasenaPage() {
   const { t } = useLanguage();
   const supabase = createClient();
-  const router = useRouter();
 
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -47,9 +45,8 @@ export default function CambiarContrasenaPage() {
     // 3. Limpiar cookie de cambio forzado
     document.cookie = 'atr_force_change=; path=/; max-age=0';
 
-    // 4. Redirigir al dashboard
-    router.push('/dashboard');
-    router.refresh();
+    // 4. Redirigir al dashboard (full reload para que middleware re-evalúe la cookie)
+    window.location.href = '/dashboard';
   }
 
   return (
