@@ -358,7 +358,8 @@
     "stats": {
       "totalOrders": "Total Reports",
       "activeMechanics": "Active Mechanics",
-      "weeklyEarned": "Mechanic Pay This Week"
+      "weeklyEarned": "Mechanic Pay This Week",
+      "weeklyRevenue": "Revenue This Week"
     },
     "shortcuts": {
       "newOrder": "NEW ORDER",

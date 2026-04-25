@@ -358,7 +358,8 @@
     "stats": {
       "totalOrders": "Reportes Totales",
       "activeMechanics": "Mecánicos Activos",
-      "weeklyEarned": "Pago Mecánicos Esta Semana"
+      "weeklyEarned": "Pago Mecánicos Esta Semana",
+      "weeklyRevenue": "Ingresos Esta Semana"
     },
     "shortcuts": {
       "newOrder": "NUEVA ORDEN",

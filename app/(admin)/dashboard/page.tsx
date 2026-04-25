@@ -51,6 +51,23 @@ export default async function DashboardPage() {
   const weeklyAdminEarned = ((adminEarnedRes.data ?? []) as any[])
     .reduce((s: number, r: any) => s + Number(r.amount), 0);
 
+  // Ingresos esta semana: suma de amount_charged_to_client de las tareas
+  // cuyo work_report cae en el rango de la semana actual.
+  // Reutilizamos reportsRes.data (ya traído) para filtrar IDs en memoria.
+  const weekReportIds = ((reportsRes.data ?? []) as any[])
+    .filter((r: any) => r.work_date >= start && r.work_date <= end)
+    .map((r: any) => r.id as string);
+
+  let weeklyRevenue = 0;
+  if (weekReportIds.length > 0) {
+    const { data: taskData } = await (supabase as any)
+      .from('report_tasks')
+      .select('amount_charged_to_client')
+      .in('report_id', weekReportIds);
+    weeklyRevenue = ((taskData ?? []) as any[])
+      .reduce((s: number, t: any) => s + Number(t.amount_charged_to_client), 0);
+  }
+
   const recentOrders = ((reportsRes.data ?? []) as any[])
     .slice(0, 5)
     .map((r: any) => ({
@@ -67,6 +84,7 @@ export default async function DashboardPage() {
       totalEmployees={totalEmployees}
       weeklyEarned={weeklyEarned}
       weeklyAdminEarned={weeklyAdminEarned}
+      weeklyRevenue={weeklyRevenue}
       start={start}
       end={end}
       recentOrders={recentOrders}
