@@ -20,7 +20,32 @@ interface Debt {
   weekly_installment: number;
   is_active: boolean;
   created_at: string;
+  start_week_ending: string | null;
   employees: { full_name: string } | null;
+}
+
+/** Genera los próximos N domingos como opciones de semana */
+function getUpcomingSundays(n: number): { value: string; label: string }[] {
+  const options: { value: string; label: string }[] = [];
+  const now = new Date();
+  const day = now.getDay();
+  // Próximo domingo (o hoy si es domingo)
+  const daysUntilSun = day === 0 ? 0 : 7 - day;
+  const firstSun = new Date(now);
+  firstSun.setDate(now.getDate() + daysUntilSun);
+  for (let i = 0; i < n; i++) {
+    const sun = new Date(firstSun);
+    sun.setDate(firstSun.getDate() + i * 7);
+    const value = sun.toISOString().split('T')[0];
+    // Lunes de esa semana
+    const mon = new Date(sun);
+    mon.setDate(sun.getDate() - 6);
+    const fmtDate = (d: Date) =>
+      d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
+    const label = `${fmtDate(mon)} – ${fmtDate(sun)} ${sun.getFullYear()}`;
+    options.push({ value, label });
+  }
+  return options;
 }
 
 interface DebtPayment {
@@ -64,8 +89,11 @@ export default function DeduccionesPage() {
   const [description, setDescription] = useState('');
   const [totalAmount, setTotalAmount] = useState('');
   const [weeks, setWeeks] = useState('');
+  const [startWeekEnding, setStartWeekEnding] = useState(getCurrentWeekEnd());
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+
+  const sundayOptions = getUpcomingSundays(12);
 
   // Per-debt applying state
   const [applying, setApplying] = useState<Record<string, boolean>>({});
@@ -93,7 +121,7 @@ export default function DeduccionesPage() {
     // Cargar deudas activas con nombre del empleado
     const { data: debtData } = await (supabase as any)
       .from('debts')
-      .select('id, employee_id, description, total_amount, remaining_balance, weekly_installment, is_active, created_at, employees(full_name)')
+      .select('id, employee_id, description, total_amount, remaining_balance, weekly_installment, is_active, created_at, start_week_ending, employees(full_name)')
       .eq('is_active', true)
       .order('created_at', { ascending: false });
     setDebts((debtData ?? []) as Debt[]);
@@ -132,12 +160,14 @@ export default function DeduccionesPage() {
       weekly_installment: installment,
       remaining_balance: total,
       is_active: true,
+      start_week_ending: startWeekEnding,
     });
 
     setSaving(false);
     if (error) { setFormError(error.message); return; }
 
     setEmpId(''); setDescription(''); setTotalAmount(''); setWeeks('');
+    setStartWeekEnding(getCurrentWeekEnd());
     setShowForm(false);
     load();
   }
@@ -179,6 +209,12 @@ export default function DeduccionesPage() {
 
   const isAppliedThisWeek = (debtId: string) =>
     paymentsThisWeek.some(p => p.debt_id === debtId);
+
+  /** La deducción ya comenzó: la semana actual >= semana de inicio */
+  const isActiveThisWeek = (debt: Debt) => {
+    if (!debt.start_week_ending) return true;
+    return weekEnd >= debt.start_week_ending;
+  };
 
   const weeksRemaining = (debt: Debt) =>
     Math.ceil(Number(debt.remaining_balance) / Number(debt.weekly_installment));
@@ -274,6 +310,18 @@ export default function DeduccionesPage() {
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 transition" />
             </div>
 
+            {/* Primera semana de descuento */}
+            <div className="md:col-span-2">
+              <label className="block text-slate-400 text-sm mb-1.5">{t('deductions.form.startWeek')}</label>
+              <select value={startWeekEnding} onChange={e => setStartWeekEnding(e.target.value)}
+                className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 transition">
+                {sundayOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              <p className="text-slate-600 text-xs mt-1">{t('deductions.form.startWeekHelp')}</p>
+            </div>
+
             {/* Cuota calculada */}
             {weeklyInstallment && (
               <div className="md:col-span-2">
@@ -324,12 +372,23 @@ export default function DeduccionesPage() {
         <div className="space-y-4">
           {debts.map(debt => {
             const applied = isAppliedThisWeek(debt.id);
+            const activeNow = isActiveThisWeek(debt);
             const pct = progressPct(debt);
             const wksLeft = weeksRemaining(debt);
             const empName = (debt.employees as any)?.full_name ?? '—';
 
+            // Formatear la semana de inicio legible
+            const startLabel = (() => {
+              if (!debt.start_week_ending) return null;
+              const sun = new Date(debt.start_week_ending + 'T12:00:00');
+              const mon = new Date(sun);
+              mon.setDate(sun.getDate() - 6);
+              const fmt = (d: Date) => d.toLocaleDateString(locale, { day: '2-digit', month: 'short' });
+              return `${fmt(mon)} – ${fmt(sun)}`;
+            })();
+
             return (
-              <div key={debt.id} className="bg-slate-900/60 border border-white/5 rounded-xl overflow-hidden">
+              <div key={debt.id} className={`bg-slate-900/60 border rounded-xl overflow-hidden ${!activeNow ? 'border-slate-700/40 opacity-80' : 'border-white/5'}`}>
                 {/* Header de la tarjeta */}
                 <div className="px-5 py-4 flex items-start justify-between gap-4 flex-wrap border-b border-white/5">
                   <div>
@@ -338,11 +397,23 @@ export default function DeduccionesPage() {
                       <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/20 text-red-400">
                         {debt.description}
                       </span>
+                      {!activeNow && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700/60 border border-slate-600/30 text-slate-400">
+                          ⏳ Pendiente
+                        </span>
+                      )}
                     </div>
-                    <p className="text-slate-500 text-xs">
-                      Registrada: {new Date(debt.created_at + 'T12:00:00').toLocaleDateString(locale)}
-                      {' · '}{wksLeft} {t('deductions.card.weeksLeft')}
-                    </p>
+                    <div className="flex items-center gap-3 flex-wrap text-slate-500 text-xs">
+                      {startLabel && (
+                        <span className={`flex items-center gap-1 ${!activeNow ? 'text-amber-400/70' : 'text-slate-500'}`}>
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          {t('deductions.card.startsWeek')}: {startLabel}
+                        </span>
+                      )}
+                      <span>{wksLeft} {t('deductions.card.weeksLeft')}</span>
+                    </div>
                   </div>
 
                   {/* Monto del cheque semanal */}
@@ -379,7 +450,15 @@ export default function DeduccionesPage() {
 
                   {/* Acciones */}
                   <div className="flex items-center gap-3 flex-wrap">
-                    {applied ? (
+                    {!activeNow ? (
+                      /* Aún no ha comenzado la semana de inicio */
+                      <div className="flex items-center gap-2 bg-slate-800/60 border border-slate-600/30 text-slate-500 text-sm px-4 py-2 rounded-lg">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        {t('deductions.card.notYetActive')} {startLabel}
+                      </div>
+                    ) : applied ? (
                       <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 text-sm px-4 py-2 rounded-lg">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { createClient } from '@/lib/supabase';
 
 export interface Employee {
   id: string;
@@ -40,6 +41,8 @@ interface Props {
   submitLabel: string;
   submitLabelLoading: string;
   successMessage: string;
+  /** ID del reporte actual (edit mode) para excluirse del chequeo de duplicados */
+  reportId?: string;
 }
 
 export function uid() {
@@ -69,8 +72,10 @@ export default function ReportForm({
   submitLabel,
   submitLabelLoading,
   successMessage,
+  reportId,
 }: Props) {
   const { t } = useLanguage();
+  const supabase = createClient();
 
   const [externalOrderNumber, setExternalOrderNumber] = useState(initialData.externalOrderNumber);
   const [truckNumber, setTruckNumber] = useState(initialData.truckNumber);
@@ -83,6 +88,28 @@ export default function ReportForm({
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [confirmHighCommission, setConfirmHighCommission] = useState(false);
+
+  // ─── Chequeo de orden duplicada ───────────────────────────────────────────
+  const [orderDupStatus, setOrderDupStatus] = useState<'idle' | 'checking' | 'ok' | 'taken'>('idle');
+  const dupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (dupTimerRef.current) clearTimeout(dupTimerRef.current);
+    const trimmed = externalOrderNumber.trim();
+    if (!trimmed) { setOrderDupStatus('idle'); return; }
+    setOrderDupStatus('checking');
+    dupTimerRef.current = setTimeout(async () => {
+      let q = (supabase as any)
+        .from('work_reports')
+        .select('id')
+        .eq('external_order_number', trimmed)
+        .limit(1);
+      if (reportId) q = q.neq('id', reportId);
+      const { data } = await q;
+      setOrderDupStatus((data ?? []).length > 0 ? 'taken' : 'ok');
+    }, 600);
+    return () => { if (dupTimerRef.current) clearTimeout(dupTimerRef.current); };
+  }, [externalOrderNumber, reportId]);
 
   // ─── Task helpers ─────────────────────────────────────────────────────────
   function addTask() {
@@ -138,6 +165,7 @@ export default function ReportForm({
 
   // ─── Validation ───────────────────────────────────────────────────────────
   function validate(): string | null {
+    if (orderDupStatus === 'taken') return t('newReport.errors.orderNumberTaken');
     if (!truckNumber.trim()) return t('newReport.errors.truckRequired');
     if (!company.trim()) return t('newReport.errors.companyRequired');
     if (tasks.length === 0) return t('newReport.errors.atLeastOneTask');
@@ -249,7 +277,39 @@ export default function ReportForm({
               <label className="block text-slate-400 text-sm mb-2">{t('newReport.header.orderNumber')}</label>
               <input type="text" value={externalOrderNumber} onChange={e => setExternalOrderNumber(e.target.value)}
                 placeholder={t('newReport.header.orderNumberPlaceholder')}
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition" />
+                className={`w-full bg-slate-800 border rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none transition ${
+                  orderDupStatus === 'taken'
+                    ? 'border-red-500/60 focus:border-red-400'
+                    : orderDupStatus === 'ok'
+                    ? 'border-emerald-500/40 focus:border-emerald-400/60'
+                    : 'border-white/10 focus:border-amber-400/50'
+                }`} />
+              {externalOrderNumber.trim() && (
+                <div className="mt-1.5 flex items-center gap-1.5 text-xs">
+                  {orderDupStatus === 'checking' && (
+                    <>
+                      <div className="w-3 h-3 border border-slate-500 border-t-transparent rounded-full animate-spin" />
+                      <span className="text-slate-500">{t('newReport.orderChecking')}</span>
+                    </>
+                  )}
+                  {orderDupStatus === 'taken' && (
+                    <>
+                      <svg className="w-3.5 h-3.5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                      </svg>
+                      <span className="text-red-400 font-medium">{t('newReport.orderDuplicate')}</span>
+                    </>
+                  )}
+                  {orderDupStatus === 'ok' && (
+                    <>
+                      <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-emerald-400">{t('newReport.orderAvailable')}</span>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-slate-400 text-sm mb-2">{t('newReport.header.truck')}</label>

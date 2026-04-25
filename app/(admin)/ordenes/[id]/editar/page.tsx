@@ -244,6 +244,7 @@ export default function EditarOrdenPage({ params }: { params: Promise<{ id: stri
   return (
     <ReportForm
       mode="edit"
+      reportId={reportId}
       initialData={initialData}
       employees={employees}
       onSubmit={handleSubmit}

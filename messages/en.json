@@ -10,7 +10,7 @@
     "users": "System Users",
     "logout": "Sign Out",
     "language": "Language",
-    "deductions": "Deductions"
+    "deductions": "Deductions & Advances"
   },
   "workReports": {
     "title": "WORK REPORTS",
@@ -140,8 +140,12 @@
       "mechanicRequired": "Select a mechanic for each assignment.",
       "commissionRequired": "Commission must be greater than 0%.",
       "commissionExceedsLimit": "Total mechanic commission cannot exceed 50% of the amount charged.",
-      "commissionExceedsHardCap": "Total mechanic commission cannot exceed 100% of the amount charged."
+      "commissionExceedsHardCap": "Total mechanic commission cannot exceed 100% of the amount charged.",
+      "orderNumberTaken": "This order number is already registered in another report."
     },
+    "orderChecking": "Checking...",
+    "orderAvailable": "Number available",
+    "orderDuplicate": "Number already in use",
     "confirmHighCommissionTitle": "Commission above 50%",
     "confirmHighCommissionMsg": "One or more tasks assign more than 50% commission, which leaves the shop with little or no profit.",
     "confirmHighCommissionTasks": "Tasks above 50%",
@@ -477,38 +481,42 @@
     "errorUpdate": "Error updating password: "
   },
   "deductions": {
-    "title": "DEDUCTIONS",
-    "subtitle": "Debt and weekly deduction management",
-    "newDebt": "NEW DEBT",
-    "activeDebts": "Active debts",
-    "noDebts": "No active debts registered.",
+    "title": "DEDUCTIONS & ADVANCES",
+    "subtitle": "Manage debts, advances and weekly deductions",
+    "newDebt": "NEW DEDUCTION",
+    "activeDebts": "Active",
+    "noDebts": "No active deductions registered.",
     "form": {
       "employee": "Employee",
       "selectEmployee": "Select employee...",
       "description": "Reason / Description",
       "descriptionPlaceholder": "E.g.: Salary advance, tool damage...",
-      "totalAmount": "Total debt amount ($)",
-      "weeks": "Number of weeks to pay",
+      "totalAmount": "Total amount ($)",
+      "weeks": "Number of weeks to deduct",
       "weeklyInstallment": "Calculated weekly installment",
-      "submit": "REGISTER DEBT",
+      "startWeek": "First deduction week",
+      "startWeekHelp": "The deduction will start on the week ending on the selected Sunday",
+      "submit": "REGISTER",
       "saving": "SAVING...",
       "errorEmployee": "Select an employee.",
       "errorAmount": "Amount must be greater than $0.",
       "errorWeeks": "Must be at least 1 week.",
-      "errorDescription": "Enter the reason for the debt."
+      "errorDescription": "Enter the reason."
     },
     "card": {
-      "total": "Total debt",
+      "total": "Total amount",
       "remaining": "Remaining balance",
       "weekly": "Weekly installment",
       "weeksLeft": "weeks remaining",
       "paid": "PAID",
       "applyInstallment": "Apply this week's installment",
       "applying": "Applying...",
-      "alreadyApplied": "Installment applied this week",
-      "cancelDebt": "Cancel debt",
-      "cancelConfirm": "Cancel this debt? It will be marked as inactive.",
-      "progress": "Progress"
+      "alreadyApplied": "✓ Installment applied this week",
+      "notYetActive": "Pending — starts week of",
+      "cancelDebt": "Cancel",
+      "cancelConfirm": "Cancel this deduction? It will be marked as inactive.",
+      "progress": "Progress",
+      "startsWeek": "Starts"
     },
     "inPayroll": "Deductions",
     "netAmount": "Net check"
