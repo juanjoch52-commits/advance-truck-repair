@@ -26,6 +26,11 @@ interface AdminEntry {
   entry_type: string;
 }
 
+interface DeductionItem {
+  desc: string;
+  amount: number;
+}
+
 function getWeekRange(offsetWeeks = 0) {
   const now = new Date();
   const day = now.getDay();
@@ -51,6 +56,7 @@ export default function NominaAdminPage() {
 
   const [admins, setAdmins] = useState<AdminEmployee[]>([]);
   const [entries, setEntries] = useState<AdminEntry[]>([]);
+  const [deductionsByEmp, setDeductionsByEmp] = useState<Record<string, DeductionItem[]>>({});
   const [loading, setLoading] = useState(true);
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [generatingAll, setGeneratingAll] = useState(false);
@@ -109,6 +115,24 @@ export default function NominaAdminPage() {
       .in('entry_type', ['admin_fixed', 'admin_hourly', 'admin_manual']);
 
     setEntries((entryData ?? []) as AdminEntry[]);
+
+    // Deducciones por deuda aplicadas esta semana
+    const { data: dpData } = await (supabase as any)
+      .from('debt_payments')
+      .select('debt_id, amount, debts!inner(employee_id, description)')
+      .gte('week_ending', weekStart)
+      .lte('week_ending', weekEnd);
+
+    const dedMap: Record<string, DeductionItem[]> = {};
+    for (const dp of dpData ?? []) {
+      const empId = (dp.debts as any)?.employee_id;
+      const desc = (dp.debts as any)?.description ?? 'Deducción';
+      if (!empId) continue;
+      if (!dedMap[empId]) dedMap[empId] = [];
+      dedMap[empId].push({ desc, amount: Number(dp.amount) });
+    }
+    setDeductionsByEmp(dedMap);
+
     setLoading(false);
   }, [weekStart, weekEnd]);
 
@@ -129,6 +153,8 @@ export default function NominaAdminPage() {
   }
 
   const grandTotal = entries.reduce((s, e) => s + Number(e.amount), 0);
+  const totalDeductions = Object.values(deductionsByEmp).flat().reduce((s, d) => s + d.amount, 0);
+  const grandNet = grandTotal - totalDeductions;
 
   // Empleados de sueldo fijo que aún no tienen entrada esta semana
   const fixedPending = admins.filter(emp =>
@@ -365,7 +391,12 @@ export default function NominaAdminPage() {
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
             <p className="text-slate-400 text-sm mb-1">{t('adminPayroll.totalToPay')}</p>
-            <p className="display-font text-2xl font-bold text-amber-400">{fmtMoney(grandTotal)}</p>
+            <p className="display-font text-2xl font-bold text-amber-400">{fmtMoney(grandNet)}</p>
+            {totalDeductions > 0 && (
+              <p className="text-slate-500 text-xs mt-0.5">
+                Devengado: {fmtMoney(grandTotal)} — Ded: -{fmtMoney(totalDeductions)}
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
@@ -439,6 +470,9 @@ export default function NominaAdminPage() {
             const f = formByEmp[emp.id] ?? { amount: '', hours: '', description: '', saving: false };
             const empEntries = entriesForEmp(emp.id);
             const empTotal = totalForEmp(emp.id);
+            const empDeds = deductionsByEmp[emp.id] ?? [];
+            const empDedTotal = empDeds.reduce((s, d) => s + d.amount, 0);
+            const empNet = empTotal - empDedTotal;
             const isFixed = emp.payment_type === 'fixed_weekly';
             const isHourly = emp.payment_type === 'hourly';
             const hasEntryThisWeek = empEntries.length > 0;
@@ -515,11 +549,24 @@ export default function NominaAdminPage() {
                   </div>
 
                   <div className="text-right">
-                    <p className={`display-font font-bold text-lg ${hasEntryThisWeek ? 'text-green-400' : 'text-slate-600'}`}>
-                      {fmtMoney(empTotal)}
-                    </p>
-                    {hasEntryThisWeek && (
-                      <p className="text-green-500/60 text-xs">✓ Esta semana</p>
+                    {empDedTotal > 0 ? (
+                      <>
+                        <p className="text-slate-500 text-xs line-through">{fmtMoney(empTotal)}</p>
+                        <p className="text-red-400 text-xs">-{fmtMoney(empDedTotal)}</p>
+                        <p className="display-font font-bold text-lg text-green-400">{fmtMoney(empNet)}</p>
+                        {empDeds.map((d, i) => (
+                          <p key={i} className="text-red-400/60 text-xs">↓ {d.desc}</p>
+                        ))}
+                      </>
+                    ) : (
+                      <>
+                        <p className={`display-font font-bold text-lg ${hasEntryThisWeek ? 'text-green-400' : 'text-slate-600'}`}>
+                          {fmtMoney(empTotal)}
+                        </p>
+                        {hasEntryThisWeek && (
+                          <p className="text-green-500/60 text-xs">✓ Esta semana</p>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>

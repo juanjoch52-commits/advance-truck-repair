@@ -10,6 +10,11 @@ interface Mechanic {
   orderCount: number;
 }
 
+interface DeductionInfo {
+  total: number;
+  items: { desc: string; amount: number }[];
+}
+
 interface Props {
   weekStart: string;
   weekEnd: string;
@@ -19,11 +24,13 @@ interface Props {
   nextEnd: string;
   mechanics: Mechanic[];
   totalGeneral: number;
+  deductionsByEmp: Record<string, DeductionInfo>;
+  totalDeductions: number;
 }
 
 export default function CorteContent({
   weekStart, weekEnd, prevStart, prevEnd, nextStart, nextEnd,
-  mechanics, totalGeneral,
+  mechanics, totalGeneral, deductionsByEmp, totalDeductions,
 }: Props) {
   const { t, lang } = useLanguage();
   const locale = lang === 'en' ? 'en-US' : 'es-MX';
@@ -34,6 +41,9 @@ export default function CorteContent({
   const fmtMoney = (n: number) =>
     '$' + n.toLocaleString(locale, { minimumFractionDigits: 2 });
 
+  const hasAnyDeductions = Object.keys(deductionsByEmp).length > 0;
+  const totalNetPayroll = totalGeneral - totalDeductions;
+
   return (
     <div>
       <div className="mb-8">
@@ -41,11 +51,10 @@ export default function CorteContent({
         <p className="text-slate-400 mt-1">{t('weeklyCut.subtitle')}</p>
       </div>
 
+      {/* Controles de semana */}
       <div className="flex items-center gap-4 mb-6 flex-wrap">
-        <a
-          href={`/corte-semanal?semana_inicio=${prevStart}&semana_fin=${prevEnd}`}
-          className="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 px-3 py-2 rounded-lg transition flex items-center gap-1 text-sm"
-        >
+        <a href={`/corte-semanal?semana_inicio=${prevStart}&semana_fin=${prevEnd}`}
+          className="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 px-3 py-2 rounded-lg transition flex items-center gap-1 text-sm">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
@@ -70,10 +79,8 @@ export default function CorteContent({
           </button>
         </form>
 
-        <a
-          href={`/corte-semanal?semana_inicio=${nextStart}&semana_fin=${nextEnd}`}
-          className="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 px-3 py-2 rounded-lg transition flex items-center gap-1 text-sm"
-        >
+        <a href={`/corte-semanal?semana_inicio=${nextStart}&semana_fin=${nextEnd}`}
+          className="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 px-3 py-2 rounded-lg transition flex items-center gap-1 text-sm">
           {t('weeklyCut.nextWeek')}
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -82,10 +89,8 @@ export default function CorteContent({
       </div>
 
       <div className="flex justify-end mb-4">
-        <Link
-          href={`/reportes?tipo=semanal&desde=${weekStart}&hasta=${weekEnd}`}
-          className="flex items-center gap-2 text-sm text-sky-400 hover:text-sky-300 border border-sky-500/20 hover:border-sky-400/30 px-4 py-2 rounded-lg transition"
-        >
+        <Link href={`/reportes?tipo=semanal&desde=${weekStart}&hasta=${weekEnd}`}
+          className="flex items-center gap-2 text-sm text-sky-400 hover:text-sky-300 border border-sky-500/20 hover:border-sky-400/30 px-4 py-2 rounded-lg transition">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
               d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -94,20 +99,30 @@ export default function CorteContent({
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-5">
           <p className="text-slate-400 text-sm mb-1">{t('weeklyCut.stats.totalToPay')}</p>
           <p className="display-font text-2xl font-bold text-amber-400">{fmtMoney(totalGeneral)}</p>
         </div>
+
+        {hasAnyDeductions && (
+          <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-5">
+            <p className="text-slate-400 text-sm mb-1">{t('deductions.inPayroll')}</p>
+            <p className="display-font text-2xl font-bold text-red-400">-{fmtMoney(totalDeductions)}</p>
+          </div>
+        )}
+
+        {hasAnyDeductions && (
+          <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-5">
+            <p className="text-slate-400 text-sm mb-1">{t('deductions.netAmount')}</p>
+            <p className="display-font text-2xl font-bold text-green-400">{fmtMoney(totalNetPayroll)}</p>
+          </div>
+        )}
+
         <div className="bg-slate-900/60 border border-white/5 rounded-xl p-5">
           <p className="text-slate-400 text-sm mb-1">{t('weeklyCut.stats.mechanicsToPay')}</p>
           <p className="display-font text-2xl font-bold text-slate-200">{mechanics.length}</p>
-        </div>
-        <div className="bg-slate-900/60 border border-white/5 rounded-xl p-5">
-          <p className="text-slate-400 text-sm mb-1">{t('weeklyCut.stats.jobsDone')}</p>
-          <p className="display-font text-2xl font-bold text-slate-200">
-            {mechanics.reduce((s, m) => s + m.orderCount, 0)}
-          </p>
         </div>
       </div>
 
@@ -130,28 +145,58 @@ export default function CorteContent({
                 <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('weeklyCut.table.mechanic')}</th>
                 <th className="text-center px-5 py-3 text-slate-500 font-medium">{t('weeklyCut.table.jobs')}</th>
                 <th className="text-right px-5 py-3 text-slate-500 font-medium">{t('weeklyCut.table.totalEarned')}</th>
+                {hasAnyDeductions && (
+                  <th className="text-right px-5 py-3 text-slate-500 font-medium">{t('deductions.inPayroll')}</th>
+                )}
                 <th className="text-right px-5 py-3 text-slate-500 font-medium">{t('weeklyCut.table.checkAmount')}</th>
               </tr>
             </thead>
             <tbody>
-              {mechanics.map((m, idx) => (
-                <tr key={m.id} className="border-b border-white/5 hover:bg-white/2 transition-colors">
-                  <td className="px-5 py-4 text-slate-600">{idx + 1}</td>
-                  <td className="px-5 py-4 text-slate-200 font-semibold">{m.name}</td>
-                  <td className="px-5 py-4 text-center text-slate-400">{m.orderCount}</td>
-                  <td className="px-5 py-4 text-right text-slate-300">{fmtMoney(m.total)}</td>
-                  <td className="px-5 py-4 text-right">
-                    <span className="display-font text-lg font-bold text-emerald-400">{fmtMoney(m.total)}</span>
-                  </td>
-                </tr>
-              ))}
+              {mechanics.map((m, idx) => {
+                const ded = deductionsByEmp[m.id];
+                const dedTotal = ded?.total ?? 0;
+                const netAmount = m.total - dedTotal;
+
+                return (
+                  <tr key={m.id} className="border-b border-white/5 hover:bg-white/2 transition-colors">
+                    <td className="px-5 py-4 text-slate-600">{idx + 1}</td>
+                    <td className="px-5 py-4">
+                      <p className="text-slate-200 font-semibold">{m.name}</p>
+                      {/* Detalle de deducciones */}
+                      {ded && ded.items.map((item, i) => (
+                        <p key={i} className="text-red-400/70 text-xs mt-0.5">
+                          ↓ {item.desc}: -{fmtMoney(item.amount)}
+                        </p>
+                      ))}
+                    </td>
+                    <td className="px-5 py-4 text-center text-slate-400">{m.orderCount}</td>
+                    <td className="px-5 py-4 text-right text-slate-300">{fmtMoney(m.total)}</td>
+                    {hasAnyDeductions && (
+                      <td className="px-5 py-4 text-right">
+                        {dedTotal > 0
+                          ? <span className="text-red-400 font-medium">-{fmtMoney(dedTotal)}</span>
+                          : <span className="text-slate-600">—</span>
+                        }
+                      </td>
+                    )}
+                    <td className="px-5 py-4 text-right">
+                      <span className={`display-font text-lg font-bold ${dedTotal > 0 ? 'text-green-400' : 'text-emerald-400'}`}>
+                        {fmtMoney(netAmount)}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
             <tfoot>
               <tr className="border-t border-white/10 bg-white/2">
                 <td colSpan={3} className="px-5 py-4 text-slate-400 font-medium text-sm">{t('weeklyCut.totalPayroll')}</td>
-                <td className="px-5 py-4 text-right text-slate-300 font-bold"></td>
+                <td className="px-5 py-4 text-right text-slate-300 font-bold">{fmtMoney(totalGeneral)}</td>
+                {hasAnyDeductions && (
+                  <td className="px-5 py-4 text-right text-red-400 font-bold">-{fmtMoney(totalDeductions)}</td>
+                )}
                 <td className="px-5 py-4 text-right">
-                  <span className="display-font text-xl font-bold text-amber-400">{fmtMoney(totalGeneral)}</span>
+                  <span className="display-font text-xl font-bold text-amber-400">{fmtMoney(totalNetPayroll)}</span>
                 </td>
               </tr>
             </tfoot>
