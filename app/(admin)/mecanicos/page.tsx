@@ -21,18 +21,216 @@ interface Employee {
 type Profile = 'mechanic' | 'admin';
 type PayType = 'fixed_weekly' | 'hourly' | 'manual';
 
-const BLANK_FORM = {
+export interface FormState {
+  fullName: string;
+  phone: string;
+  email: string;
+  hireDate: string;
+  notes: string;
+  profile: Profile;
+  payType: PayType;
+  weeklySalary: string;
+  hourlyRate: string;
+}
+
+const BLANK_FORM: FormState = {
   fullName: '',
   phone: '',
   email: '',
   hireDate: new Date().toISOString().split('T')[0],
   notes: '',
-  profile: 'mechanic' as Profile,
-  payType: 'fixed_weekly' as PayType,
+  profile: 'mechanic',
+  payType: 'fixed_weekly',
   weeklySalary: '',
   hourlyRate: '',
 };
 
+// ─── FormBody is defined OUTSIDE PersonalPage so React never remounts it on re-render ───
+function FormBody({
+  form,
+  onChange,
+  saving,
+  error,
+  onSubmit,
+  onCancel,
+  isEdit,
+  t,
+}: {
+  form: FormState;
+  onChange: (patch: Partial<FormState>) => void;
+  saving: boolean;
+  error: string;
+  onSubmit: (e: React.FormEvent) => void;
+  onCancel: () => void;
+  isEdit: boolean;
+  t: (key: string) => string;
+}) {
+  return (
+    <form onSubmit={onSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Nombre */}
+      <div>
+        <label className="block text-slate-400 text-sm mb-1.5">{t('staff.fullName')} *</label>
+        <input
+          required
+          value={form.fullName}
+          onChange={e => onChange({ fullName: e.target.value })}
+          placeholder={t('staff.fullNamePlaceholder')}
+          className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition"
+        />
+      </div>
+
+      {/* Teléfono */}
+      <div>
+        <label className="block text-slate-400 text-sm mb-1.5">{t('common.phone')}</label>
+        <input
+          value={form.phone}
+          onChange={e => onChange({ phone: e.target.value })}
+          placeholder={t('staff.phonePlaceholder')}
+          className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition"
+        />
+      </div>
+
+      {/* Email */}
+      <div>
+        <label className="block text-slate-400 text-sm mb-1.5">{t('common.email')}</label>
+        <input
+          type="email"
+          value={form.email}
+          onChange={e => onChange({ email: e.target.value })}
+          placeholder={t('staff.emailPlaceholder')}
+          className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition"
+        />
+      </div>
+
+      {/* Fecha contratación */}
+      <div>
+        <label className="block text-slate-400 text-sm mb-1.5">{t('staff.hireDate')}</label>
+        <input
+          type="date"
+          value={form.hireDate}
+          onChange={e => onChange({ hireDate: e.target.value })}
+          className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 transition"
+        />
+      </div>
+
+      {/* Notas */}
+      <div className="md:col-span-2">
+        <label className="block text-slate-400 text-sm mb-1.5">{t('staff.notes')}</label>
+        <input
+          value={form.notes}
+          onChange={e => onChange({ notes: e.target.value })}
+          placeholder={t('staff.notesPlaceholder')}
+          className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition"
+        />
+      </div>
+
+      {/* Perfil */}
+      <div className="md:col-span-2 border-t border-white/5 pt-4 mt-1">
+        <label className="block text-slate-400 text-sm mb-2">{t('staff.profile.label')}</label>
+        <div className="grid grid-cols-2 gap-3">
+          {(['mechanic', 'admin'] as Profile[]).map(p => (
+            <button
+              key={p} type="button"
+              onClick={() => onChange({ profile: p })}
+              className={`px-4 py-3 rounded-lg border transition text-left ${
+                form.profile === p
+                  ? p === 'mechanic'
+                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                    : 'bg-sky-500/15 border-sky-500/40 text-sky-300'
+                  : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <p className="font-semibold text-sm">{t(`staff.profile.${p}`)}</p>
+              <p className="text-xs opacity-70 mt-1">{t(`staff.profile.${p}Desc`)}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Tipo de pago (solo admin) */}
+      {form.profile === 'admin' && (
+        <div className="md:col-span-2 bg-slate-800/40 border border-white/5 rounded-xl p-4">
+          <label className="block text-slate-400 text-sm mb-3">{t('staff.payment.type')}</label>
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            {([
+              { val: 'fixed_weekly' as PayType, label: 'Sueldo fijo',  desc: 'Mismo monto cada semana' },
+              { val: 'hourly'       as PayType, label: 'Por hora',     desc: 'Horas × tarifa'          },
+              { val: 'manual'       as PayType, label: 'Manual',       desc: 'Tú defines el monto'     },
+            ]).map(opt => (
+              <button
+                key={opt.val} type="button"
+                onClick={() => onChange({ payType: opt.val })}
+                className={`px-3 py-2.5 rounded-lg border transition text-left ${
+                  form.payType === opt.val
+                    ? 'bg-sky-500/15 border-sky-500/40 text-sky-300'
+                    : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <p className="font-semibold text-xs">{opt.label}</p>
+                <p className="text-xs opacity-60 mt-0.5">{opt.desc}</p>
+              </button>
+            ))}
+          </div>
+
+          {form.payType === 'fixed_weekly' && (
+            <div>
+              <label className="block text-slate-400 text-xs mb-1.5">Sueldo semanal ($)</label>
+              <div className="relative w-48">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-400 font-bold text-sm">$</span>
+                <input
+                  type="number" min="0" step="0.01"
+                  value={form.weeklySalary}
+                  onChange={e => onChange({ weeklySalary: e.target.value })}
+                  placeholder="0.00"
+                  className="w-full bg-slate-800 border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-slate-100 text-sm focus:outline-none focus:border-amber-400/50"
+                />
+              </div>
+            </div>
+          )}
+
+          {form.payType === 'hourly' && (
+            <div>
+              <label className="block text-slate-400 text-xs mb-1.5">Tarifa por hora ($)</label>
+              <div className="relative w-48">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-400 font-bold text-sm">$</span>
+                <input
+                  type="number" min="0" step="0.01"
+                  value={form.hourlyRate}
+                  onChange={e => onChange({ hourlyRate: e.target.value })}
+                  placeholder="0.00"
+                  className="w-full bg-slate-800 border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-slate-100 text-sm focus:outline-none focus:border-amber-400/50"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {error && (
+        <div className="md:col-span-2 bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2.5 text-red-400 text-sm">
+          {error}
+        </div>
+      )}
+
+      <div className="md:col-span-2 flex gap-3">
+        <button
+          type="submit" disabled={saving}
+          className="bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-slate-950 font-bold py-2.5 px-6 rounded-lg transition display-font tracking-wide"
+        >
+          {saving ? t('staff.saving') : isEdit ? 'Guardar cambios' : t('staff.save')}
+        </button>
+        <button
+          type="button" onClick={onCancel}
+          className="bg-slate-700 hover:bg-slate-600 text-slate-300 py-2.5 px-5 rounded-lg transition text-sm"
+        >
+          {t('common.cancel')}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
 export default function PersonalPage() {
   const { t, lang } = useLanguage();
   const supabase = createClient();
@@ -41,16 +239,17 @@ export default function PersonalPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   // ── Add form ──
   const [showForm, setShowForm] = useState(false);
-  const [addForm, setAddForm] = useState(BLANK_FORM);
+  const [addForm, setAddForm] = useState<FormState>(BLANK_FORM);
   const [addSaving, setAddSaving] = useState(false);
   const [addError, setAddError] = useState('');
 
   // ── Edit form ──
   const [editingEmp, setEditingEmp] = useState<Employee | null>(null);
-  const [editForm, setEditForm] = useState(BLANK_FORM);
+  const [editForm, setEditForm] = useState<FormState>(BLANK_FORM);
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
 
@@ -65,7 +264,7 @@ export default function PersonalPage() {
   useEffect(() => { load(); }, []);
 
   // ── Helpers ──
-  function empToForm(emp: Employee): typeof BLANK_FORM {
+  function empToForm(emp: Employee): FormState {
     const isMech = emp.payment_type === 'mechanic_commission' || emp.role === 'mechanic';
     let payType: PayType = 'manual';
     if (!isMech) {
@@ -85,18 +284,7 @@ export default function PersonalPage() {
     };
   }
 
-  function openEdit(emp: Employee) {
-    setEditingEmp(emp);
-    setEditForm(empToForm(emp));
-    setEditError('');
-  }
-
-  function closeEdit() {
-    setEditingEmp(null);
-    setEditError('');
-  }
-
-  function buildPayload(form: typeof BLANK_FORM) {
+  function buildPayload(form: FormState) {
     const isAdmin = form.profile === 'admin';
     return {
       full_name: form.fullName.trim(),
@@ -111,41 +299,56 @@ export default function PersonalPage() {
     };
   }
 
+  // ── Add ──
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
-    setAddSaving(true);
-    setAddError('');
-    const payload = { ...buildPayload(addForm), access_pin: '0000' };
-    const { error: err } = await (supabase as any).from('employees').insert(payload);
+    setAddSaving(true); setAddError('');
+    const { error: err } = await (supabase as any).from('employees').insert({ ...buildPayload(addForm), access_pin: '0000' });
     if (err) { setAddError(err.message); setAddSaving(false); return; }
-    setAddForm(BLANK_FORM);
-    setShowForm(false);
-    setAddSaving(false);
+    setAddForm(BLANK_FORM); setShowForm(false); setAddSaving(false);
     load();
   }
+
+  // ── Edit ──
+  function openEdit(emp: Employee) {
+    setEditingEmp(emp);
+    setEditForm(empToForm(emp));
+    setEditError('');
+  }
+
+  function closeEdit() { setEditingEmp(null); setEditError(''); }
 
   async function handleEditSave(e: React.FormEvent) {
     e.preventDefault();
     if (!editingEmp) return;
-    setEditSaving(true);
-    setEditError('');
-    const payload = buildPayload(editForm);
-    const { error: err } = await (supabase as any).from('employees').update(payload).eq('id', editingEmp.id);
+    setEditSaving(true); setEditError('');
+    const { error: err } = await (supabase as any).from('employees').update(buildPayload(editForm)).eq('id', editingEmp.id);
     if (err) { setEditError(err.message); setEditSaving(false); return; }
-    setEditSaving(false);
-    closeEdit();
-    load();
+    setEditSaving(false); closeEdit(); load();
   }
 
+  // ── Delete ──
   async function handleDelete(id: string, name: string) {
     if (!confirm(t('staff.deleteConfirm').replace('{name}', name))) return;
     setDeletingId(id);
     const { error: err } = await (supabase as any).from('employees').delete().eq('id', id);
     if (err) alert(t('staff.deleteError') + err.message);
-    setDeletingId(null);
-    load();
+    setDeletingId(null); load();
   }
 
+  // ── Suspend / activate ──
+  async function handleToggleActive(emp: Employee) {
+    if (!confirm(
+      emp.is_active
+        ? `¿Suspender a ${emp.full_name}? Ya no aparecerá al asignar reportes.`
+        : `¿Reactivar a ${emp.full_name}?`
+    )) return;
+    setTogglingId(emp.id);
+    await (supabase as any).from('employees').update({ is_active: !emp.is_active }).eq('id', emp.id);
+    setTogglingId(null); load();
+  }
+
+  // ── Display helpers ──
   function salaryDisplay(emp: Employee) {
     if (emp.payment_type === 'fixed_weekly' && emp.weekly_salary != null)
       return `$${Number(emp.weekly_salary).toLocaleString(locale, { minimumFractionDigits: 2 })}/sem`;
@@ -162,186 +365,20 @@ export default function PersonalPage() {
   }
 
   const isMechanic = (e: Employee) => e.payment_type === 'mechanic_commission' || e.role === 'mechanic';
-  const isAdminEmp = (e: Employee) => !isMechanic(e);
 
-  // ── Shared form body (reused for Add and Edit) ──
-  function FormBody({
-    form,
-    setForm,
-    saving,
-    error,
-    onSubmit,
-    onCancel,
-    isEdit,
-  }: {
-    form: typeof BLANK_FORM;
-    setForm: React.Dispatch<React.SetStateAction<typeof BLANK_FORM>>;
-    saving: boolean;
-    error: string;
-    onSubmit: (e: React.FormEvent) => void;
-    onCancel: () => void;
-    isEdit: boolean;
-  }) {
-    return (
-      <form onSubmit={onSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Nombre */}
-        <div>
-          <label className="block text-slate-400 text-sm mb-1.5">{t('staff.fullName')} *</label>
-          <input required value={form.fullName} onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))}
-            placeholder={t('staff.fullNamePlaceholder')}
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition" />
-        </div>
-        {/* Teléfono */}
-        <div>
-          <label className="block text-slate-400 text-sm mb-1.5">{t('common.phone')}</label>
-          <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-            placeholder={t('staff.phonePlaceholder')}
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition" />
-        </div>
-        {/* Email */}
-        <div>
-          <label className="block text-slate-400 text-sm mb-1.5">{t('common.email')}</label>
-          <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-            placeholder={t('staff.emailPlaceholder')}
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition" />
-        </div>
-        {/* Fecha de contratación */}
-        <div>
-          <label className="block text-slate-400 text-sm mb-1.5">{t('staff.hireDate')}</label>
-          <input type="date" value={form.hireDate} onChange={e => setForm(f => ({ ...f, hireDate: e.target.value }))}
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 transition" />
-        </div>
-        {/* Notas */}
-        <div className="md:col-span-2">
-          <label className="block text-slate-400 text-sm mb-1.5">{t('staff.notes')}</label>
-          <input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-            placeholder={t('staff.notesPlaceholder')}
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition" />
-        </div>
-
-        {/* Perfil */}
-        <div className="md:col-span-2 border-t border-white/5 pt-4 mt-1">
-          <label className="block text-slate-400 text-sm mb-2">{t('staff.profile.label')}</label>
-          <div className="grid grid-cols-2 gap-3">
-            {(['mechanic', 'admin'] as Profile[]).map(p => (
-              <button key={p} type="button" onClick={() => setForm(f => ({ ...f, profile: p }))}
-                className={`px-4 py-3 rounded-lg border transition text-left ${
-                  form.profile === p
-                    ? p === 'mechanic'
-                      ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
-                      : 'bg-sky-500/15 border-sky-500/40 text-sky-300'
-                    : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'
-                }`}>
-                <p className="font-semibold text-sm">{t(`staff.profile.${p}`)}</p>
-                <p className="text-xs opacity-70 mt-1">{t(`staff.profile.${p}Desc`)}</p>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Tipo de pago (solo admin) */}
-        {form.profile === 'admin' && (
-          <div className="md:col-span-2 bg-slate-800/40 border border-white/5 rounded-xl p-4">
-            <label className="block text-slate-400 text-sm mb-3">{t('staff.payment.type')}</label>
-            <div className="grid grid-cols-3 gap-2 mb-4">
-              {([
-                { val: 'fixed_weekly' as PayType, label: 'Sueldo fijo', desc: 'Mismo monto cada semana' },
-                { val: 'hourly'       as PayType, label: 'Por hora',    desc: 'Horas × tarifa'          },
-                { val: 'manual'       as PayType, label: 'Manual',      desc: 'Tú defines el monto'     },
-              ]).map(opt => (
-                <button key={opt.val} type="button" onClick={() => setForm(f => ({ ...f, payType: opt.val }))}
-                  className={`px-3 py-2.5 rounded-lg border transition text-left ${
-                    form.payType === opt.val
-                      ? 'bg-sky-500/15 border-sky-500/40 text-sky-300'
-                      : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'
-                  }`}>
-                  <p className="font-semibold text-xs">{opt.label}</p>
-                  <p className="text-xs opacity-60 mt-0.5">{opt.desc}</p>
-                </button>
-              ))}
-            </div>
-            {form.payType === 'fixed_weekly' && (
-              <div>
-                <label className="block text-slate-400 text-xs mb-1.5">Sueldo semanal ($)</label>
-                <div className="relative w-48">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-400 font-bold text-sm">$</span>
-                  <input type="number" min="0" step="0.01" value={form.weeklySalary}
-                    onChange={e => setForm(f => ({ ...f, weeklySalary: e.target.value }))}
-                    placeholder="0.00"
-                    className="w-full bg-slate-800 border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-slate-100 text-sm focus:outline-none focus:border-amber-400/50" />
-                </div>
-              </div>
-            )}
-            {form.payType === 'hourly' && (
-              <div>
-                <label className="block text-slate-400 text-xs mb-1.5">Tarifa por hora ($)</label>
-                <div className="relative w-48">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-400 font-bold text-sm">$</span>
-                  <input type="number" min="0" step="0.01" value={form.hourlyRate}
-                    onChange={e => setForm(f => ({ ...f, hourlyRate: e.target.value }))}
-                    placeholder="0.00"
-                    className="w-full bg-slate-800 border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-slate-100 text-sm focus:outline-none focus:border-amber-400/50" />
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {error && (
-          <div className="md:col-span-2 bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2.5 text-red-400 text-sm">{error}</div>
-        )}
-        <div className="md:col-span-2 flex gap-3">
-          <button type="submit" disabled={saving}
-            className="bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-slate-950 font-bold py-2.5 px-6 rounded-lg transition display-font tracking-wide">
-            {saving ? t('staff.saving') : isEdit ? 'Guardar cambios' : t('staff.save')}
-          </button>
-          <button type="button" onClick={onCancel}
-            className="bg-slate-700 hover:bg-slate-600 text-slate-300 py-2.5 px-5 rounded-lg transition text-sm">
-            {t('common.cancel')}
-          </button>
-        </div>
-      </form>
-    );
-  }
-
-  // ── Suspend / activate ──
-  const [togglingId, setTogglingId] = useState<string | null>(null);
-
-  async function handleToggleActive(emp: Employee) {
-    if (!confirm(
-      emp.is_active
-        ? `¿Suspender a ${emp.full_name}? Ya no aparecerá en los reportes de trabajo.`
-        : `¿Reactivar a ${emp.full_name}?`
-    )) return;
-    setTogglingId(emp.id);
-    await (supabase as any).from('employees').update({ is_active: !emp.is_active }).eq('id', emp.id);
-    setTogglingId(null);
-    load();
-  }
-
-  // ── Row / card actions ──
-  const EditBtn = ({ emp }: { emp: Employee }) => (
-    <button onClick={() => openEdit(emp)}
-      className="text-slate-500 hover:text-amber-400 transition p-1.5 rounded hover:bg-amber-500/10"
-      title="Editar">
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-          d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-1.414a2 2 0 01.586-1.414z" />
-      </svg>
-    </button>
-  );
-
+  // ── Action buttons ──
   const SuspendBtn = ({ emp }: { emp: Employee }) => (
     <button
       onClick={() => handleToggleActive(emp)}
       disabled={togglingId === emp.id}
-      title={emp.is_active ? 'Suspender mecánico' : 'Reactivar mecánico'}
-      className={`transition p-1.5 rounded text-xs font-semibold flex items-center gap-1 ${
+      title={emp.is_active ? 'Suspender' : 'Reactivar'}
+      className={`p-1.5 rounded transition ${
         emp.is_active
           ? 'text-slate-500 hover:text-orange-400 hover:bg-orange-500/10'
           : 'text-green-500 hover:text-green-400 hover:bg-green-500/10'
-      }`}>
-      {togglingId === emp.id ? <span className="text-slate-500">...</span> : emp.is_active ? (
+      }`}
+    >
+      {togglingId === emp.id ? <span className="text-xs">...</span> : emp.is_active ? (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
         </svg>
@@ -353,10 +390,26 @@ export default function PersonalPage() {
     </button>
   );
 
+  const EditBtn = ({ emp }: { emp: Employee }) => (
+    <button
+      onClick={() => openEdit(emp)}
+      title="Editar"
+      className="p-1.5 rounded text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition"
+    >
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-1.414a2 2 0 01.586-1.414z" />
+      </svg>
+    </button>
+  );
+
   const DeleteBtn = ({ emp }: { emp: Employee }) => (
-    <button onClick={() => handleDelete(emp.id, emp.full_name)} disabled={deletingId === emp.id}
-      className="text-slate-600 hover:text-red-400 transition p-1.5 rounded hover:bg-red-500/10"
-      title="Eliminar">
+    <button
+      onClick={() => handleDelete(emp.id, emp.full_name)}
+      disabled={deletingId === emp.id}
+      title="Eliminar"
+      className="p-1.5 rounded text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition"
+    >
       {deletingId === emp.id ? <span className="text-xs text-slate-500">...</span> : (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -366,7 +419,10 @@ export default function PersonalPage() {
     </button>
   );
 
-  // ── Mechanics table ──
+  // ── Tables / cards ──
+  const mechanics = employees.filter(isMechanic);
+  const adminStaff = employees.filter(e => !isMechanic(e));
+
   const renderMechanicsTable = (rows: Employee[]) => (
     <div className="bg-slate-900/60 border border-white/5 rounded-xl overflow-hidden">
       <table className="w-full text-sm">
@@ -381,7 +437,7 @@ export default function PersonalPage() {
         </thead>
         <tbody>
           {rows.map(emp => (
-            <tr key={emp.id} className="border-b border-white/5 hover:bg-white/2 transition-colors">
+            <tr key={emp.id} className={`border-b border-white/5 transition-colors ${emp.is_active ? 'hover:bg-white/2' : 'opacity-60'}`}>
               <td className="px-5 py-3.5">
                 <div className="flex items-center gap-2">
                   <span className={`font-medium ${emp.is_active ? 'text-slate-200' : 'text-slate-500 line-through'}`}>
@@ -395,11 +451,11 @@ export default function PersonalPage() {
                 </div>
               </td>
               <td className="px-5 py-3.5 text-slate-400">{emp.phone ?? '—'}</td>
-              <td className="px-5 py-3.5 text-slate-500">
+              <td className="px-5 py-3.5 text-slate-500 text-xs">
                 {new Date(emp.hire_date + 'T12:00:00').toLocaleDateString(locale)}
               </td>
               <td className="px-5 py-3.5 text-slate-500 italic text-xs max-w-xs truncate">{emp.notes ?? '—'}</td>
-              <td className="px-5 py-3.5 text-right">
+              <td className="px-5 py-3.5">
                 <div className="flex items-center justify-end gap-1">
                   <EditBtn emp={emp} />
                   <SuspendBtn emp={emp} />
@@ -413,13 +469,12 @@ export default function PersonalPage() {
     </div>
   );
 
-  // ── Admin cards ──
   const renderAdminCards = (rows: Employee[]) => (
     <div className="space-y-3">
       {rows.map(emp => {
         const sal = salaryDisplay(emp);
         return (
-          <div key={emp.id} className="bg-slate-900/60 border border-white/5 rounded-xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+          <div key={emp.id} className={`bg-slate-900/60 border border-white/5 rounded-xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap ${!emp.is_active ? 'opacity-60' : ''}`}>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <p className={`display-font font-semibold tracking-wide ${emp.is_active ? 'text-slate-200' : 'text-slate-500 line-through'}`}>
@@ -465,8 +520,10 @@ export default function PersonalPage() {
             <h2 className="display-font text-slate-100 font-bold text-lg tracking-wide">
               Editar — {editingEmp.full_name}
             </h2>
-            <button onClick={closeEdit}
-              className="text-slate-500 hover:text-slate-300 p-1.5 rounded-lg hover:bg-slate-700 transition">
+            <button
+              onClick={closeEdit}
+              className="text-slate-500 hover:text-slate-300 p-1.5 rounded-lg hover:bg-slate-700 transition"
+            >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -474,12 +531,13 @@ export default function PersonalPage() {
           </div>
           <FormBody
             form={editForm}
-            setForm={setEditForm}
+            onChange={patch => setEditForm(prev => ({ ...prev, ...patch }))}
             saving={editSaving}
             error={editError}
             onSubmit={handleEditSave}
             onCancel={closeEdit}
             isEdit={true}
+            t={t}
           />
         </div>
       </div>
@@ -487,9 +545,6 @@ export default function PersonalPage() {
   };
 
   // ── Render ──
-  const mechanics = employees.filter(isMechanic);
-  const adminStaff = employees.filter(isAdminEmp);
-
   return (
     <div>
       <EditModal />
@@ -516,12 +571,13 @@ export default function PersonalPage() {
           <h2 className="display-font text-slate-200 font-semibold mb-4 tracking-wide">{t('staff.registerPerson')}</h2>
           <FormBody
             form={addForm}
-            setForm={setAddForm}
+            onChange={patch => setAddForm(prev => ({ ...prev, ...patch }))}
             saving={addSaving}
             error={addError}
             onSubmit={handleAdd}
             onCancel={() => { setShowForm(false); setAddForm(BLANK_FORM); }}
             isEdit={false}
+            t={t}
           />
         </div>
       )}
@@ -534,7 +590,6 @@ export default function PersonalPage() {
         </div>
       ) : (
         <div className="space-y-8">
-          {/* Mecánicos */}
           <section>
             <div className="flex items-baseline justify-between mb-3">
               <h2 className="display-font text-amber-400 font-semibold tracking-wider text-sm uppercase">
@@ -547,7 +602,6 @@ export default function PersonalPage() {
               : renderMechanicsTable(mechanics)}
           </section>
 
-          {/* Administración */}
           <section>
             <div className="flex items-baseline justify-between mb-3">
               <h2 className="display-font text-sky-400 font-semibold tracking-wider text-sm uppercase">
