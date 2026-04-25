@@ -5,13 +5,30 @@
   --foreground: #ecf2f8;
 }
 
-html,
+html {
+  /* Evitar que iOS ajuste fuentes automáticamente */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* Fuente base mínima 16px para legibilidad en móvil */
+  font-size: 16px;
+}
+
 body {
   margin: 0;
   padding: 0;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-body), 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Evitar zoom en iOS al enfocar inputs (requiere font-size >= 16px) */
+input, select, textarea {
+  font-size: 16px;
+}
+
+/* Tap area mínima para botones e interactivos */
+button, a, [role="button"] {
+  touch-action: manipulation;
 }
 
 * {
