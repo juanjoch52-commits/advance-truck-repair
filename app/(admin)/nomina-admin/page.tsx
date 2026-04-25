@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { jsPDF } from 'jspdf';
@@ -53,24 +53,21 @@ export default function NominaAdminPage() {
   const [entries, setEntries] = useState<AdminEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [allowed, setAllowed] = useState<boolean | null>(null);
+  const [generatingAll, setGeneratingAll] = useState(false);
 
-  // Restrict access: only owner + super admin can manage admin payroll.
+  // Check role
   useEffect(() => {
     (async () => {
       let role = '';
       try {
         const res = await fetch('/api/auth/me');
-        if (res.ok) {
-          const j = await res.json();
-          role = (j?.user?.role ?? '').toLowerCase();
-        }
+        if (res.ok) { const j = await res.json(); role = (j?.user?.role ?? '').toLowerCase(); }
       } catch {}
       if (!role) {
         try {
           const { data: { user } } = await supabase.auth.getUser();
           if (user) {
-            const { data } = await (supabase as any)
-              .from('profiles').select('role').eq('id', user.id).single();
+            const { data } = await (supabase as any).from('profiles').select('role').eq('id', user.id).single();
             role = ((data as any)?.role ?? '').toLowerCase();
           }
         } catch {}
@@ -79,8 +76,10 @@ export default function NominaAdminPage() {
     })();
   }, []);
 
-  // Form state per-employee (keyed by employee id)
-  const [formByEmp, setFormByEmp] = useState<Record<string, { amount: string; hours: string; description: string; saving: boolean }>>({});
+  // Per-employee form state
+  const [formByEmp, setFormByEmp] = useState<Record<string, {
+    amount: string; hours: string; description: string; saving: boolean;
+  }>>({});
 
   function setForm(empId: string, patch: Partial<{ amount: string; hours: string; description: string; saving: boolean }>) {
     setFormByEmp(prev => ({
@@ -91,10 +90,9 @@ export default function NominaAdminPage() {
 
   const fmtMoney = (n: number) => '$' + n.toLocaleString(locale, { minimumFractionDigits: 2 });
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
 
-    // Admin staff = anyone NOT on mechanic_commission
     const { data: empData } = await (supabase as any)
       .from('employees')
       .select('id, full_name, payment_type, weekly_salary, hourly_rate')
@@ -103,7 +101,6 @@ export default function NominaAdminPage() {
     const adminList = (empData ?? []) as AdminEmployee[];
     setAdmins(adminList);
 
-    // Existing admin entries this week
     const { data: entryData } = await (supabase as any)
       .from('earned_entries')
       .select('id, employee_id, amount, hours_worked, description, work_date, week_start, week_end, entry_type')
@@ -113,14 +110,54 @@ export default function NominaAdminPage() {
 
     setEntries((entryData ?? []) as AdminEntry[]);
     setLoading(false);
-  }
+  }, [weekStart, weekEnd]);
 
-  useEffect(() => { load(); }, [weekStart, weekEnd]);
+  useEffect(() => { load(); }, [load]);
 
   function entryTypeForEmployee(emp: AdminEmployee): 'admin_fixed' | 'admin_hourly' | 'admin_manual' {
     if (emp.payment_type === 'fixed_weekly') return 'admin_fixed';
     if (emp.payment_type === 'hourly') return 'admin_hourly';
     return 'admin_manual';
+  }
+
+  function entriesForEmp(empId: string) {
+    return entries.filter(e => e.employee_id === empId);
+  }
+
+  function totalForEmp(empId: string) {
+    return entriesForEmp(empId).reduce((s, e) => s + Number(e.amount), 0);
+  }
+
+  const grandTotal = entries.reduce((s, e) => s + Number(e.amount), 0);
+
+  // Empleados de sueldo fijo que aún no tienen entrada esta semana
+  const fixedPending = admins.filter(emp =>
+    emp.payment_type === 'fixed_weekly' &&
+    Number(emp.weekly_salary ?? 0) > 0 &&
+    entriesForEmp(emp.id).length === 0
+  );
+
+  // Generar planilla completa: agrega todos los fijos pendientes de una vez
+  async function handleGenerarTodos() {
+    if (fixedPending.length === 0) return;
+    setGeneratingAll(true);
+
+    const rows = fixedPending.map(emp => ({
+      employee_id: emp.id,
+      amount: parseFloat(Number(emp.weekly_salary).toFixed(2)),
+      hours_worked: null,
+      work_date: weekEnd,
+      week_start: weekStart,
+      week_end: weekEnd,
+      description: null,
+      entry_type: 'admin_fixed',
+      mechanic_role: 'admin',
+    }));
+
+    const { error } = await (supabase as any).from('earned_entries').insert(rows);
+    if (error) alert(error.message);
+    setGeneratingAll(false);
+    load();
   }
 
   async function handleAdd(emp: AdminEmployee) {
@@ -138,14 +175,13 @@ export default function NominaAdminPage() {
     }
 
     if (amount <= 0) return;
-
     setForm(emp.id, { saving: true });
 
     const { error } = await (supabase as any).from('earned_entries').insert({
       employee_id: emp.id,
       amount: parseFloat(amount.toFixed(2)),
       hours_worked: hours,
-      work_date: weekEnd, // use week end as the entry date
+      work_date: weekEnd,
       week_start: weekStart,
       week_end: weekEnd,
       description: f.description?.trim() || null,
@@ -160,103 +196,85 @@ export default function NominaAdminPage() {
 
   async function handleDelete(entryId: string) {
     if (!confirm(t('adminPayroll.confirmDelete'))) return;
-    const { error } = await (supabase as any).from('earned_entries').delete().eq('id', entryId);
-    if (error) { alert(error.message); return; }
+    await (supabase as any).from('earned_entries').delete().eq('id', entryId);
     load();
   }
 
-  function entriesForEmp(empId: string) {
-    return entries.filter(e => e.employee_id === empId);
+  // Edit salary inline
+  const [editingSalary, setEditingSalary] = useState<string | null>(null);
+  const [salaryInput, setSalaryInput] = useState('');
+  const [savingSalary, setSavingSalary] = useState(false);
+
+  async function handleSaveSalary(emp: AdminEmployee) {
+    setSavingSalary(true);
+    const val = parseFloat(salaryInput);
+    if (isNaN(val) || val < 0) { setSavingSalary(false); return; }
+    await (supabase as any).from('employees').update({ weekly_salary: val }).eq('id', emp.id);
+    setSavingSalary(false);
+    setEditingSalary(null);
+    load();
   }
 
-  function totalForEmp(empId: string) {
-    return entriesForEmp(empId).reduce((s, e) => s + Number(e.amount), 0);
+  function shiftWeek(weeks: number) {
+    const baseStart = new Date(weekStart + 'T12:00:00');
+    baseStart.setDate(baseStart.getDate() + weeks * 7);
+    const baseEnd = new Date(weekEnd + 'T12:00:00');
+    baseEnd.setDate(baseEnd.getDate() + weeks * 7);
+    setWeekStart(baseStart.toISOString().split('T')[0]);
+    setWeekEnd(baseEnd.toISOString().split('T')[0]);
   }
 
-  const grandTotal = entries.reduce((s, e) => s + Number(e.amount), 0);
+  const formatFecha = (d: string) =>
+    new Date(d + 'T12:00:00').toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
 
   const [generatingPdf, setGeneratingPdf] = useState(false);
 
   function generatePdf() {
     setGeneratingPdf(true);
     try {
-      // Same ink-friendly style as the rest of the system: black text on white,
-      // thin grey rules, no fills, no bold.
-      const INK = 30;
-      const SOFT = 110;
-      const LINE = 170;
-
+      const INK = 30; const SOFT = 110; const LINE = 170;
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
       const pageW = doc.internal.pageSize.getWidth();
       const margin = 15;
 
-      // Header
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(14);
-      doc.setTextColor(INK, INK, INK);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(INK, INK, INK);
       doc.text('ADVANCE TRUCK REPAIR', margin, 14);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
-      doc.setTextColor(SOFT, SOFT, SOFT);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(SOFT, SOFT, SOFT);
       doc.text(t('adminPayroll.title'), margin, 20);
-
       const issued = new Date().toLocaleDateString(locale, { day: '2-digit', month: 'long', year: 'numeric' });
       doc.text(`${t('pdf.header.issued')}: ${issued}`, pageW - margin, 20, { align: 'right' });
-
-      doc.setDrawColor(LINE, LINE, LINE);
-      doc.setLineWidth(0.2);
+      doc.setDrawColor(LINE, LINE, LINE); doc.setLineWidth(0.2);
       doc.line(margin, 24, pageW - margin, 24);
 
-      // Period + total
-      doc.setFontSize(11);
-      doc.setTextColor(INK, INK, INK);
+      doc.setFontSize(11); doc.setTextColor(INK, INK, INK);
       doc.text(t('weeklyCut.cutWeek') + ': ' + formatFecha(weekStart) + ' — ' + formatFecha(weekEnd), margin, 32);
-
-      doc.setFontSize(9);
-      doc.setTextColor(SOFT, SOFT, SOFT);
+      doc.setFontSize(9); doc.setTextColor(SOFT, SOFT, SOFT);
       doc.text(t('adminPayroll.totalToPay') + ':', margin, 40);
       doc.setTextColor(INK, INK, INK);
       doc.text(fmtMoney(grandTotal), margin + 70, 40);
 
       let y = 48;
-
-      // Per-employee section
       for (const emp of admins) {
         const empEntries = entriesForEmp(emp.id);
         if (empEntries.length === 0) continue;
-
         if (y > 230) { doc.addPage(); y = 20; }
 
-        // Employee heading
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(10);
-        doc.setTextColor(INK, INK, INK);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(INK, INK, INK);
         doc.text(emp.full_name.toUpperCase(), margin, y + 4);
-
-        // Payment-type meta
-        doc.setFontSize(8);
-        doc.setTextColor(SOFT, SOFT, SOFT);
+        doc.setFontSize(8); doc.setTextColor(SOFT, SOFT, SOFT);
         let meta = '';
         if (emp.payment_type === 'fixed_weekly') meta = `${t('staff.payment.fixedWeekly')} · ${fmtMoney(Number(emp.weekly_salary ?? 0))}/sem`;
         else if (emp.payment_type === 'hourly') meta = `${t('staff.payment.hourly')} · ${fmtMoney(Number(emp.hourly_rate ?? 0))}/h`;
         else meta = t('staff.payment.manual');
         doc.text(meta, margin, y + 9);
-
-        // Total
-        doc.setFontSize(10);
-        doc.setTextColor(INK, INK, INK);
+        doc.setFontSize(10); doc.setTextColor(INK, INK, INK);
         doc.text(fmtMoney(totalForEmp(emp.id)), pageW - margin, y + 4, { align: 'right' });
-
-        doc.setDrawColor(LINE, LINE, LINE);
-        doc.setLineWidth(0.2);
+        doc.setDrawColor(LINE, LINE, LINE); doc.setLineWidth(0.2);
         doc.line(margin, y + 11, pageW - margin, y + 11);
         y += 14;
 
         autoTable(doc, {
-          startY: y,
-          margin: { left: margin, right: margin },
-          theme: 'plain',
+          startY: y, margin: { left: margin, right: margin }, theme: 'plain',
           head: [[t('common.date'), t('adminPayroll.hours'), t('adminPayroll.note'), t('adminPayroll.amount')]],
           body: empEntries.map((en) => [
             new Date(en.work_date + 'T12:00:00').toLocaleDateString(locale),
@@ -264,81 +282,31 @@ export default function NominaAdminPage() {
             en.description ?? '—',
             fmtMoney(Number(en.amount)),
           ]),
-          styles: {
-            fontSize: 9,
-            textColor: [INK, INK, INK] as [number, number, number],
-            cellPadding: { top: 2.2, right: 3, bottom: 2.2, left: 3 },
-            lineColor: [LINE, LINE, LINE] as [number, number, number],
-            lineWidth: 0.15,
-          },
-          headStyles: {
-            fillColor: [255, 255, 255] as [number, number, number],
-            textColor: [INK, INK, INK] as [number, number, number],
-            fontStyle: 'normal' as const,
-            fontSize: 9,
-          },
-          columnStyles: {
-            1: { halign: 'center', cellWidth: 20 },
-            3: { halign: 'right', cellWidth: 35 },
-          },
-          didDrawCell: (hookData) => {
-            if (hookData.section === 'head') {
-              const { x, y: cy, width, height } = hookData.cell;
-              doc.setDrawColor(LINE, LINE, LINE);
-              doc.setLineWidth(0.2);
-              doc.line(x, cy + height, x + width, cy + height);
-            }
-          },
+          styles: { fontSize: 9, textColor: [INK, INK, INK] as [number, number, number], cellPadding: { top: 2.2, right: 3, bottom: 2.2, left: 3 }, lineColor: [LINE, LINE, LINE] as [number, number, number], lineWidth: 0.15 },
+          headStyles: { fillColor: [255, 255, 255] as [number, number, number], textColor: [INK, INK, INK] as [number, number, number], fontStyle: 'normal' as const, fontSize: 9 },
+          columnStyles: { 1: { halign: 'center', cellWidth: 20 }, 3: { halign: 'right', cellWidth: 35 } },
         });
-
         y = ((doc as any).lastAutoTable?.finalY ?? y + 16) + 10;
       }
 
-      // Footer with grand total
       if (y > 250) { doc.addPage(); y = 20; }
-      doc.setDrawColor(LINE, LINE, LINE);
-      doc.setLineWidth(0.3);
-      doc.line(margin, y, pageW - margin, y);
-      y += 7;
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(11);
-      doc.setTextColor(INK, INK, INK);
+      doc.setDrawColor(LINE, LINE, LINE); doc.setLineWidth(0.3); doc.line(margin, y, pageW - margin, y); y += 7;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(INK, INK, INK);
       doc.text(t('adminPayroll.totalToPay'), margin, y);
       doc.text(fmtMoney(grandTotal), pageW - margin, y, { align: 'right' });
 
-      // Page numbers
       const pages = doc.getNumberOfPages();
       for (let i = 1; i <= pages; i++) {
-        doc.setPage(i);
-        doc.setFontSize(8);
-        doc.setTextColor(SOFT, SOFT, SOFT);
+        doc.setPage(i); doc.setFontSize(8); doc.setTextColor(SOFT, SOFT, SOFT);
         doc.text(`${i} / ${pages}`, pageW / 2, doc.internal.pageSize.getHeight() - 8, { align: 'center' });
       }
-
       doc.save(`nomina_admin_${weekStart}_${weekEnd}.pdf`);
-    } finally {
-      setGeneratingPdf(false);
-    }
+    } finally { setGeneratingPdf(false); }
   }
 
-  function shiftWeek(weeks: number) {
-    const r = getWeekRange(0);
-    const baseStart = new Date(weekStart + 'T12:00:00');
-    baseStart.setDate(baseStart.getDate() + weeks * 7);
-    const newStart = baseStart.toISOString().split('T')[0];
-    const baseEnd = new Date(weekEnd + 'T12:00:00');
-    baseEnd.setDate(baseEnd.getDate() + weeks * 7);
-    const newEnd = baseEnd.toISOString().split('T')[0];
-    setWeekStart(newStart);
-    setWeekEnd(newEnd);
-  }
+  /* ---- Render ---- */
 
-  const formatFecha = (d: string) =>
-    new Date(d + 'T12:00:00').toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
-
-  if (allowed === null) {
-    return <div className="text-center py-12 text-slate-500">{t('common.loading')}</div>;
-  }
+  if (allowed === null) return <div className="text-center py-12 text-slate-500">{t('common.loading')}</div>;
 
   if (!allowed) {
     return (
@@ -348,6 +316,8 @@ export default function NominaAdminPage() {
       </div>
     );
   }
+
+  const allFixedDone = fixedPending.length === 0 && admins.some(e => e.payment_type === 'fixed_weekly');
 
   return (
     <div>
@@ -390,23 +360,70 @@ export default function NominaAdminPage() {
         </button>
       </div>
 
-      {/* Summary */}
-      <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-5 mb-4 flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <p className="text-slate-400 text-sm mb-1">{t('adminPayroll.totalToPay')}</p>
-          <p className="display-font text-2xl font-bold text-amber-400">{fmtMoney(grandTotal)}</p>
+      {/* Botón GENERAR PLANILLA + totales */}
+      <div className="bg-slate-900/60 border border-white/5 rounded-xl p-5 mb-5">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <p className="text-slate-400 text-sm mb-1">{t('adminPayroll.totalToPay')}</p>
+            <p className="display-font text-2xl font-bold text-amber-400">{fmtMoney(grandTotal)}</p>
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Botón principal: Generar planilla */}
+            {!loading && fixedPending.length > 0 && (
+              <button
+                onClick={handleGenerarTodos}
+                disabled={generatingAll}
+                className="bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-slate-950 font-bold py-2.5 px-5 rounded-lg transition display-font tracking-wide flex items-center gap-2 text-sm"
+              >
+                {generatingAll ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                    Generando...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    GENERAR PLANILLA ({fixedPending.length})
+                  </>
+                )}
+              </button>
+            )}
+
+            {/* Ya generada */}
+            {!loading && allFixedDone && (
+              <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 text-sm px-4 py-2.5 rounded-lg">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Planilla generada
+              </div>
+            )}
+
+            {/* Descargar PDF */}
+            <button
+              onClick={generatePdf}
+              disabled={generatingPdf || entries.length === 0}
+              className="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 text-slate-200 text-sm px-4 py-2.5 rounded-lg transition flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              {generatingPdf ? t('adminPayroll.generatingPdf') : t('adminPayroll.downloadPdf')}
+            </button>
+          </div>
         </div>
-        <button
-          onClick={generatePdf}
-          disabled={generatingPdf || entries.length === 0}
-          className="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 text-slate-200 text-sm px-4 py-2.5 rounded-lg transition flex items-center gap-2"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          {generatingPdf ? t('adminPayroll.generatingPdf') : t('adminPayroll.downloadPdf')}
-        </button>
+
+        {/* Hint cuando hay fijos pendientes */}
+        {!loading && fixedPending.length > 0 && (
+          <p className="text-slate-500 text-xs mt-3 border-t border-white/5 pt-3">
+            {fixedPending.length} empleado{fixedPending.length > 1 ? 's' : ''} con sueldo fijo pendiente{fixedPending.length > 1 ? 's' : ''} de agregar esta semana:
+            {' '}<span className="text-slate-400">{fixedPending.map(e => e.full_name).join(', ')}</span>
+          </p>
+        )}
       </div>
 
       {loading ? (
@@ -414,34 +431,102 @@ export default function NominaAdminPage() {
       ) : admins.length === 0 ? (
         <div className="bg-slate-900/60 border border-white/5 rounded-xl p-12 text-center">
           <p className="text-slate-500 mb-2">{t('adminPayroll.noAdmins')}</p>
-          <a href="/mecanicos" className="text-amber-400 hover:text-amber-300 text-sm">
-            {t('adminPayroll.goToStaff')}
-          </a>
+          <a href="/mecanicos" className="text-amber-400 hover:text-amber-300 text-sm">{t('adminPayroll.goToStaff')}</a>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {admins.map(emp => {
             const f = formByEmp[emp.id] ?? { amount: '', hours: '', description: '', saving: false };
             const empEntries = entriesForEmp(emp.id);
             const empTotal = totalForEmp(emp.id);
+            const isFixed = emp.payment_type === 'fixed_weekly';
+            const isHourly = emp.payment_type === 'hourly';
+            const hasEntryThisWeek = empEntries.length > 0;
+            const isEditingSalary = editingSalary === emp.id;
 
             return (
-              <div key={emp.id} className="bg-slate-900/60 border border-white/5 rounded-xl overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 bg-white/2">
-                  <div>
-                    <p className="display-font text-slate-200 font-semibold tracking-wide">{emp.full_name}</p>
-                    <p className="text-slate-500 text-xs">
-                      {emp.payment_type === 'fixed_weekly' && `${t('staff.payment.fixedWeekly')} · ${fmtMoney(Number(emp.weekly_salary ?? 0))}/sem`}
-                      {emp.payment_type === 'hourly' && `${t('staff.payment.hourly')} · ${fmtMoney(Number(emp.hourly_rate ?? 0))}/h`}
-                      {emp.payment_type === 'manual' && t('staff.payment.manual')}
-                    </p>
+              <div key={emp.id} className={`bg-slate-900/60 border rounded-xl overflow-hidden transition ${
+                hasEntryThisWeek && isFixed ? 'border-green-500/20' : 'border-white/5'
+              }`}>
+                {/* Header del empleado */}
+                <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5">
+                  <div className="flex items-center gap-3">
+                    {/* Indicador de estado */}
+                    <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                      hasEntryThisWeek ? 'bg-green-400' : isFixed ? 'bg-amber-400/60' : 'bg-slate-600'
+                    }`} />
+                    <div>
+                      <p className="display-font text-slate-200 font-semibold tracking-wide">{emp.full_name}</p>
+
+                      {/* Tipo de pago + salario (editable) */}
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {isFixed && !isEditingSalary && (
+                          <span className="text-slate-500 text-xs">
+                            Sueldo fijo:{' '}
+                            <span className="text-amber-400 font-semibold">{fmtMoney(Number(emp.weekly_salary ?? 0))}/sem</span>
+                          </span>
+                        )}
+                        {isHourly && (
+                          <span className="text-slate-500 text-xs">
+                            Por hora · {fmtMoney(Number(emp.hourly_rate ?? 0))}/h
+                          </span>
+                        )}
+                        {!isFixed && !isHourly && (
+                          <span className="text-slate-500 text-xs">Manual</span>
+                        )}
+
+                        {/* Botón editar salario (solo fijo) */}
+                        {isFixed && !isEditingSalary && (
+                          <button
+                            onClick={() => { setEditingSalary(emp.id); setSalaryInput(String(emp.weekly_salary ?? '')); }}
+                            className="text-slate-600 hover:text-amber-400 transition text-xs flex items-center gap-0.5"
+                            title="Cambiar salario"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-1.414a2 2 0 01.586-1.414z" />
+                            </svg>
+                            editar
+                          </button>
+                        )}
+
+                        {/* Editar salario inline */}
+                        {isEditingSalary && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-amber-400 text-xs">$</span>
+                            <input
+                              type="number" min="0" step="0.01"
+                              value={salaryInput}
+                              onChange={e => setSalaryInput(e.target.value)}
+                              className="w-24 bg-slate-800 border border-amber-400/40 rounded px-2 py-0.5 text-slate-100 text-xs focus:outline-none"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => handleSaveSalary(emp)}
+                              disabled={savingSalary}
+                              className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 text-xs font-bold px-2 py-0.5 rounded transition"
+                            >
+                              {savingSalary ? '...' : 'OK'}
+                            </button>
+                            <button onClick={() => setEditingSalary(null)} className="text-slate-500 hover:text-slate-300 text-xs px-1">✕</button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <p className="display-font text-emerald-400 font-bold text-lg">{fmtMoney(empTotal)}</p>
+
+                  <div className="text-right">
+                    <p className={`display-font font-bold text-lg ${hasEntryThisWeek ? 'text-green-400' : 'text-slate-600'}`}>
+                      {fmtMoney(empTotal)}
+                    </p>
+                    {hasEntryThisWeek && (
+                      <p className="text-green-500/60 text-xs">✓ Esta semana</p>
+                    )}
+                  </div>
                 </div>
 
-                {/* Existing entries */}
+                {/* Entradas existentes */}
                 {empEntries.length > 0 && (
-                  <div className="px-5 py-2 border-b border-white/5">
+                  <div className="px-5 py-2 border-b border-white/5 bg-green-500/3">
                     {empEntries.map(en => (
                       <div key={en.id} className="flex items-center justify-between text-sm py-1.5">
                         <span className="text-slate-400 text-xs">
@@ -450,7 +535,7 @@ export default function NominaAdminPage() {
                           {en.description ? ` · ${en.description}` : ''}
                         </span>
                         <div className="flex items-center gap-3">
-                          <span className="text-emerald-400 font-medium">{fmtMoney(Number(en.amount))}</span>
+                          <span className="text-green-400 font-medium text-sm">{fmtMoney(Number(en.amount))}</span>
                           <button onClick={() => handleDelete(en.id)}
                             className="text-slate-600 hover:text-red-400 transition p-1 rounded hover:bg-red-500/10"
                             title={t('common.delete')}>
@@ -464,16 +549,36 @@ export default function NominaAdminPage() {
                   </div>
                 )}
 
-                {/* Add new entry */}
+                {/* Formulario para agregar entrada */}
                 <div className="px-5 py-3 flex items-end gap-3 flex-wrap">
-                  {emp.payment_type === 'fixed_weekly' && (
-                    <div className="flex-1 min-w-40">
-                      <label className="block text-slate-500 text-xs mb-1">{t('adminPayroll.amount')}</label>
-                      <input type="text" disabled value={fmtMoney(Number(emp.weekly_salary ?? 0))}
-                        className="w-full bg-slate-800/50 border border-white/10 rounded-lg px-3 py-2 text-slate-300 text-sm" />
-                    </div>
+                  {/* Fijo: muestra monto y un solo botón */}
+                  {isFixed && (
+                    <>
+                      <div className="flex-1 min-w-32">
+                        <label className="block text-slate-500 text-xs mb-1">Monto</label>
+                        <input type="text" disabled value={fmtMoney(Number(emp.weekly_salary ?? 0))}
+                          className="w-full bg-slate-800/40 border border-white/5 rounded-lg px-3 py-2 text-slate-400 text-sm" />
+                      </div>
+                      <div className="flex-1 min-w-40">
+                        <label className="block text-slate-500 text-xs mb-1">{t('adminPayroll.note')} (opcional)</label>
+                        <input type="text" value={f.description}
+                          onChange={e => setForm(emp.id, { description: e.target.value })}
+                          placeholder={t('adminPayroll.notePlaceholder')}
+                          className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-slate-100 text-sm focus:outline-none focus:border-amber-400/50" />
+                      </div>
+                      <button onClick={() => handleAdd(emp)} disabled={f.saving}
+                        className={`font-bold py-2 px-4 rounded-lg text-sm transition display-font ${
+                          hasEntryThisWeek
+                            ? 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+                            : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                        } disabled:opacity-50`}>
+                        {f.saving ? t('common.saving') : hasEntryThisWeek ? '+ Agregar otro' : t('adminPayroll.add')}
+                      </button>
+                    </>
                   )}
-                  {emp.payment_type === 'hourly' && (
+
+                  {/* Por horas */}
+                  {isHourly && (
                     <>
                       <div>
                         <label className="block text-slate-500 text-xs mb-1">{t('adminPayroll.hours')}</label>
@@ -488,33 +593,46 @@ export default function NominaAdminPage() {
                           {fmtMoney((Number(f.hours || 0)) * Number(emp.hourly_rate ?? 0))}
                         </span>
                       </div>
+                      <div className="flex-1 min-w-40">
+                        <label className="block text-slate-500 text-xs mb-1">{t('adminPayroll.note')}</label>
+                        <input type="text" value={f.description}
+                          onChange={e => setForm(emp.id, { description: e.target.value })}
+                          placeholder={t('adminPayroll.notePlaceholder')}
+                          className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-slate-100 text-sm focus:outline-none focus:border-amber-400/50" />
+                      </div>
+                      <button onClick={() => handleAdd(emp)} disabled={f.saving}
+                        className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold py-2 px-4 rounded-lg text-sm transition">
+                        {f.saving ? t('common.saving') : t('adminPayroll.add')}
+                      </button>
                     </>
                   )}
-                  {emp.payment_type === 'manual' && (
-                    <div>
-                      <label className="block text-slate-500 text-xs mb-1">{t('adminPayroll.amount')}</label>
-                      <div className="relative w-32">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-400 text-sm font-bold">$</span>
-                        <input type="number" min="0" step="0.01" value={f.amount}
-                          onChange={e => setForm(emp.id, { amount: e.target.value })}
-                          placeholder="0.00"
-                          className="w-full bg-slate-800 border border-white/10 rounded-lg pl-7 pr-3 py-2 text-slate-100 text-sm focus:outline-none focus:border-amber-400/50" />
+
+                  {/* Manual */}
+                  {!isFixed && !isHourly && (
+                    <>
+                      <div>
+                        <label className="block text-slate-500 text-xs mb-1">{t('adminPayroll.amount')}</label>
+                        <div className="relative w-32">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-400 text-sm font-bold">$</span>
+                          <input type="number" min="0" step="0.01" value={f.amount}
+                            onChange={e => setForm(emp.id, { amount: e.target.value })}
+                            placeholder="0.00"
+                            className="w-full bg-slate-800 border border-white/10 rounded-lg pl-7 pr-3 py-2 text-slate-100 text-sm focus:outline-none focus:border-amber-400/50" />
+                        </div>
                       </div>
-                    </div>
+                      <div className="flex-1 min-w-40">
+                        <label className="block text-slate-500 text-xs mb-1">{t('adminPayroll.note')}</label>
+                        <input type="text" value={f.description}
+                          onChange={e => setForm(emp.id, { description: e.target.value })}
+                          placeholder={t('adminPayroll.notePlaceholder')}
+                          className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-slate-100 text-sm focus:outline-none focus:border-amber-400/50" />
+                      </div>
+                      <button onClick={() => handleAdd(emp)} disabled={f.saving}
+                        className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold py-2 px-4 rounded-lg text-sm transition">
+                        {f.saving ? t('common.saving') : t('adminPayroll.add')}
+                      </button>
+                    </>
                   )}
-
-                  <div className="flex-1 min-w-40">
-                    <label className="block text-slate-500 text-xs mb-1">{t('adminPayroll.note')}</label>
-                    <input type="text" value={f.description}
-                      onChange={e => setForm(emp.id, { description: e.target.value })}
-                      placeholder={t('adminPayroll.notePlaceholder')}
-                      className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-slate-100 text-sm focus:outline-none focus:border-amber-400/50" />
-                  </div>
-
-                  <button onClick={() => handleAdd(emp)} disabled={f.saving}
-                    className="bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-slate-950 font-bold py-2 px-4 rounded-lg text-sm transition">
-                    {f.saving ? t('common.saving') : t('adminPayroll.add')}
-                  </button>
                 </div>
               </div>
             );

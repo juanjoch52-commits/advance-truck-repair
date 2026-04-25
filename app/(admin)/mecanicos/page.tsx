@@ -17,8 +17,8 @@ interface Employee {
   hourly_rate: number | null;
 }
 
-// Two profiles only: mechanic (commission) or administration (manual pay).
 type Profile = 'mechanic' | 'admin';
+type PayType = 'fixed_weekly' | 'hourly' | 'manual';
 
 export default function PersonalPage() {
   const { t, lang } = useLanguage();
@@ -30,12 +30,21 @@ export default function PersonalPage() {
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Form fields
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [hireDate, setHireDate] = useState(new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
   const [profile, setProfile] = useState<Profile>('mechanic');
+  const [payType, setPayType] = useState<PayType>('fixed_weekly');
+  const [weeklySalary, setWeeklySalary] = useState('');
+  const [hourlyRate, setHourlyRate] = useState('');
+
+  // Inline salary edit for existing employees
+  const [editingSalaryId, setEditingSalaryId] = useState<string | null>(null);
+  const [salaryEditVal, setSalaryEditVal] = useState('');
+  const [savingSalary, setSavingSalary] = useState(false);
 
   async function load() {
     const { data } = await (supabase as any).from('employees')
@@ -49,7 +58,8 @@ export default function PersonalPage() {
 
   function resetForm() {
     setFullName(''); setPhone(''); setEmail(''); setNotes('');
-    setProfile('mechanic');
+    setProfile('mechanic'); setPayType('fixed_weekly');
+    setWeeklySalary(''); setHourlyRate('');
   }
 
   async function handleAdd(e: React.FormEvent) {
@@ -57,6 +67,7 @@ export default function PersonalPage() {
     setSaving(true);
     setError('');
 
+    const isAdmin = profile === 'admin';
     const payload: any = {
       full_name: fullName.trim(),
       phone: phone.trim() || null,
@@ -64,10 +75,10 @@ export default function PersonalPage() {
       hire_date: hireDate,
       notes: notes.trim() || null,
       access_pin: '0000',
-      role: profile === 'mechanic' ? 'mechanic' : 'admin',
-      payment_type: profile === 'mechanic' ? 'mechanic_commission' : 'manual',
-      weekly_salary: null,
-      hourly_rate: null,
+      role: isAdmin ? 'admin' : 'mechanic',
+      payment_type: isAdmin ? payType : 'mechanic_commission',
+      weekly_salary: isAdmin && payType === 'fixed_weekly' ? parseFloat(weeklySalary) || null : null,
+      hourly_rate: isAdmin && payType === 'hourly' ? parseFloat(hourlyRate) || null : null,
     };
 
     const { error: err } = await (supabase as any).from('employees').insert(payload);
@@ -78,21 +89,53 @@ export default function PersonalPage() {
     load();
   }
 
+  async function handleSalaryEdit(emp: Employee) {
+    setSavingSalary(true);
+    const val = parseFloat(salaryEditVal);
+    if (!isNaN(val) && val >= 0) {
+      await (supabase as any).from('employees')
+        .update({
+          weekly_salary: emp.payment_type === 'fixed_weekly' ? val : null,
+          hourly_rate: emp.payment_type === 'hourly' ? val : null,
+        })
+        .eq('id', emp.id);
+    }
+    setSavingSalary(false);
+    setEditingSalaryId(null);
+    load();
+  }
+
   function profileLabel(emp: Employee) {
     const isMech = emp.payment_type === 'mechanic_commission' || emp.role === 'mechanic';
     return isMech ? t('staff.profile.mechanic') : t('staff.profile.admin');
+  }
+
+  function payTypeLabel(emp: Employee) {
+    if (emp.payment_type === 'fixed_weekly') return `Fijo semanal`;
+    if (emp.payment_type === 'hourly') return `Por hora`;
+    return 'Manual';
+  }
+
+  function salaryDisplay(emp: Employee) {
+    if (emp.payment_type === 'fixed_weekly' && emp.weekly_salary != null)
+      return `$${Number(emp.weekly_salary).toLocaleString(locale, { minimumFractionDigits: 2 })}/sem`;
+    if (emp.payment_type === 'hourly' && emp.hourly_rate != null)
+      return `$${Number(emp.hourly_rate).toLocaleString(locale, { minimumFractionDigits: 2 })}/h`;
+    return null;
   }
 
   async function handleDelete(id: string, name: string) {
     if (!confirm(t('staff.deleteConfirm').replace('{name}', name))) return;
     setDeletingId(id);
     const { error: err } = await (supabase as any).from('employees').delete().eq('id', id);
-    if (err) { alert(t('staff.deleteError') + err.message); }
+    if (err) alert(t('staff.deleteError') + err.message);
     setDeletingId(null);
     load();
   }
 
   const locale = lang === 'en' ? 'en-US' : 'es-MX';
+  const isMechanic = (e: Employee) => e.payment_type === 'mechanic_commission' || (!e.payment_type && true);
+  const isAdminEmp = (e: Employee) => !isMechanic(e);
 
   return (
     <div>
@@ -142,12 +185,11 @@ export default function PersonalPage() {
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition" />
             </div>
 
-            {/* Profile (mechanic vs administration) */}
+            {/* Perfil */}
             <div className="md:col-span-2 border-t border-white/5 pt-4 mt-2">
               <label className="block text-slate-400 text-sm mb-2">{t('staff.profile.label')}</label>
               <div className="grid grid-cols-2 gap-3">
-                <button type="button"
-                  onClick={() => setProfile('mechanic')}
+                <button type="button" onClick={() => setProfile('mechanic')}
                   className={`px-4 py-3 rounded-lg border transition text-left ${
                     profile === 'mechanic'
                       ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
@@ -156,8 +198,7 @@ export default function PersonalPage() {
                   <p className="font-semibold text-sm">{t('staff.profile.mechanic')}</p>
                   <p className="text-xs opacity-70 mt-1">{t('staff.profile.mechanicDesc')}</p>
                 </button>
-                <button type="button"
-                  onClick={() => setProfile('admin')}
+                <button type="button" onClick={() => setProfile('admin')}
                   className={`px-4 py-3 rounded-lg border transition text-left ${
                     profile === 'admin'
                       ? 'bg-sky-500/15 border-sky-500/40 text-sky-300'
@@ -169,6 +210,56 @@ export default function PersonalPage() {
               </div>
             </div>
 
+            {/* Tipo de pago (solo admin) */}
+            {profile === 'admin' && (
+              <div className="md:col-span-2 bg-slate-800/40 border border-white/5 rounded-xl p-4">
+                <label className="block text-slate-400 text-sm mb-3">{t('staff.payment.type')}</label>
+                <div className="grid grid-cols-3 gap-2 mb-4">
+                  {([
+                    { val: 'fixed_weekly', label: 'Sueldo fijo', desc: 'Mismo monto cada semana' },
+                    { val: 'hourly', label: 'Por hora', desc: 'Horas × tarifa' },
+                    { val: 'manual', label: 'Manual', desc: 'Tú defines el monto' },
+                  ] as const).map(opt => (
+                    <button type="button" key={opt.val} onClick={() => setPayType(opt.val)}
+                      className={`px-3 py-2.5 rounded-lg border transition text-left ${
+                        payType === opt.val
+                          ? 'bg-sky-500/15 border-sky-500/40 text-sky-300'
+                          : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'
+                      }`}>
+                      <p className="font-semibold text-xs">{opt.label}</p>
+                      <p className="text-xs opacity-60 mt-0.5">{opt.desc}</p>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Campo de monto según tipo */}
+                {payType === 'fixed_weekly' && (
+                  <div>
+                    <label className="block text-slate-400 text-xs mb-1.5">Sueldo semanal ($)</label>
+                    <div className="relative w-48">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-400 font-bold text-sm">$</span>
+                      <input type="number" min="0" step="0.01" value={weeklySalary}
+                        onChange={e => setWeeklySalary(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full bg-slate-800 border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-slate-100 text-sm focus:outline-none focus:border-amber-400/50" />
+                    </div>
+                  </div>
+                )}
+                {payType === 'hourly' && (
+                  <div>
+                    <label className="block text-slate-400 text-xs mb-1.5">Tarifa por hora ($)</label>
+                    <div className="relative w-48">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-400 font-bold text-sm">$</span>
+                      <input type="number" min="0" step="0.01" value={hourlyRate}
+                        onChange={e => setHourlyRate(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full bg-slate-800 border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-slate-100 text-sm focus:outline-none focus:border-amber-400/50" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {error && (
               <div className="md:col-span-2 bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2.5 text-red-400 text-sm">{error}</div>
             )}
@@ -177,7 +268,7 @@ export default function PersonalPage() {
                 className="bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-slate-950 font-bold py-2.5 px-6 rounded-lg transition display-font tracking-wide">
                 {saving ? t('staff.saving') : t('staff.save')}
               </button>
-              <button type="button" onClick={() => setShowForm(false)}
+              <button type="button" onClick={() => { setShowForm(false); resetForm(); }}
                 className="bg-slate-700 hover:bg-slate-600 text-slate-300 py-2.5 px-5 rounded-lg transition text-sm">
                 {t('common.cancel')}
               </button>
@@ -193,17 +284,15 @@ export default function PersonalPage() {
           <p className="text-slate-500">{t('staff.empty')}</p>
         </div>
       ) : (() => {
-        const isMechanic = (e: Employee) => e.payment_type === 'mechanic_commission' || (!e.payment_type && true);
         const mechanics = employees.filter(isMechanic);
-        const adminStaff = employees.filter(e => !isMechanic(e));
+        const adminStaff = employees.filter(isAdminEmp);
 
-        const renderTable = (rows: Employee[]) => (
+        const renderMechanicsTable = (rows: Employee[]) => (
           <div className="bg-slate-900/60 border border-white/5 rounded-xl overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/5">
                   <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('common.name')}</th>
-                  <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('staff.profile.label')}</th>
                   <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('staff.table.phone')}</th>
                   <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('staff.table.hireDateCol')}</th>
                   <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('staff.notes')}</th>
@@ -214,30 +303,15 @@ export default function PersonalPage() {
                 {rows.map(emp => (
                   <tr key={emp.id} className="border-b border-white/5 hover:bg-white/2 transition-colors">
                     <td className="px-5 py-3.5 text-slate-200 font-medium">{emp.full_name}</td>
-                    <td className="px-5 py-3.5">
-                      <span className={`text-xs px-2 py-1 rounded-full border ${
-                        (emp.payment_type === 'mechanic_commission' || emp.role === 'mechanic')
-                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
-                          : 'bg-sky-500/10 border-sky-500/30 text-sky-300'
-                      }`}>
-                        {profileLabel(emp)}
-                      </span>
-                    </td>
                     <td className="px-5 py-3.5 text-slate-400">{emp.phone ?? '—'}</td>
                     <td className="px-5 py-3.5 text-slate-500">
                       {new Date(emp.hire_date + 'T12:00:00').toLocaleDateString(locale)}
                     </td>
                     <td className="px-5 py-3.5 text-slate-500 italic">{emp.notes ?? '—'}</td>
                     <td className="px-5 py-3.5 text-right">
-                      <button
-                        onClick={() => handleDelete(emp.id, emp.full_name)}
-                        disabled={deletingId === emp.id}
-                        className="text-slate-600 hover:text-red-400 transition p-1.5 rounded hover:bg-red-500/10"
-                        title={t('common.delete')}
-                      >
-                        {deletingId === emp.id ? (
-                          <span className="text-xs text-slate-500">...</span>
-                        ) : (
+                      <button onClick={() => handleDelete(emp.id, emp.full_name)} disabled={deletingId === emp.id}
+                        className="text-slate-600 hover:text-red-400 transition p-1.5 rounded hover:bg-red-500/10">
+                        {deletingId === emp.id ? <span className="text-xs text-slate-500">...</span> : (
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                           </svg>
@@ -251,8 +325,92 @@ export default function PersonalPage() {
           </div>
         );
 
+        const renderAdminCards = (rows: Employee[]) => (
+          <div className="space-y-3">
+            {rows.map(emp => {
+              const sal = salaryDisplay(emp);
+              const isEditing = editingSalaryId === emp.id;
+              const hasRate = emp.payment_type === 'fixed_weekly' || emp.payment_type === 'hourly';
+
+              return (
+                <div key={emp.id} className="bg-slate-900/60 border border-white/5 rounded-xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="display-font text-slate-200 font-semibold tracking-wide">{emp.full_name}</p>
+                      <span className="text-xs px-2 py-0.5 rounded-full border bg-sky-500/10 border-sky-500/30 text-sky-300">
+                        {payTypeLabel(emp)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                      {/* Salario / tarifa */}
+                      {!isEditing && sal && (
+                        <span className="text-amber-400 font-semibold text-sm">{sal}</span>
+                      )}
+                      {!isEditing && !sal && hasRate && (
+                        <span className="text-slate-500 text-xs italic">Sin monto configurado</span>
+                      )}
+
+                      {/* Edición inline del salario */}
+                      {isEditing ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-amber-400 text-sm">$</span>
+                          <input
+                            type="number" min="0" step="0.01" autoFocus
+                            value={salaryEditVal}
+                            onChange={e => setSalaryEditVal(e.target.value)}
+                            className="w-28 bg-slate-800 border border-amber-400/40 rounded-lg px-2 py-1 text-slate-100 text-sm focus:outline-none"
+                          />
+                          <span className="text-slate-500 text-xs">
+                            {emp.payment_type === 'fixed_weekly' ? '/sem' : '/h'}
+                          </span>
+                          <button onClick={() => handleSalaryEdit(emp)} disabled={savingSalary}
+                            className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 text-xs font-bold px-3 py-1 rounded-lg transition">
+                            {savingSalary ? '...' : 'Guardar'}
+                          </button>
+                          <button onClick={() => setEditingSalaryId(null)}
+                            className="text-slate-500 hover:text-slate-300 text-xs px-1.5 py-1 rounded hover:bg-slate-700 transition">
+                            Cancelar
+                          </button>
+                        </div>
+                      ) : hasRate && (
+                        <button
+                          onClick={() => {
+                            setEditingSalaryId(emp.id);
+                            setSalaryEditVal(String(emp.payment_type === 'fixed_weekly' ? (emp.weekly_salary ?? '') : (emp.hourly_rate ?? '')));
+                          }}
+                          className="text-slate-500 hover:text-amber-400 text-xs flex items-center gap-1 transition"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-1.414a2 2 0 01.586-1.414z" />
+                          </svg>
+                          Cambiar monto
+                        </button>
+                      )}
+
+                      {/* Teléfono y email */}
+                      {emp.phone && <span className="text-slate-500 text-xs">{emp.phone}</span>}
+                      {emp.email && <span className="text-slate-500 text-xs">{emp.email}</span>}
+                    </div>
+                  </div>
+
+                  <button onClick={() => handleDelete(emp.id, emp.full_name)} disabled={deletingId === emp.id}
+                    className="text-slate-600 hover:text-red-400 transition p-1.5 rounded hover:bg-red-500/10 flex-shrink-0">
+                    {deletingId === emp.id ? <span className="text-xs text-slate-500">...</span> : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        );
+
         return (
           <div className="space-y-8">
+            {/* Mecánicos */}
             <section>
               <div className="flex items-baseline justify-between mb-3">
                 <h2 className="display-font text-amber-400 font-semibold tracking-wider text-sm uppercase">
@@ -262,9 +420,10 @@ export default function PersonalPage() {
               </div>
               {mechanics.length === 0
                 ? <div className="bg-slate-900/40 border border-white/5 rounded-xl p-6 text-center text-slate-500 text-sm">{t('staff.section.noMechanics')}</div>
-                : renderTable(mechanics)}
+                : renderMechanicsTable(mechanics)}
             </section>
 
+            {/* Administración */}
             <section>
               <div className="flex items-baseline justify-between mb-3">
                 <h2 className="display-font text-sky-400 font-semibold tracking-wider text-sm uppercase">
@@ -274,7 +433,7 @@ export default function PersonalPage() {
               </div>
               {adminStaff.length === 0
                 ? <div className="bg-slate-900/40 border border-white/5 rounded-xl p-6 text-center text-slate-500 text-sm">{t('staff.section.noAdmin')}</div>
-                : renderTable(adminStaff)}
+                : renderAdminCards(adminStaff)}
             </section>
           </div>
         );
