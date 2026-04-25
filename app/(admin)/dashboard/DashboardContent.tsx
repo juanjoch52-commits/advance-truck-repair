@@ -4,8 +4,10 @@ import { useLanguage } from '@/contexts/LanguageContext';
 
 interface RecentOrder {
   id: string;
-  status: string;
-  created_at: string;
+  externalOrderNumber: string;
+  truckNumber: string;
+  company: string;
+  workDate: string;
 }
 
 interface Props {
@@ -190,18 +192,49 @@ export default function DashboardContent({
       {/* Recent reports */}
       {recentOrders.length > 0 && (
         <div className="bg-slate-900/60 border border-white/5 rounded-xl p-5">
-          <h2 className="display-font text-slate-300 font-semibold mb-4 tracking-wide">
-            {t('dashboard.recentActivity')}
-          </h2>
-          <div className="space-y-2">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="display-font text-slate-300 font-semibold tracking-wide">
+              {t('dashboard.recentActivity')}
+            </h2>
+            <a href="/ordenes" className="text-xs text-sky-400 hover:text-sky-300 border border-sky-500/20 hover:border-sky-400/30 px-3 py-1.5 rounded-lg transition">
+              {t('nav.reports')} →
+            </a>
+          </div>
+          <div className="space-y-1">
             {recentOrders.map((o) => (
-              <div key={o.id} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0 gap-3">
-                <span className="text-slate-400 text-sm font-mono shrink-0">#{o.id.slice(0, 8)}</span>
-                <span className="text-slate-200 text-sm flex-1 truncate">{o.status}</span>
-                <span className="text-slate-500 text-xs shrink-0">
-                  {new Date(o.created_at).toLocaleDateString(locale)}
+              <a
+                key={o.id}
+                href={`/ordenes/${o.id}`}
+                className="flex items-center justify-between py-2.5 px-3 border-b border-white/5 last:border-0 gap-3 hover:bg-white/3 rounded-lg transition-colors group"
+              >
+                {/* Orden # o camión */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <svg className="w-3.5 h-3.5 text-amber-400/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  <span className="text-amber-400 text-xs font-mono font-semibold">
+                    {o.externalOrderNumber ? `#${o.externalOrderNumber}` : o.truckNumber}
+                  </span>
+                </div>
+
+                {/* Empresa */}
+                <span className="text-slate-200 text-sm flex-1 truncate group-hover:text-white transition-colors">
+                  {o.company}
                 </span>
-              </div>
+
+                {/* Camión si hay orden externa */}
+                {o.externalOrderNumber && (
+                  <span className="text-slate-500 text-xs shrink-0 hidden sm:block">
+                    {o.truckNumber}
+                  </span>
+                )}
+
+                {/* Fecha de trabajo */}
+                <span className="text-slate-500 text-xs shrink-0">
+                  {new Date(o.workDate + 'T12:00:00').toLocaleDateString(locale, { day: '2-digit', month: 'short' })}
+                </span>
+              </a>
             ))}
           </div>
         </div>

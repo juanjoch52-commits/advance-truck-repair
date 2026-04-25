@@ -26,9 +26,10 @@ export default async function DashboardPage() {
   const [reportsRes, mechanicsRes, earnedRes, adminEarnedRes] = await Promise.all([
     (supabase as any)
       .from('work_reports')
-      .select('id, work_date, company, truck_number, created_at, created_by_name', { count: 'exact' })
+      .select('id, work_date, company, truck_number, external_order_number, created_at', { count: 'exact' })
+      .order('work_date', { ascending: false })
       .order('created_at', { ascending: false }),
-    (supabase as any).from('employees').select('id', { count: 'exact' }).eq('role', 'mechanic'),
+    (supabase as any).from('employees').select('id', { count: 'exact' }).eq('role', 'mechanic').eq('is_active', true),
     (supabase as any)
       .from('earned_entries')
       .select('amount, entry_type')
@@ -54,9 +55,10 @@ export default async function DashboardPage() {
     .slice(0, 5)
     .map((r: any) => ({
       id: r.id as string,
-      // Repurpose 'status' to carry the company name for the recent activity row.
-      status: (r.company ?? r.truck_number ?? '—') as string,
-      created_at: r.created_at as string,
+      externalOrderNumber: (r.external_order_number ?? '') as string,
+      truckNumber: (r.truck_number ?? '—') as string,
+      company: (r.company ?? '—') as string,
+      workDate: r.work_date as string,
     }));
 
   return (
