@@ -47,15 +47,31 @@ export default function OrdenesPage() {
     '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   useEffect(() => {
-    // Fetch current user role from PIN-based session
-    fetch('/api/auth/me')
-      .then(r => r.ok ? r.json() : null)
-      .then(j => {
-        if (j && j.authenticated && j.user) {
-          setCurrentUserRole(j.user.role ?? '');
+    // Detect role from BOTH auth flows:
+    //  1) PIN-based session cookie (/api/auth/me)
+    //  2) Supabase Auth + profiles.role (email/password login)
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const j = await res.json();
+          if (j?.authenticated && j.user?.role) {
+            setCurrentUserRole(j.user.role);
+            return;
+          }
         }
-      })
-      .catch(() => {});
+      } catch {}
+
+      // Fallback to Supabase Auth
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data } = await (supabase as any)
+            .from('profiles').select('role').eq('id', user.id).single();
+          if ((data as any)?.role) setCurrentUserRole((data as any).role);
+        }
+      } catch {}
+    })();
 
     // Fetch employees
     supabase.from('employees' as any).select('id, full_name').order('full_name')
@@ -195,10 +211,12 @@ export default function OrdenesPage() {
   const totalProfit  = totalCharged - totalPayout;
 
   // Role-based permissions
-  // - View full detail (creator + audit): super user, owner, admin
-  // - Edit + delete: super user and owner ONLY
+  // - View full detail (creator + audit): super admin/user, owner, admin
+  // - Edit + delete: super admin/user and owner ONLY
+  // Accept both 'super_user' (PIN flow) and 'super_admin' (Supabase auth flow).
   const role = (currentUserRole || '').toLowerCase();
-  const canManage     = role === 'super_user' || role === 'owner';
+  const isSuper       = role === 'super_user' || role === 'super_admin';
+  const canManage     = isSuper || role === 'owner';
   const canDelete     = canManage;
   const canEdit       = canManage;
   const canViewDetail = canManage || role === 'admin';

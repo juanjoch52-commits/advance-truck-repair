@@ -42,19 +42,44 @@ export default function NuevaOrdenPage() {
       .order('full_name')
       .then(({ data }: any) => setEmployees(data ?? []));
 
-    fetch('/api/auth/me')
-      .then(r => r.ok ? r.json() : null)
-      .then(j => {
-        if (j && j.authenticated && j.user) {
-          setCurrentUser({
-            id: j.user.id,
-            full_name: j.user.full_name,
-            role: j.user.role,
-            effective_role: j.user.effective_role,
-          });
+    // Detect creator from PIN session OR Supabase auth + profiles
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const j = await res.json();
+          if (j?.authenticated && j.user) {
+            setCurrentUser({
+              id: j.user.id,
+              full_name: j.user.full_name,
+              role: j.user.role,
+              effective_role: j.user.effective_role,
+            });
+            return;
+          }
         }
-      })
-      .catch(() => {});
+      } catch {}
+
+      // Fallback: Supabase auth
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await (supabase as any)
+            .from('profiles')
+            .select('id, full_name, email, role')
+            .eq('id', user.id)
+            .single();
+          if (profile) {
+            setCurrentUser({
+              id: (profile as any).id,
+              full_name: (profile as any).full_name || (profile as any).email || 'Admin',
+              role: (profile as any).role || 'admin',
+              effective_role: (profile as any).role || 'admin',
+            });
+          }
+        }
+      } catch {}
+    })();
   }, []);
 
   async function handleSubmit(data: ReportFormData): Promise<{ ok: boolean; error?: string }> {

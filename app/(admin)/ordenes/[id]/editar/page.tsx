@@ -32,14 +32,30 @@ export default function EditarOrdenPage({ params }: { params: Promise<{ id: stri
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check role
-    fetch('/api/auth/me')
-      .then(r => r.ok ? r.json() : null)
-      .then(j => {
-        const role = (j?.user?.role ?? '').toLowerCase();
-        setAllowed(role === 'super_user' || role === 'owner');
-      })
-      .catch(() => setAllowed(false));
+    // Detect role from BOTH auth flows (PIN session + Supabase Auth)
+    (async () => {
+      let role = '';
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const j = await res.json();
+          role = (j?.user?.role ?? '').toLowerCase();
+        }
+      } catch {}
+
+      if (!role) {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data } = await (supabase as any)
+              .from('profiles').select('role').eq('id', user.id).single();
+            role = ((data as any)?.role ?? '').toLowerCase();
+          }
+        } catch {}
+      }
+
+      setAllowed(role === 'super_user' || role === 'super_admin' || role === 'owner');
+    })();
 
     // Load employees
     (supabase as any)
