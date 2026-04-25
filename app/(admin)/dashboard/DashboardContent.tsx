@@ -67,13 +67,6 @@ export default function DashboardContent({
     },
   ];
 
-  function statusLabel(s: string) {
-    if (s === 'approved') return t('dashboard.status.approved');
-    if (s === 'paid') return t('dashboard.status.paid');
-    if (s === 'rejected') return t('dashboard.status.rejected');
-    return t('dashboard.status.pending');
-  }
-
   return (
     <div>
       <div className="mb-8">
@@ -132,7 +125,7 @@ export default function DashboardContent({
         </a>
       </div>
 
-      {/* Órdenes recientes */}
+      {/* Recent reports */}
       {recentOrders.length > 0 && (
         <div className="bg-slate-900/60 border border-white/5 rounded-xl p-5">
           <h2 className="display-font text-slate-300 font-semibold mb-4 tracking-wide">
@@ -140,17 +133,10 @@ export default function DashboardContent({
           </h2>
           <div className="space-y-2">
             {recentOrders.map((o) => (
-              <div key={o.id} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
-                <span className="text-slate-400 text-sm font-mono">#{o.id.slice(0, 8)}</span>
-                <span className={`text-xs px-2 py-1 rounded-full ${
-                  o.status === 'approved' ? 'bg-emerald-500/20 text-emerald-400' :
-                  o.status === 'paid' ? 'bg-sky-500/20 text-sky-400' :
-                  o.status === 'rejected' ? 'bg-red-500/20 text-red-400' :
-                  'bg-amber-500/20 text-amber-400'
-                }`}>
-                  {statusLabel(o.status)}
-                </span>
-                <span className="text-slate-500 text-xs">
+              <div key={o.id} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0 gap-3">
+                <span className="text-slate-400 text-sm font-mono shrink-0">#{o.id.slice(0, 8)}</span>
+                <span className="text-slate-200 text-sm flex-1 truncate">{o.status}</span>
+                <span className="text-slate-500 text-xs shrink-0">
                   {new Date(o.created_at).toLocaleDateString(locale)}
                 </span>
               </div>

@@ -73,9 +73,16 @@ export default function OrdenesPage() {
       } catch {}
     })();
 
-    // Fetch employees
-    supabase.from('employees' as any).select('id, full_name').order('full_name')
-      .then(({ data }) => setEmployees((data as any) ?? []));
+    // Fetch mechanics only (for the mechanic filter dropdown)
+    (supabase as any).from('employees')
+      .select('id, full_name, role, payment_type')
+      .order('full_name')
+      .then(({ data }: any) => {
+        const mechanics = (data ?? []).filter((e: any) =>
+          e.role === 'mechanic' || e.payment_type === 'mechanic_commission'
+        );
+        setEmployees(mechanics.map((e: any) => ({ id: e.id, full_name: e.full_name })));
+      });
   }, []);
 
   useEffect(() => { loadReports(); }, [dateFrom, dateTo, selectedMechanic, globalView]);

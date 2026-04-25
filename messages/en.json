@@ -318,9 +318,9 @@
     "title": "MAIN PANEL",
     "weekRange": "Week",
     "stats": {
-      "totalOrders": "Total Orders",
+      "totalOrders": "Total Reports",
       "activeMechanics": "Active Mechanics",
-      "weeklyEarned": "Earned This Week"
+      "weeklyEarned": "Mechanic Pay This Week"
     },
     "shortcuts": {
       "newOrder": "NEW ORDER",
@@ -378,6 +378,12 @@
     "empty": "No people registered.",
     "deleteConfirm": "Remove {name} from the list? This action cannot be undone.",
     "deleteError": "Error deleting: ",
+    "section": {
+      "mechanics": "Mechanics",
+      "admin": "Administration",
+      "noMechanics": "No mechanics registered yet.",
+      "noAdmin": "No administration staff registered yet."
+    },
     "payment": {
       "type": "Payment type",
       "mechanic": "Mechanic (commission)",
@@ -403,7 +409,11 @@
     "note": "Note",
     "notePlaceholder": "Optional note...",
     "add": "Add",
-    "confirmDelete": "Delete this entry?"
+    "confirmDelete": "Delete this entry?",
+    "notAllowedTitle": "Not allowed",
+    "notAllowedMsg": "Only super admin and owner can manage administration payroll.",
+    "downloadPdf": "Download PDF",
+    "generatingPdf": "Generating..."
   },
   "changePassword": {
     "tempDetectedTitle": "Temporary password detected",

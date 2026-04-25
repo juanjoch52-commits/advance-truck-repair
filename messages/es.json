@@ -318,9 +318,9 @@
     "title": "PANEL PRINCIPAL",
     "weekRange": "Semana",
     "stats": {
-      "totalOrders": "Órdenes Totales",
+      "totalOrders": "Reportes Totales",
       "activeMechanics": "Mecánicos Activos",
-      "weeklyEarned": "Devengado Esta Semana"
+      "weeklyEarned": "Pago Mecánicos Esta Semana"
     },
     "shortcuts": {
       "newOrder": "NUEVA ORDEN",
@@ -378,6 +378,12 @@
     "empty": "No hay personas registradas.",
     "deleteConfirm": "¿Eliminar a {name} de la lista? Esta acción no se puede deshacer.",
     "deleteError": "Error al eliminar: ",
+    "section": {
+      "mechanics": "Mecánicos",
+      "admin": "Administración",
+      "noMechanics": "Aún no hay mecánicos registrados.",
+      "noAdmin": "Aún no hay personal de administración registrado."
+    },
     "payment": {
       "type": "Tipo de pago",
       "mechanic": "Mecánico (comisión)",
@@ -403,7 +409,11 @@
     "note": "Nota",
     "notePlaceholder": "Nota opcional...",
     "add": "Agregar",
-    "confirmDelete": "¿Eliminar este registro?"
+    "confirmDelete": "¿Eliminar este registro?",
+    "notAllowedTitle": "Sin permisos",
+    "notAllowedMsg": "Solo super admin y dueño pueden gestionar la nómina de administración.",
+    "downloadPdf": "Descargar PDF",
+    "generatingPdf": "Generando..."
   },
   "changePassword": {
     "tempDetectedTitle": "Contraseña temporal detectada",

@@ -57,12 +57,17 @@ export default function EditarOrdenPage({ params }: { params: Promise<{ id: stri
       setAllowed(role === 'super_user' || role === 'super_admin' || role === 'owner');
     })();
 
-    // Load employees
+    // Load mechanics only for the assignment dropdown
     (supabase as any)
       .from('employees')
-      .select('id, full_name')
+      .select('id, full_name, role, payment_type')
       .order('full_name')
-      .then(({ data }: any) => setEmployees(data ?? []));
+      .then(({ data }: any) => {
+        const mechanics = (data ?? []).filter((e: any) =>
+          e.role === 'mechanic' || e.payment_type === 'mechanic_commission'
+        );
+        setEmployees(mechanics.map((e: any) => ({ id: e.id, full_name: e.full_name })));
+      });
 
     // Load report
     (async () => {

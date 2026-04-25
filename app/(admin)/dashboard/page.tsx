@@ -19,25 +19,37 @@ export default async function DashboardPage() {
   const supabase = getSupabaseServerClient();
   const { start, end } = getWeekRange();
 
-  // Stats generales
-  const [ordersRes, employeesRes, earnedRes] = await Promise.all([
-    supabase.from('work_orders').select('id, status, created_at', { count: 'exact' }),
-    supabase.from('employees').select('id', { count: 'exact' }),
-    supabase
+  // Pulled from the new schema:
+  //  - work_reports for total reports count + recent activity
+  //  - employees filtered by role='mechanic' for active mechanics
+  //  - earned_entries for weekly earned (mechanic-only)
+  const [reportsRes, mechanicsRes, earnedRes] = await Promise.all([
+    (supabase as any)
+      .from('work_reports')
+      .select('id, work_date, company, truck_number, created_at, created_by_name', { count: 'exact' })
+      .order('created_at', { ascending: false }),
+    (supabase as any).from('employees').select('id', { count: 'exact' }).eq('role', 'mechanic'),
+    (supabase as any)
       .from('earned_entries')
-      .select('amount, work_date')
+      .select('amount, work_date, entry_type')
       .gte('work_date', start)
       .lte('work_date', end),
   ]);
 
-  const totalOrders = ordersRes.count ?? 0;
-  const totalEmployees = employeesRes.count ?? 0;
-  const weeklyEarned = (earnedRes.data ?? []).reduce((s, r) => s + Number(r.amount), 0);
+  const totalOrders = reportsRes.count ?? 0;
+  const totalEmployees = mechanicsRes.count ?? 0;
+  const weeklyEarned = ((earnedRes.data ?? []) as any[])
+    .filter(r => !r.entry_type || r.entry_type === 'mechanic')
+    .reduce((s: number, r: any) => s + Number(r.amount), 0);
 
-  const recentOrders = (ordersRes.data ?? [])
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  const recentOrders = ((reportsRes.data ?? []) as any[])
     .slice(0, 5)
-    .map(o => ({ id: o.id as string, status: o.status as string, created_at: o.created_at as string }));
+    .map((r: any) => ({
+      id: r.id as string,
+      // Repurpose 'status' to carry the company name for the recent activity row.
+      status: (r.company ?? r.truck_number ?? '—') as string,
+      created_at: r.created_at as string,
+    }));
 
   return (
     <DashboardContent

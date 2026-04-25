@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import Image from 'next/image';
@@ -89,11 +90,41 @@ const NAV_ITEMS = [
   },
 ];
 
+// Items only visible to owner / super-admin / super-user
+const PRIVILEGED_ONLY_HREFS = new Set<string>(['/nomina-admin']);
+
 export default function AdminSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
   const { t, lang, setLang } = useLanguage();
+  const [role, setRole] = useState<string>('');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const j = await res.json();
+          if (j?.authenticated && j.user?.role) {
+            setRole(String(j.user.role).toLowerCase());
+            return;
+          }
+        }
+      } catch {}
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data } = await (supabase as any)
+            .from('profiles').select('role').eq('id', user.id).single();
+          if ((data as any)?.role) setRole(String((data as any).role).toLowerCase());
+        }
+      } catch {}
+    })();
+  }, []);
+
+  const isPrivileged = role === 'super_user' || role === 'super_admin' || role === 'owner';
+  const visibleNavItems = NAV_ITEMS.filter(it => !PRIVILEGED_ONLY_HREFS.has(it.href) || isPrivileged);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -122,7 +153,7 @@ export default function AdminSidebar() {
 
       {/* Navegación */}
       <nav className="flex-1 px-3 py-4 space-y-1">
-        {NAV_ITEMS.map((item) => {
+        {visibleNavItems.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
           return (
             <Link

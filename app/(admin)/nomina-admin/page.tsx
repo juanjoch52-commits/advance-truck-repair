@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface AdminEmployee {
   id: string;
@@ -50,6 +52,32 @@ export default function NominaAdminPage() {
   const [admins, setAdmins] = useState<AdminEmployee[]>([]);
   const [entries, setEntries] = useState<AdminEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [allowed, setAllowed] = useState<boolean | null>(null);
+
+  // Restrict access: only owner + super admin can manage admin payroll.
+  useEffect(() => {
+    (async () => {
+      let role = '';
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const j = await res.json();
+          role = (j?.user?.role ?? '').toLowerCase();
+        }
+      } catch {}
+      if (!role) {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data } = await (supabase as any)
+              .from('profiles').select('role').eq('id', user.id).single();
+            role = ((data as any)?.role ?? '').toLowerCase();
+          }
+        } catch {}
+      }
+      setAllowed(role === 'super_user' || role === 'super_admin' || role === 'owner');
+    })();
+  }, []);
 
   // Form state per-employee (keyed by employee id)
   const [formByEmp, setFormByEmp] = useState<Record<string, { amount: string; hours: string; description: string; saving: boolean }>>({});
@@ -147,6 +175,152 @@ export default function NominaAdminPage() {
 
   const grandTotal = entries.reduce((s, e) => s + Number(e.amount), 0);
 
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+
+  function generatePdf() {
+    setGeneratingPdf(true);
+    try {
+      // Same ink-friendly style as the rest of the system: black text on white,
+      // thin grey rules, no fills, no bold.
+      const INK = 30;
+      const SOFT = 110;
+      const LINE = 170;
+
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
+      const pageW = doc.internal.pageSize.getWidth();
+      const margin = 15;
+
+      // Header
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.setTextColor(INK, INK, INK);
+      doc.text('ADVANCE TRUCK REPAIR', margin, 14);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(SOFT, SOFT, SOFT);
+      doc.text(t('adminPayroll.title'), margin, 20);
+
+      const issued = new Date().toLocaleDateString(locale, { day: '2-digit', month: 'long', year: 'numeric' });
+      doc.text(`${t('pdf.header.issued')}: ${issued}`, pageW - margin, 20, { align: 'right' });
+
+      doc.setDrawColor(LINE, LINE, LINE);
+      doc.setLineWidth(0.2);
+      doc.line(margin, 24, pageW - margin, 24);
+
+      // Period + total
+      doc.setFontSize(11);
+      doc.setTextColor(INK, INK, INK);
+      doc.text(t('weeklyCut.cutWeek') + ': ' + formatFecha(weekStart) + ' — ' + formatFecha(weekEnd), margin, 32);
+
+      doc.setFontSize(9);
+      doc.setTextColor(SOFT, SOFT, SOFT);
+      doc.text(t('adminPayroll.totalToPay') + ':', margin, 40);
+      doc.setTextColor(INK, INK, INK);
+      doc.text(fmtMoney(grandTotal), margin + 70, 40);
+
+      let y = 48;
+
+      // Per-employee section
+      for (const emp of admins) {
+        const empEntries = entriesForEmp(emp.id);
+        if (empEntries.length === 0) continue;
+
+        if (y > 230) { doc.addPage(); y = 20; }
+
+        // Employee heading
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.setTextColor(INK, INK, INK);
+        doc.text(emp.full_name.toUpperCase(), margin, y + 4);
+
+        // Payment-type meta
+        doc.setFontSize(8);
+        doc.setTextColor(SOFT, SOFT, SOFT);
+        let meta = '';
+        if (emp.payment_type === 'fixed_weekly') meta = `${t('staff.payment.fixedWeekly')} · ${fmtMoney(Number(emp.weekly_salary ?? 0))}/sem`;
+        else if (emp.payment_type === 'hourly') meta = `${t('staff.payment.hourly')} · ${fmtMoney(Number(emp.hourly_rate ?? 0))}/h`;
+        else meta = t('staff.payment.manual');
+        doc.text(meta, margin, y + 9);
+
+        // Total
+        doc.setFontSize(10);
+        doc.setTextColor(INK, INK, INK);
+        doc.text(fmtMoney(totalForEmp(emp.id)), pageW - margin, y + 4, { align: 'right' });
+
+        doc.setDrawColor(LINE, LINE, LINE);
+        doc.setLineWidth(0.2);
+        doc.line(margin, y + 11, pageW - margin, y + 11);
+        y += 14;
+
+        autoTable(doc, {
+          startY: y,
+          margin: { left: margin, right: margin },
+          theme: 'plain',
+          head: [[t('common.date'), t('adminPayroll.hours'), t('adminPayroll.note'), t('adminPayroll.amount')]],
+          body: empEntries.map((en) => [
+            new Date(en.work_date + 'T12:00:00').toLocaleDateString(locale),
+            en.hours_worked != null ? String(en.hours_worked) : '—',
+            en.description ?? '—',
+            fmtMoney(Number(en.amount)),
+          ]),
+          styles: {
+            fontSize: 9,
+            textColor: [INK, INK, INK] as [number, number, number],
+            cellPadding: { top: 2.2, right: 3, bottom: 2.2, left: 3 },
+            lineColor: [LINE, LINE, LINE] as [number, number, number],
+            lineWidth: 0.15,
+          },
+          headStyles: {
+            fillColor: [255, 255, 255] as [number, number, number],
+            textColor: [INK, INK, INK] as [number, number, number],
+            fontStyle: 'normal' as const,
+            fontSize: 9,
+          },
+          columnStyles: {
+            1: { halign: 'center', cellWidth: 20 },
+            3: { halign: 'right', cellWidth: 35 },
+          },
+          didDrawCell: (hookData) => {
+            if (hookData.section === 'head') {
+              const { x, y: cy, width, height } = hookData.cell;
+              doc.setDrawColor(LINE, LINE, LINE);
+              doc.setLineWidth(0.2);
+              doc.line(x, cy + height, x + width, cy + height);
+            }
+          },
+        });
+
+        y = ((doc as any).lastAutoTable?.finalY ?? y + 16) + 10;
+      }
+
+      // Footer with grand total
+      if (y > 250) { doc.addPage(); y = 20; }
+      doc.setDrawColor(LINE, LINE, LINE);
+      doc.setLineWidth(0.3);
+      doc.line(margin, y, pageW - margin, y);
+      y += 7;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(11);
+      doc.setTextColor(INK, INK, INK);
+      doc.text(t('adminPayroll.totalToPay'), margin, y);
+      doc.text(fmtMoney(grandTotal), pageW - margin, y, { align: 'right' });
+
+      // Page numbers
+      const pages = doc.getNumberOfPages();
+      for (let i = 1; i <= pages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(SOFT, SOFT, SOFT);
+        doc.text(`${i} / ${pages}`, pageW / 2, doc.internal.pageSize.getHeight() - 8, { align: 'center' });
+      }
+
+      doc.save(`nomina_admin_${weekStart}_${weekEnd}.pdf`);
+    } finally {
+      setGeneratingPdf(false);
+    }
+  }
+
   function shiftWeek(weeks: number) {
     const r = getWeekRange(0);
     const baseStart = new Date(weekStart + 'T12:00:00');
@@ -161,6 +335,19 @@ export default function NominaAdminPage() {
 
   const formatFecha = (d: string) =>
     new Date(d + 'T12:00:00').toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
+
+  if (allowed === null) {
+    return <div className="text-center py-12 text-slate-500">{t('common.loading')}</div>;
+  }
+
+  if (!allowed) {
+    return (
+      <div className="max-w-2xl mx-auto bg-red-500/10 border border-red-500/30 rounded-xl p-8 text-center">
+        <h2 className="display-font text-red-400 font-bold text-xl mb-2">{t('adminPayroll.notAllowedTitle')}</h2>
+        <p className="text-slate-400 text-sm">{t('adminPayroll.notAllowedMsg')}</p>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -204,9 +391,22 @@ export default function NominaAdminPage() {
       </div>
 
       {/* Summary */}
-      <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-5 mb-6">
-        <p className="text-slate-400 text-sm mb-1">{t('adminPayroll.totalToPay')}</p>
-        <p className="display-font text-2xl font-bold text-amber-400">{fmtMoney(grandTotal)}</p>
+      <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-5 mb-4 flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <p className="text-slate-400 text-sm mb-1">{t('adminPayroll.totalToPay')}</p>
+          <p className="display-font text-2xl font-bold text-amber-400">{fmtMoney(grandTotal)}</p>
+        </div>
+        <button
+          onClick={generatePdf}
+          disabled={generatingPdf || entries.length === 0}
+          className="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 text-slate-200 text-sm px-4 py-2.5 rounded-lg transition flex items-center gap-2"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          {generatingPdf ? t('adminPayroll.generatingPdf') : t('adminPayroll.downloadPdf')}
+        </button>
       </div>
 
       {loading ? (

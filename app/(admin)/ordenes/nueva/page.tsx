@@ -36,11 +36,19 @@ export default function NuevaOrdenPage() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
 
   useEffect(() => {
+    // Only show mechanics in the dropdown.
+    // We accept rows where role='mechanic' OR payment_type='mechanic_commission'
+    // (covers legacy rows where payment_type was never set).
     (supabase as any)
       .from('employees')
-      .select('id, full_name')
+      .select('id, full_name, role, payment_type')
       .order('full_name')
-      .then(({ data }: any) => setEmployees(data ?? []));
+      .then(({ data }: any) => {
+        const mechanics = (data ?? []).filter((e: any) =>
+          e.role === 'mechanic' || e.payment_type === 'mechanic_commission'
+        );
+        setEmployees(mechanics.map((e: any) => ({ id: e.id, full_name: e.full_name })));
+      });
 
     // Detect creator from PIN session OR Supabase auth + profiles
     (async () => {

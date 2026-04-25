@@ -208,61 +208,95 @@ export default function PersonalPage() {
         <div className="bg-slate-900/60 border border-white/5 rounded-xl p-12 text-center">
           <p className="text-slate-500">{t('staff.empty')}</p>
         </div>
-      ) : (
-        <div className="bg-slate-900/60 border border-white/5 rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-white/5">
-                <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('common.name')}</th>
-                <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('staff.payment.type')}</th>
-                <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('staff.table.phone')}</th>
-                <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('staff.table.hireDateCol')}</th>
-                <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('staff.notes')}</th>
-                <th className="px-5 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {employees.map(emp => (
-                <tr key={emp.id} className="border-b border-white/5 hover:bg-white/2 transition-colors">
-                  <td className="px-5 py-3.5 text-slate-200 font-medium">{emp.full_name}</td>
-                  <td className="px-5 py-3.5">
-                    <div className="text-xs">
-                      <p className="text-slate-300">{paymentTypeLabel(emp.payment_type)}</p>
-                      {emp.payment_type === 'fixed_weekly' && emp.weekly_salary != null && (
-                        <p className="text-amber-400 mt-0.5">${Number(emp.weekly_salary).toLocaleString(locale, { minimumFractionDigits: 2 })}/sem</p>
-                      )}
-                      {emp.payment_type === 'hourly' && emp.hourly_rate != null && (
-                        <p className="text-amber-400 mt-0.5">${Number(emp.hourly_rate).toLocaleString(locale, { minimumFractionDigits: 2 })}/h</p>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-5 py-3.5 text-slate-400">{emp.phone ?? '—'}</td>
-                  <td className="px-5 py-3.5 text-slate-500">
-                    {new Date(emp.hire_date + 'T12:00:00').toLocaleDateString(locale)}
-                  </td>
-                  <td className="px-5 py-3.5 text-slate-500 italic">{emp.notes ?? '—'}</td>
-                  <td className="px-5 py-3.5 text-right">
-                    <button
-                      onClick={() => handleDelete(emp.id, emp.full_name)}
-                      disabled={deletingId === emp.id}
-                      className="text-slate-600 hover:text-red-400 transition p-1.5 rounded hover:bg-red-500/10"
-                      title={t('common.delete')}
-                    >
-                      {deletingId === emp.id ? (
-                        <span className="text-xs text-slate-500">...</span>
-                      ) : (
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      )}
-                    </button>
-                  </td>
+      ) : (() => {
+        const isMechanic = (e: Employee) => e.payment_type === 'mechanic_commission' || (!e.payment_type && true);
+        const mechanics = employees.filter(isMechanic);
+        const adminStaff = employees.filter(e => !isMechanic(e));
+
+        const renderTable = (rows: Employee[]) => (
+          <div className="bg-slate-900/60 border border-white/5 rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/5">
+                  <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('common.name')}</th>
+                  <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('staff.payment.type')}</th>
+                  <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('staff.table.phone')}</th>
+                  <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('staff.table.hireDateCol')}</th>
+                  <th className="text-left px-5 py-3 text-slate-500 font-medium">{t('staff.notes')}</th>
+                  <th className="px-5 py-3"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {rows.map(emp => (
+                  <tr key={emp.id} className="border-b border-white/5 hover:bg-white/2 transition-colors">
+                    <td className="px-5 py-3.5 text-slate-200 font-medium">{emp.full_name}</td>
+                    <td className="px-5 py-3.5">
+                      <div className="text-xs">
+                        <p className="text-slate-300">{paymentTypeLabel(emp.payment_type)}</p>
+                        {emp.payment_type === 'fixed_weekly' && emp.weekly_salary != null && (
+                          <p className="text-amber-400 mt-0.5">${Number(emp.weekly_salary).toLocaleString(locale, { minimumFractionDigits: 2 })}/sem</p>
+                        )}
+                        {emp.payment_type === 'hourly' && emp.hourly_rate != null && (
+                          <p className="text-amber-400 mt-0.5">${Number(emp.hourly_rate).toLocaleString(locale, { minimumFractionDigits: 2 })}/h</p>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-5 py-3.5 text-slate-400">{emp.phone ?? '—'}</td>
+                    <td className="px-5 py-3.5 text-slate-500">
+                      {new Date(emp.hire_date + 'T12:00:00').toLocaleDateString(locale)}
+                    </td>
+                    <td className="px-5 py-3.5 text-slate-500 italic">{emp.notes ?? '—'}</td>
+                    <td className="px-5 py-3.5 text-right">
+                      <button
+                        onClick={() => handleDelete(emp.id, emp.full_name)}
+                        disabled={deletingId === emp.id}
+                        className="text-slate-600 hover:text-red-400 transition p-1.5 rounded hover:bg-red-500/10"
+                        title={t('common.delete')}
+                      >
+                        {deletingId === emp.id ? (
+                          <span className="text-xs text-slate-500">...</span>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        )}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+
+        return (
+          <div className="space-y-8">
+            <section>
+              <div className="flex items-baseline justify-between mb-3">
+                <h2 className="display-font text-amber-400 font-semibold tracking-wider text-sm uppercase">
+                  {t('staff.section.mechanics')}
+                </h2>
+                <span className="text-slate-500 text-xs">{mechanics.length}</span>
+              </div>
+              {mechanics.length === 0
+                ? <div className="bg-slate-900/40 border border-white/5 rounded-xl p-6 text-center text-slate-500 text-sm">{t('staff.section.noMechanics')}</div>
+                : renderTable(mechanics)}
+            </section>
+
+            <section>
+              <div className="flex items-baseline justify-between mb-3">
+                <h2 className="display-font text-sky-400 font-semibold tracking-wider text-sm uppercase">
+                  {t('staff.section.admin')}
+                </h2>
+                <span className="text-slate-500 text-xs">{adminStaff.length}</span>
+              </div>
+              {adminStaff.length === 0
+                ? <div className="bg-slate-900/40 border border-white/5 rounded-xl p-6 text-center text-slate-500 text-sm">{t('staff.section.noAdmin')}</div>
+                : renderTable(adminStaff)}
+            </section>
+          </div>
+        );
+      })()}
     </div>
   );
 }
