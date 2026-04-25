@@ -384,6 +384,13 @@
       "noMechanics": "No mechanics registered yet.",
       "noAdmin": "No administration staff registered yet."
     },
+    "profile": {
+      "label": "Profile",
+      "mechanic": "Mechanic",
+      "admin": "Administration",
+      "mechanicDesc": "Earns commissions from work reports",
+      "adminDesc": "Office / administration staff (manual weekly pay)"
+    },
     "payment": {
       "type": "Payment type",
       "mechanic": "Mechanic (commission)",

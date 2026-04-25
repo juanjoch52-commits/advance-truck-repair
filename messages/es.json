@@ -384,6 +384,13 @@
       "noMechanics": "Aún no hay mecánicos registrados.",
       "noAdmin": "Aún no hay personal de administración registrado."
     },
+    "profile": {
+      "label": "Perfil",
+      "mechanic": "Mecánico",
+      "admin": "Administración",
+      "mechanicDesc": "Cobra comisiones de los reportes de trabajo",
+      "adminDesc": "Personal de oficina / administración (pago manual semanal)"
+    },
     "payment": {
       "type": "Tipo de pago",
       "mechanic": "Mecánico (comisión)",
