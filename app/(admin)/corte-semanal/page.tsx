@@ -5,15 +5,14 @@ import CorteContent from './CorteContent';
 
 function getWeekRange(offsetWeeks = 0) {
   const now = new Date();
-  const day = now.getDay();
-  const diffToMon = day === 0 ? -6 : 1 - day;
-  const monday = new Date(now);
-  monday.setDate(now.getDate() + diffToMon + offsetWeeks * 7);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
+  const day = now.getDay(); // 0=Dom, 6=Sáb
+  const sunday = new Date(now);
+  sunday.setDate(now.getDate() - day + offsetWeeks * 7); // retroceder al domingo
+  const saturday = new Date(sunday);
+  saturday.setDate(sunday.getDate() + 6);
   return {
-    start: monday.toISOString().split('T')[0],
-    end: sunday.toISOString().split('T')[0],
+    start: sunday.toISOString().split('T')[0],
+    end: saturday.toISOString().split('T')[0],
   };
 }
 

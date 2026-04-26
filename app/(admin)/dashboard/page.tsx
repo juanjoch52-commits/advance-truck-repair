@@ -5,15 +5,14 @@ import DashboardContent from './DashboardContent';
 
 function getWeekRange() {
   const now = new Date();
-  const day = now.getDay(); // 0=Dom, 1=Lun...
-  const diffToMon = (day === 0 ? -6 : 1 - day);
-  const monday = new Date(now);
-  monday.setDate(now.getDate() + diffToMon);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
+  const day = now.getDay(); // 0=Dom, 6=Sáb
+  const sunday = new Date(now);
+  sunday.setDate(now.getDate() - day); // retroceder al domingo
+  const saturday = new Date(sunday);
+  saturday.setDate(sunday.getDate() + 6);
   return {
-    start: monday.toISOString().split('T')[0],
-    end: sunday.toISOString().split('T')[0],
+    start: sunday.toISOString().split('T')[0],
+    end: saturday.toISOString().split('T')[0],
   };
 }
 
@@ -78,6 +77,7 @@ export default async function DashboardPage() {
       truckNumber: (r.truck_number ?? '—') as string,
       company: (r.company ?? '—') as string,
       workDate: r.work_date as string,
+      createdAt: (r.created_at ?? '') as string,
     }));
 
   return (

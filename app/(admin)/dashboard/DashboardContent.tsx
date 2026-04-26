@@ -9,6 +9,7 @@ interface RecentOrder {
   truckNumber: string;
   company: string;
   workDate: string;
+  createdAt: string;
 }
 
 interface Props {
@@ -233,9 +234,16 @@ export default function DashboardContent({
                   </span>
                 )}
 
-                {/* Fecha de trabajo */}
-                <span className="text-slate-500 text-xs shrink-0">
-                  {fmtDate(o.workDate)}
+                {/* Fecha de creación + hora */}
+                <span className="text-slate-500 text-xs shrink-0 text-right leading-tight">
+                  {o.createdAt ? (
+                    <>
+                      <span className="block">{fmtDate(o.createdAt.split('T')[0])}</span>
+                      <span className="block text-slate-600">
+                        {new Date(o.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                      </span>
+                    </>
+                  ) : fmtDate(o.workDate)}
                 </span>
               </a>
             ))}

@@ -25,28 +25,28 @@ interface Debt {
   employees: { full_name: string } | null;
 }
 
-/** Genera los próximos N domingos como opciones de semana */
+/** Genera los próximos N sábados (fin de semana Dom–Sáb) como opciones */
 function getUpcomingSundays(n: number): { value: string; label: string }[] {
   const options: { value: string; label: string }[] = [];
   const now = new Date();
-  const day = now.getDay();
-  // Próximo domingo (o hoy si es domingo)
-  const daysUntilSun = day === 0 ? 0 : 7 - day;
-  const firstSun = new Date(now);
-  firstSun.setDate(now.getDate() + daysUntilSun);
+  const day = now.getDay(); // 0=Dom, 6=Sáb
+  // Próximo sábado (o hoy si es sábado)
+  const daysUntilSat = day === 6 ? 0 : 6 - day;
+  const firstSat = new Date(now);
+  firstSat.setDate(now.getDate() + daysUntilSat);
   for (let i = 0; i < n; i++) {
-    const sun = new Date(firstSun);
-    sun.setDate(firstSun.getDate() + i * 7);
-    const value = sun.toISOString().split('T')[0];
-    // Lunes de esa semana
-    const mon = new Date(sun);
-    mon.setDate(sun.getDate() - 6);
+    const sat = new Date(firstSat);
+    sat.setDate(firstSat.getDate() + i * 7);
+    const value = sat.toISOString().split('T')[0];
+    // Domingo de esa semana (6 días antes del sábado)
+    const sun = new Date(sat);
+    sun.setDate(sat.getDate() - 6);
     const fmt = (d: Date) => {
       const mm = String(d.getMonth() + 1).padStart(2, '0');
       const dd = String(d.getDate()).padStart(2, '0');
       return `${mm}/${dd}`;
     };
-    const label = `${fmt(mon)} – ${fmt(sun)}/${sun.getFullYear()}`;
+    const label = `${fmt(sun)} – ${fmt(sat)}/${sat.getFullYear()}`;
     options.push({ value, label });
   }
   return options;
@@ -59,22 +59,22 @@ interface DebtPayment {
 }
 
 function getCurrentWeekEnd() {
-  // Domingo de la semana actual
+  // Sábado de la semana actual (semanas Dom–Sáb)
   const now = new Date();
-  const day = now.getDay();
-  const diff = 7 - day === 7 ? 0 : 7 - day;
-  const sun = new Date(now);
-  sun.setDate(now.getDate() + (day === 0 ? 0 : diff));
-  return sun.toISOString().split('T')[0];
+  const day = now.getDay(); // 0=Dom, 6=Sáb
+  const daysUntilSat = day === 6 ? 0 : 6 - day;
+  const sat = new Date(now);
+  sat.setDate(now.getDate() + daysUntilSat);
+  return sat.toISOString().split('T')[0];
 }
 
 function getCurrentWeekStart() {
+  // Domingo de la semana actual (semanas Dom–Sáb)
   const now = new Date();
-  const day = now.getDay();
-  const diffToMon = day === 0 ? -6 : 1 - day;
-  const mon = new Date(now);
-  mon.setDate(now.getDate() + diffToMon);
-  return mon.toISOString().split('T')[0];
+  const day = now.getDay(); // 0=Dom
+  const sun = new Date(now);
+  sun.setDate(now.getDate() - day);
+  return sun.toISOString().split('T')[0];
 }
 
 export default function DeduccionesPage() {
@@ -381,19 +381,19 @@ export default function DeduccionesPage() {
             const wksLeft = weeksRemaining(debt);
             const empName = (debt.employees as any)?.full_name ?? '—';
 
-            // Formatear la semana de inicio legible
+            // Formatear la semana de inicio legible (Dom–Sáb)
             const startLabel = (() => {
               if (!debt.start_week_ending) return null;
               const [y, mo, d] = debt.start_week_ending.split('-').map(Number);
-              const sun = new Date(y, mo - 1, d);
-              const mon = new Date(sun);
-              mon.setDate(sun.getDate() - 6);
+              const sat = new Date(y, mo - 1, d); // week_ending = sábado
+              const sun = new Date(sat);
+              sun.setDate(sat.getDate() - 6); // domingo de esa semana
               const fmt = (dt: Date) => {
                 const mm = String(dt.getMonth() + 1).padStart(2, '0');
                 const dd = String(dt.getDate()).padStart(2, '0');
                 return `${mm}/${dd}`;
               };
-              return `${fmt(mon)} – ${fmt(sun)}/${sun.getFullYear()}`;
+              return `${fmt(sun)} – ${fmt(sat)}/${sat.getFullYear()}`;
             })();
 
             return (
