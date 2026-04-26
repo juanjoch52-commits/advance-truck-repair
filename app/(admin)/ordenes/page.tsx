@@ -43,6 +43,8 @@ export default function OrdenesPage() {
   const [deleteTarget, setDeleteTarget] = useState<WorkReport | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [detailReportId, setDetailReportId] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'date' | 'invoice'>('date');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   const fmt = (n: number) =>
     '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -214,6 +216,27 @@ export default function OrdenesPage() {
     );
   });
 
+  function toggleSort(col: 'date' | 'invoice') {
+    if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortBy(col); setSortDir(col === 'date' ? 'desc' : 'asc'); }
+  }
+
+  const sorted = [...filtered].sort((a, b) => {
+    let cmp = 0;
+    if (sortBy === 'date') {
+      cmp = a.work_date < b.work_date ? -1 : a.work_date > b.work_date ? 1 : 0;
+    } else {
+      const na = Number(a.external_order_number ?? '') || 0;
+      const nb = Number(b.external_order_number ?? '') || 0;
+      // Nulls always last regardless of direction
+      if (!a.external_order_number && !b.external_order_number) cmp = 0;
+      else if (!a.external_order_number) cmp = 1;
+      else if (!b.external_order_number) cmp = -1;
+      else cmp = na - nb;
+    }
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+
   const totalCharged = filtered.reduce((s, r) => s + r.total_charged, 0);
   const totalPayout  = filtered.reduce((s, r) => s + r.total_payout, 0);
   const totalProfit  = totalCharged - totalPayout;
@@ -343,10 +366,22 @@ export default function OrdenesPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/5">
-                <th className="text-left px-4 py-3 text-slate-500 font-medium">{t('workReports.table.date')}</th>
+                <th className="text-left px-4 py-3 font-medium">
+                  <button onClick={() => toggleSort('date')}
+                    className={`flex items-center gap-1 hover:text-amber-400 transition-colors ${sortBy === 'date' ? 'text-amber-400' : 'text-slate-500'}`}>
+                    {t('workReports.table.date')}
+                    <span className="text-xs">{sortBy === 'date' ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}</span>
+                  </button>
+                </th>
                 <th className="text-left px-4 py-3 text-slate-500 font-medium">{t('workReports.table.truck')}</th>
                 <th className="text-left px-4 py-3 text-slate-500 font-medium">{t('workReports.table.company')}</th>
-                <th className="text-left px-4 py-3 text-slate-500 font-medium">{t('workReports.table.orderNumber')}</th>
+                <th className="text-left px-4 py-3 font-medium">
+                  <button onClick={() => toggleSort('invoice')}
+                    className={`flex items-center gap-1 hover:text-amber-400 transition-colors ${sortBy === 'invoice' ? 'text-amber-400' : 'text-slate-500'}`}>
+                    {t('workReports.table.orderNumber')}
+                    <span className="text-xs">{sortBy === 'invoice' ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}</span>
+                  </button>
+                </th>
                 <th className="text-center px-4 py-3 text-slate-500 font-medium">{t('workReports.table.tasks')}</th>
                 {canViewDetail && (
                   <th className="text-left px-4 py-3 text-slate-500 font-medium">{t('reportDetail.createdBy')}</th>
@@ -360,7 +395,7 @@ export default function OrdenesPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => (
+              {sorted.map((r) => (
                 <tr key={r.id} className="border-b border-white/5 hover:bg-white/2 transition-colors">
                   <td className="px-4 py-3.5 text-slate-400">
                     {fmtDate(r.work_date)}
