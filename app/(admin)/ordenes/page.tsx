@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { fmtDate } from '@/lib/fmt';
 import ReportDetailModal from '@/components/reports/ReportDetailModal';
 
 interface Employee { id: string; full_name: string; }
@@ -362,7 +363,7 @@ export default function OrdenesPage() {
               {filtered.map((r) => (
                 <tr key={r.id} className="border-b border-white/5 hover:bg-white/2 transition-colors">
                   <td className="px-4 py-3.5 text-slate-400">
-                    {new Date(r.work_date + 'T12:00:00').toLocaleDateString('es-MX')}
+                    {fmtDate(r.work_date)}
                   </td>
                   <td className="px-4 py-3.5 text-slate-200 font-medium">{r.truck_number}</td>
                   <td className="px-4 py-3.5 text-slate-400">{r.company}</td>

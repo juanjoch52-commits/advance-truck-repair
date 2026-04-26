@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { fmtDate } from '@/lib/fmt';
 
 interface Employee {
   id: string;
@@ -452,7 +453,7 @@ export default function PersonalPage() {
               </td>
               <td className="px-5 py-3.5 text-slate-400">{emp.phone ?? '—'}</td>
               <td className="px-5 py-3.5 text-slate-500 text-xs">
-                {new Date(emp.hire_date + 'T12:00:00').toLocaleDateString(locale)}
+                {fmtDate(emp.hire_date)}
               </td>
               <td className="px-5 py-3.5 text-slate-500 italic text-xs max-w-xs truncate">{emp.notes ?? '—'}</td>
               <td className="px-5 py-3.5">

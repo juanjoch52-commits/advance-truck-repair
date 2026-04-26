@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { fmtDate } from '@/lib/fmt';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -250,8 +251,7 @@ export default function NominaAdminPage() {
     setWeekEnd(baseEnd.toISOString().split('T')[0]);
   }
 
-  const formatFecha = (d: string) =>
-    new Date(d + 'T12:00:00').toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
+  const formatFecha = (d: string) => fmtDate(d);
 
   const [generatingPdf, setGeneratingPdf] = useState(false);
 
@@ -577,7 +577,7 @@ export default function NominaAdminPage() {
                     {empEntries.map(en => (
                       <div key={en.id} className="flex items-center justify-between text-sm py-1.5">
                         <span className="text-slate-400 text-xs">
-                          {new Date(en.work_date + 'T12:00:00').toLocaleDateString(locale)}
+                          {fmtDate(en.work_date)}
                           {en.hours_worked != null ? ` · ${en.hours_worked}h` : ''}
                           {en.description ? ` · ${en.description}` : ''}
                         </span>
@@ -598,8 +598,8 @@ export default function NominaAdminPage() {
 
                 {/* Formulario para agregar entrada */}
                 <div className="px-5 py-3 flex items-end gap-3 flex-wrap">
-                  {/* Fijo: muestra monto y un solo botón */}
-                  {isFixed && (
+                  {/* Fijo: solo muestra el formulario si aún no tiene pago esta semana */}
+                  {isFixed && !hasEntryThisWeek && (
                     <>
                       <div className="flex-1 min-w-32">
                         <label className="block text-slate-500 text-xs mb-1">Monto</label>
@@ -614,12 +614,8 @@ export default function NominaAdminPage() {
                           className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-slate-100 text-sm focus:outline-none focus:border-amber-400/50" />
                       </div>
                       <button onClick={() => handleAdd(emp)} disabled={f.saving}
-                        className={`font-bold py-2 px-4 rounded-lg text-sm transition display-font ${
-                          hasEntryThisWeek
-                            ? 'bg-slate-700 hover:bg-slate-600 text-slate-300'
-                            : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
-                        } disabled:opacity-50`}>
-                        {f.saving ? t('common.saving') : hasEntryThisWeek ? '+ Agregar otro' : t('adminPayroll.add')}
+                        className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold py-2 px-4 rounded-lg text-sm transition display-font">
+                        {f.saving ? t('common.saving') : t('adminPayroll.add')}
                       </button>
                     </>
                   )}

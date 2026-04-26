@@ -1,6 +1,7 @@
 'use client';
 
 import { useLanguage } from '@/contexts/LanguageContext';
+import { fmtDate } from '@/lib/fmt';
 
 interface RecentOrder {
   id: string;
@@ -83,7 +84,7 @@ export default function DashboardContent({
           {t('dashboard.title')}
         </h1>
         <p className="text-slate-400 mt-1">
-          {t('dashboard.weekRange')}: {new Date(start + 'T12:00:00').toLocaleDateString(locale, { day: '2-digit', month: 'short' })} — {new Date(end + 'T12:00:00').toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' })}
+          {t('dashboard.weekRange')}: {fmtDate(start)} — {fmtDate(end)}
         </p>
       </div>
 
@@ -234,7 +235,7 @@ export default function DashboardContent({
 
                 {/* Fecha de trabajo */}
                 <span className="text-slate-500 text-xs shrink-0">
-                  {new Date(o.workDate + 'T12:00:00').toLocaleDateString(locale, { day: '2-digit', month: 'short' })}
+                  {fmtDate(o.workDate)}
                 </span>
               </a>
             ))}

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { fmtDate } from '@/lib/fmt';
 
 interface Employee {
   id: string;
@@ -40,9 +41,12 @@ function getUpcomingSundays(n: number): { value: string; label: string }[] {
     // Lunes de esa semana
     const mon = new Date(sun);
     mon.setDate(sun.getDate() - 6);
-    const fmtDate = (d: Date) =>
-      d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
-    const label = `${fmtDate(mon)} – ${fmtDate(sun)} ${sun.getFullYear()}`;
+    const fmt = (d: Date) => {
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${mm}/${dd}`;
+    };
+    const label = `${fmt(mon)} – ${fmt(sun)}/${sun.getFullYear()}`;
     options.push({ value, label });
   }
   return options;
@@ -380,11 +384,16 @@ export default function DeduccionesPage() {
             // Formatear la semana de inicio legible
             const startLabel = (() => {
               if (!debt.start_week_ending) return null;
-              const sun = new Date(debt.start_week_ending + 'T12:00:00');
+              const [y, mo, d] = debt.start_week_ending.split('-').map(Number);
+              const sun = new Date(y, mo - 1, d);
               const mon = new Date(sun);
               mon.setDate(sun.getDate() - 6);
-              const fmt = (d: Date) => d.toLocaleDateString(locale, { day: '2-digit', month: 'short' });
-              return `${fmt(mon)} – ${fmt(sun)}`;
+              const fmt = (dt: Date) => {
+                const mm = String(dt.getMonth() + 1).padStart(2, '0');
+                const dd = String(dt.getDate()).padStart(2, '0');
+                return `${mm}/${dd}`;
+              };
+              return `${fmt(mon)} – ${fmt(sun)}/${sun.getFullYear()}`;
             })();
 
             return (

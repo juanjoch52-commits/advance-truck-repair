@@ -1,6 +1,7 @@
 'use client';
 
 import { useLanguage } from '@/contexts/LanguageContext';
+import { fmtDate } from '@/lib/fmt';
 
 interface Entry {
   id: string;
@@ -97,7 +98,7 @@ export default function NominaContent({ desde, hasta, totalGeneral, totalRecords
                   {entries.map((e) => (
                     <tr key={e.id} className="border-b border-white/5 last:border-0">
                       <td className="px-5 py-2.5 text-slate-500">
-                        {new Date(e.work_date + 'T12:00:00').toLocaleDateString(locale)}
+                        {fmtDate(e.work_date)}
                       </td>
                       <td className="px-5 py-2.5 text-slate-300">{e.truck_number ?? '—'}</td>
                       <td className="px-5 py-2.5 text-slate-400">{e.company ?? '—'}</td>

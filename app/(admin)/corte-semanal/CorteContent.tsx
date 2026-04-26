@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { fmtDate } from '@/lib/fmt';
 
 interface Mechanic {
   id: string;
@@ -35,8 +36,7 @@ export default function CorteContent({
   const { t, lang } = useLanguage();
   const locale = lang === 'en' ? 'en-US' : 'es-MX';
 
-  const formatFecha = (d: string) =>
-    new Date(d + 'T12:00:00').toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
+  const formatFecha = (d: string) => fmtDate(d);
 
   const fmtMoney = (n: number) =>
     '$' + n.toLocaleString(locale, { minimumFractionDigits: 2 });

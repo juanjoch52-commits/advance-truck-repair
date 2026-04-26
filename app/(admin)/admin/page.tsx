@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { fmtDate } from '@/lib/fmt';
 
 interface UserProfile {
   id: string;
@@ -306,7 +307,7 @@ export default function AdminPage() {
                       )}
                     </td>
                     <td className="px-5 py-3.5 text-slate-500 text-xs">
-                      {new Date(user.created_at).toLocaleDateString(locale)}
+                      {fmtDate(user.created_at)}
                     </td>
                     <td className="px-5 py-3.5 text-right">
                       {showReset ? (

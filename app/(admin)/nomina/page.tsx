@@ -22,6 +22,7 @@ export default async function NominaPage({
       employees!earned_entries_employee_id_fkey(full_name),
       work_reports!earned_entries_work_report_id_fkey(company, external_order_number)
     `)
+    .eq('entry_type', 'mechanic')
     .gte('work_date', desde)
     .lte('work_date', hasta)
     .order('work_date', { ascending: false });
