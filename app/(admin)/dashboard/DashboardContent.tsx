@@ -20,6 +20,13 @@ interface Props {
   weeklyRevenue: number;
   start: string;
   end: string;
+  prevStart: string;
+  prevEnd: string;
+  nextStart: string;
+  nextEnd: string;
+  currentStart: string;
+  currentEnd: string;
+  isCurrentWeek: boolean;
   recentOrders: RecentOrder[];
 }
 
@@ -31,6 +38,13 @@ export default function DashboardContent({
   weeklyRevenue,
   start,
   end,
+  prevStart,
+  prevEnd,
+  nextStart,
+  nextEnd,
+  currentStart,
+  currentEnd,
+  isCurrentWeek,
   recentOrders,
 }: Props) {
   const { t, lang } = useLanguage();
@@ -84,9 +98,52 @@ export default function DashboardContent({
         <h1 className="display-font text-3xl font-bold text-slate-100 tracking-wide">
           {t('dashboard.title')}
         </h1>
-        <p className="text-slate-400 mt-1">
-          {t('dashboard.weekRange')}: {fmtDate(start)} — {fmtDate(end)}
-        </p>
+
+        {/* Navegación de semana */}
+        <div className="flex items-center gap-3 mt-3 flex-wrap">
+          <a
+            href={`/dashboard?semana_inicio=${prevStart}&semana_fin=${prevEnd}`}
+            className="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 px-3 py-1.5 rounded-lg transition flex items-center gap-1 text-sm"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            {t('weeklyCut.prevWeek')}
+          </a>
+
+          <div className="flex items-center gap-2 bg-slate-900/60 border border-white/5 rounded-xl px-4 py-2">
+            <svg className="w-4 h-4 text-amber-400/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span className="display-font text-amber-400 font-bold tracking-wide text-sm">
+              {fmtDate(start)} — {fmtDate(end)}
+            </span>
+            {isCurrentWeek && (
+              <span className="text-xs bg-amber-500/15 border border-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full">
+                {t('weeklyCut.currentWeek') ?? 'Esta semana'}
+              </span>
+            )}
+          </div>
+
+          <a
+            href={`/dashboard?semana_inicio=${nextStart}&semana_fin=${nextEnd}`}
+            className="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 px-3 py-1.5 rounded-lg transition flex items-center gap-1 text-sm"
+          >
+            {t('weeklyCut.nextWeek')}
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </a>
+
+          {!isCurrentWeek && (
+            <a
+              href="/dashboard"
+              className="text-xs text-sky-400 hover:text-sky-300 border border-sky-500/20 hover:border-sky-400/30 px-3 py-1.5 rounded-lg transition"
+            >
+              ↩ {t('weeklyCut.currentWeek') ?? 'Semana actual'}
+            </a>
+          )}
+        </div>
       </div>
 
       {/* Stats */}

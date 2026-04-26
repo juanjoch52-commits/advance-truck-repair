@@ -282,6 +282,7 @@
     "subtitle": "Resumen de pagos para emisión de cheques",
     "prevWeek": "Semana anterior",
     "nextWeek": "Semana siguiente",
+    "currentWeek": "Semana actual",
     "cutWeek": "SEMANA DE CORTE",
     "generatePdf": "Generar PDF de esta semana",
     "checksTable": "TABLA DE CHEQUES",

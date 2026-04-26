@@ -282,6 +282,7 @@
     "subtitle": "Payment summary for check issuance",
     "prevWeek": "Previous week",
     "nextWeek": "Next week",
+    "currentWeek": "Current week",
     "cutWeek": "CUT WEEK",
     "generatePdf": "Generate PDF for this week",
     "checksTable": "PAYCHECK TABLE",

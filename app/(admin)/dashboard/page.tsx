@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { getSupabaseServerClient } from '@/lib/supabaseServer';
 import DashboardContent from './DashboardContent';
 
-function getWeekRange() {
+function getCurrentWeekRange() {
   const now = new Date();
   const day = now.getDay(); // 0=Dom, 6=Sáb
   const sunday = new Date(now);
@@ -16,14 +16,34 @@ function getWeekRange() {
   };
 }
 
-export default async function DashboardPage() {
-  const supabase = getSupabaseServerClient();
-  const { start, end } = getWeekRange();
+function shiftWeek(startStr: string, offsetWeeks: number) {
+  const base = new Date(startStr + 'T12:00:00');
+  base.setDate(base.getDate() + offsetWeeks * 7);
+  const end = new Date(base);
+  end.setDate(base.getDate() + 6);
+  return {
+    start: base.toISOString().split('T')[0],
+    end: end.toISOString().split('T')[0],
+  };
+}
 
-  // Pulled from the new schema:
-  //  - work_reports for total reports count + recent activity
-  //  - employees filtered by role='mechanic' for active mechanics
-  //  - earned_entries for weekly earned (mechanic-only)
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ semana_inicio?: string; semana_fin?: string }>;
+}) {
+  const params = await searchParams;
+  const supabase = getSupabaseServerClient();
+
+  const { start: defaultStart, end: defaultEnd } = getCurrentWeekRange();
+  const start = params.semana_inicio ?? defaultStart;
+  const end = params.semana_fin ?? defaultEnd;
+
+  const { start: prevStart, end: prevEnd } = shiftWeek(start, -1);
+  const { start: nextStart, end: nextEnd } = shiftWeek(start, 1);
+  const { start: currentStart, end: currentEnd } = getCurrentWeekRange();
+  const isCurrentWeek = start === currentStart;
+
   const [reportsRes, mechanicsRes, earnedRes, adminEarnedRes] = await Promise.all([
     (supabase as any)
       .from('work_reports')
@@ -52,9 +72,6 @@ export default async function DashboardPage() {
   const weeklyAdminEarned = ((adminEarnedRes.data ?? []) as any[])
     .reduce((s: number, r: any) => s + Number(r.amount), 0);
 
-  // Ingresos esta semana: suma de amount_charged_to_client de las tareas
-  // cuyo work_report cae en el rango de la semana actual.
-  // Reutilizamos reportsRes.data (ya traído) para filtrar IDs en memoria.
   const weekReportIds = ((reportsRes.data ?? []) as any[])
     .filter((r: any) => r.work_date >= start && r.work_date <= end)
     .map((r: any) => r.id as string);
@@ -89,6 +106,13 @@ export default async function DashboardPage() {
       weeklyRevenue={weeklyRevenue}
       start={start}
       end={end}
+      prevStart={prevStart}
+      prevEnd={prevEnd}
+      nextStart={nextStart}
+      nextEnd={nextEnd}
+      currentStart={currentStart}
+      currentEnd={currentEnd}
+      isCurrentWeek={isCurrentWeek}
       recentOrders={recentOrders}
     />
   );
