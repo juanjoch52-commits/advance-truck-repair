@@ -267,7 +267,7 @@ export default function NominaAdminPage() {
       doc.text('ADVANCE TRUCK REPAIR', margin, 14);
       doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(SOFT, SOFT, SOFT);
       doc.text(t('adminPayroll.title'), margin, 20);
-      const issued = new Date().toLocaleDateString(locale, { day: '2-digit', month: 'long', year: 'numeric' });
+      const issued = fmtDate(new Date().toISOString().split('T')[0]);
       doc.text(`${t('pdf.header.issued')}: ${issued}`, pageW - margin, 20, { align: 'right' });
       doc.setDrawColor(LINE, LINE, LINE); doc.setLineWidth(0.2);
       doc.line(margin, 24, pageW - margin, 24);
@@ -303,7 +303,7 @@ export default function NominaAdminPage() {
           startY: y, margin: { left: margin, right: margin }, theme: 'plain',
           head: [[t('common.date'), t('adminPayroll.hours'), t('adminPayroll.note'), t('adminPayroll.amount')]],
           body: empEntries.map((en) => [
-            new Date(en.work_date + 'T12:00:00').toLocaleDateString(locale),
+            fmtDate(en.work_date),
             en.hours_worked != null ? String(en.hours_worked) : '—',
             en.description ?? '—',
             fmtMoney(Number(en.amount)),

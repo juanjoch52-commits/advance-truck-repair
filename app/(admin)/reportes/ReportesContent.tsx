@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import { useLanguage, getTranslator, type Lang } from '@/contexts/LanguageContext';
+import { fmtDate } from '@/lib/fmt';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -64,8 +65,7 @@ export default function ReportesContent() {
   const formatMoney = (n: number) =>
     '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  const formatDate = (d: string, locale = 'es-MX') =>
-    new Date(d + 'T12:00:00').toLocaleDateString(locale, { day: '2-digit', month: 'long', year: 'numeric' });
+  const formatDate = (d: string) => fmtDate(d);
 
   // ─── PDF generation ───────────────────────────────────────────────────────────
   async function generarPDF(pdfLang: Lang) {
@@ -84,7 +84,7 @@ export default function ReportesContent() {
       const [y, m] = mes.split('-').map(Number);
       fechaDesde = new Date(y, m - 1, 1).toISOString().split('T')[0];
       fechaHasta = new Date(y, m, 0).toISOString().split('T')[0];
-      const mesNombre = new Date(y, m - 1, 15).toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+      const mesNombre = `${String(m).padStart(2, '0')}/${y}`;
       titulo = t('pdf.reportTitle.mensual');
       subtitulo = `${t('pdf.period.label')}: ${mesNombre.toUpperCase()}`;
     } else if (tipo === 'anual') {
@@ -94,7 +94,7 @@ export default function ReportesContent() {
       subtitulo = `${t('pdf.period.year')}: ${anio}`;
     } else {
       titulo = t('pdf.reportTitle.semanal');
-      subtitulo = `${t('pdf.period.week')}: ${formatDate(desde, locale)} — ${formatDate(hasta, locale)}`;
+      subtitulo = `${t('pdf.period.week')}: ${fmtDate(desde)} — ${fmtDate(hasta)}`;
     }
 
     const INK = 30; const SOFT = 110; const LINE = 170;
@@ -157,7 +157,7 @@ export default function ReportesContent() {
       doc.text(t('pdf.header.company'), margin, 14);
       doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(SOFT, SOFT, SOFT);
       doc.text(t('pdf.header.system'), margin, 20);
-      const fechaEmision = new Date().toLocaleDateString(locale, { day: '2-digit', month: 'long', year: 'numeric' });
+      const fechaEmision = fmtDate(new Date().toISOString().split('T')[0]);
       doc.text(`${t('pdf.header.issued')}: ${fechaEmision}`, pageW - margin, 20, { align: 'right' });
       doc.setDrawColor(LINE, LINE, LINE); doc.setLineWidth(0.2);
       doc.line(margin, 24, pageW - margin, 24);
@@ -202,7 +202,7 @@ export default function ReportesContent() {
             startY: y, margin: { left: margin, right: margin }, theme: 'plain',
             head: [[t('pdf.table.date'), t('pdf.table.truck'), t('pdf.table.company'), t('pdf.table.task'), t('pdf.table.amount')]],
             body: entries.map((e: any) => [
-              new Date(e.work_date + 'T12:00:00').toLocaleDateString(locale),
+              fmtDate(e.work_date),
               e.truck_number ?? '—',
               e.work_reports?.company ?? '—',
               e.description ?? '—',
@@ -220,7 +220,7 @@ export default function ReportesContent() {
             startY: y, margin: { left: margin, right: margin }, theme: 'plain',
             head: [[t('pdf.table.date'), t('pdf.table.hours'), t('pdf.table.note'), t('pdf.table.amount')]],
             body: entries.map((e: any) => [
-              new Date(e.work_date + 'T12:00:00').toLocaleDateString(locale),
+              fmtDate(e.work_date),
               e.hours_worked != null ? String(e.hours_worked) : '—',
               e.description ?? '—',
               formatMoney(Number(e.amount)),
@@ -249,7 +249,7 @@ export default function ReportesContent() {
           startY: y, margin: { left: margin, right: margin }, theme: 'plain',
           head: [[t('pdf.table.date'), t('deductions.description'), t('pdf.table.amount')]],
           body: deductions.map(d => [
-            new Date(d.weekEnding + 'T12:00:00').toLocaleDateString(locale),
+            fmtDate(d.weekEnding),
             d.desc,
             `- ${formatMoney(d.amount)}`,
           ]),
@@ -374,8 +374,8 @@ export default function ReportesContent() {
     doc.text(t('pdf.header.company'), margin, 14);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(SOFT, SOFT, SOFT);
     doc.text(t('pdf.header.system'), margin, 20);
-    const fechaEmision = new Date().toLocaleDateString(locale, { day: '2-digit', month: 'long', year: 'numeric' });
-    doc.text(`${t('pdf.header.issued')}: ${fechaEmision}`, pageW - margin, 20, { align: 'right' });
+    const fechaEmision2 = fmtDate(new Date().toISOString().split('T')[0]);
+    doc.text(`${t('pdf.header.issued')}: ${fechaEmision2}`, pageW - margin, 20, { align: 'right' });
     doc.setDrawColor(LINE, LINE, LINE); doc.setLineWidth(0.2);
     doc.line(margin, 24, pageW - margin, 24);
 
@@ -469,7 +469,7 @@ export default function ReportesContent() {
             startY: y, margin: { left: margin, right: margin }, theme: 'plain',
             head: [[t('pdf.table.date'), t('pdf.table.truck'), t('pdf.table.company'), t('pdf.table.task'), t('pdf.table.amount')]],
             body: m.rows.map((e: any) => [
-              new Date(e.work_date + 'T12:00:00').toLocaleDateString(locale),
+              fmtDate(e.work_date),
               e.truck_number ?? '-', e.work_reports?.company ?? '-', e.description ?? '-',
               formatMoney(Number(e.amount)),
             ]),
@@ -528,7 +528,7 @@ export default function ReportesContent() {
             startY: y, margin: { left: margin, right: margin }, theme: 'plain',
             head: [[t('pdf.table.date'), t('pdf.table.hours'), t('pdf.table.note'), t('pdf.table.amount')]],
             body: a.rows.map((e: any) => [
-              new Date(e.work_date + 'T12:00:00').toLocaleDateString(locale),
+              fmtDate(e.work_date),
               e.hours_worked != null ? String(e.hours_worked) : '—', e.description ?? '—',
               formatMoney(Number(e.amount)),
             ]),
