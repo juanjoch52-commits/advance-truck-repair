@@ -89,8 +89,8 @@
     "back": "Back to Reports",
     "header": {
       "sectionTitle": "REPORT DETAILS",
-      "orderNumber": "External Order #",
-      "orderNumberPlaceholder": "Number from other platform (optional)",
+      "orderNumber": "Invoice #",
+      "orderNumberPlaceholder": "Invoice number (optional)",
       "truck": "Truck / Unit *",
       "truckPlaceholder": "E.g.: TRK-001, Unit 42",
       "company": "Company / Client *",

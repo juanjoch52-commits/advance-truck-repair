@@ -89,8 +89,8 @@
     "back": "Volver a Reportes",
     "header": {
       "sectionTitle": "DATOS DEL REPORTE",
-      "orderNumber": "# Orden Externa",
-      "orderNumberPlaceholder": "Número de la otra plataforma (opcional)",
+      "orderNumber": "# Factura",
+      "orderNumberPlaceholder": "Número de factura (opcional)",
       "truck": "Camión / Unidad *",
       "truckPlaceholder": "Ej: TRK-001, Unidad 42",
       "company": "Empresa / Cliente *",
