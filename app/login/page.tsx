@@ -29,28 +29,31 @@ export default function LoginPage() {
       return;
     }
 
-    // Guardar cookie para que el middleware pueda verificar la sesión
-    document.cookie = 'atr_auth=1; path=/; max-age=86400; SameSite=Lax';
+    // Emitir la cookie de sesión firmada (httpOnly) en el servidor a partir del
+    // token verificado de Supabase Auth. Reemplaza la antigua cookie atr_auth
+    // que se escribía en el cliente y era falsificable.
+    const accessToken = authData.session?.access_token;
+    const sessionRes = await fetch('/api/auth/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ access_token: accessToken }),
+    });
+    const sessionJson = (await sessionRes.json().catch(() => ({}))) as {
+      mustChangePassword?: boolean;
+      error?: string;
+    };
 
-    // Verificar si el usuario debe cambiar su contraseña
-    const userId = authData.user?.id;
-    if (userId) {
-      const { data: profile } = await (supabase as any)
-        .from('profiles')
-        .select('must_change_password')
-        .eq('id', userId)
-        .single();
-
-      if (profile?.must_change_password) {
-        // Marcar cookie para que el middleware redirija
-        document.cookie = 'atr_force_change=1; path=/; max-age=86400; SameSite=Lax';
-        router.push('/cambiar-contrasena');
-        return;
-      }
+    if (!sessionRes.ok) {
+      setError(sessionJson.error ?? t('login.errorWrong'));
+      setLoading(false);
+      return;
     }
 
-    // Limpiar bandera por si acaso
-    document.cookie = 'atr_force_change=; path=/; max-age=0';
+    if (sessionJson.mustChangePassword) {
+      router.push('/cambiar-contrasena');
+      return;
+    }
+
     router.push('/dashboard');
     router.refresh();
   }

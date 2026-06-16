@@ -78,9 +78,8 @@ export default function NuevaContrasenaPage() {
     // Cerrar sesión y redirigir al login después de 2.5 segundos
     setTimeout(async () => {
       await supabase.auth.signOut();
-      // Limpiar cookies de sesión
-      document.cookie = 'atr_auth=; path=/; max-age=0';
-      document.cookie = 'atr_force_change=; path=/; max-age=0';
+      // Limpiar la cookie de sesión firmada (httpOnly) en el servidor.
+      await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
       router.push('/login');
     }, 2500);
   }

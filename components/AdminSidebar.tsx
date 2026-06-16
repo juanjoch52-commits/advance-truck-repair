@@ -144,7 +144,8 @@ export default function AdminSidebar() {
 
   async function handleLogout() {
     await supabase.auth.signOut();
-    document.cookie = 'atr_auth=; path=/; max-age=0';
+    // Limpiar la cookie de sesión firmada (httpOnly) en el servidor.
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
     router.push('/login');
     router.refresh();
   }

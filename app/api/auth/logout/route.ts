@@ -1,8 +1,16 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServerClient } from '@/lib/supabaseServer';
+import { getSessionCookieName } from '@/lib/authSession';
 
 export async function POST() {
-  const supabase = getSupabaseServerClient();
-  await supabase.auth.signOut();
-  return NextResponse.json({ success: true });
+  const response = NextResponse.json({ success: true });
+  // Clear the server session cookie. The browser-side Supabase session is
+  // cleared separately by the client (supabase.auth.signOut()).
+  response.cookies.set(getSessionCookieName(), '', {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 0,
+  });
+  return response;
 }

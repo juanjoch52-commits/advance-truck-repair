@@ -1,6 +1,16 @@
+import { redirect } from 'next/navigation';
 import AdminSidebar from '@/components/AdminSidebar';
+import { getServerSession } from '@/lib/authSession';
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  // Validación real de la sesión firmada en el servidor. Esto protege TODAS las
+  // páginas del panel (incluidas las que leen datos con el service role), no
+  // solo el redirect del middleware.
+  const session = await getServerSession();
+  if (!session) {
+    redirect('/login');
+  }
+
   return (
     <div className="brand-bg min-h-screen lg:flex">
       <AdminSidebar />

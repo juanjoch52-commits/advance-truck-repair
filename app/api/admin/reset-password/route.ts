@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireRole, authErrorResponse } from '@/lib/apiAuth';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,6 +18,14 @@ function generateTempPassword() {
 }
 
 export async function POST(req: NextRequest) {
+  try {
+    await requireRole('owner', 'super_user');
+  } catch (e) {
+    const resp = authErrorResponse(e);
+    if (resp) return resp;
+    throw e;
+  }
+
   const body = await req.json();
 
   // Crear nuevo usuario

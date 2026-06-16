@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireSelfOrAdmin, authErrorResponse } from '@/lib/apiAuth';
 
 type LoanRow = {
   id: string;
@@ -51,6 +52,15 @@ export async function GET(
 ) {
   try {
     const { employeeId } = await params;
+
+    try {
+      await requireSelfOrAdmin(employeeId);
+    } catch (e) {
+      const resp = authErrorResponse(e);
+      if (resp) return resp;
+      throw e;
+    }
+
     const { searchParams } = new URL(request.url);
 
     let start = searchParams.get('start');

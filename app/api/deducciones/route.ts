@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireRole, authErrorResponse } from '@/lib/apiAuth';
 
 type DeductionBody = {
   employee_id: string;
@@ -22,6 +23,14 @@ function getClient() {
 
 export async function POST(request: Request) {
   try {
+    try {
+      await requireRole('owner', 'super_user');
+    } catch (e) {
+      const resp = authErrorResponse(e);
+      if (resp) return resp;
+      throw e;
+    }
+
     const body = await request.json() as DeductionBody;
 
     if (!body.employee_id || !body.deduction_type || !body.description || !body.report_week_ending) {

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireRole, authErrorResponse } from '@/lib/apiAuth';
 
 function getClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -17,6 +18,14 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    try {
+      await requireRole('owner', 'super_user');
+    } catch (e) {
+      const resp = authErrorResponse(e);
+      if (resp) return resp;
+      throw e;
+    }
+
     const { id } = await params;
     const supabase = getClient();
 

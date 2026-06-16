@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireRole, authErrorResponse } from '@/lib/apiAuth';
 
 function getWeekEndingThursday(date = new Date()) {
   const result = new Date(date);
@@ -13,6 +14,14 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  try {
+    await requireRole('owner', 'super_user');
+  } catch (e) {
+    const resp = authErrorResponse(e);
+    if (resp) return resp;
+    throw e;
+  }
+
   const { id } = await params;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

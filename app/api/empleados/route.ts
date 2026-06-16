@@ -6,7 +6,6 @@ import { getDemoEmployees } from '@/lib/demoData';
 type CreateEmployeeBody = {
   full_name: string;
   phone?: string | null;
-  access_pin: string;
   hire_date: string;
   notes?: string | null;
   role?: 'mechanic' | 'admin' | 'SUPER_USER';
@@ -43,15 +42,6 @@ function mapEmployeeRow(row: GenericRow): EmployeeResponse | null {
     role: mapRole(row.role ?? row.rol ?? row.tipo),
     notes: String(row.notes ?? row.notas ?? '').trim() || null,
   };
-}
-
-function mapRoleToLegacy(role: CreateEmployeeBody['role']) {
-  return role === 'admin' ? 'admin' : role === 'SUPER_USER' ? 'SUPER_USER' : 'mechanic';
-}
-
-function getMissingColumnFromError(message: string) {
-  const match = message.match(/Could not find the '([^']+)' column/);
-  return match?.[1] ?? null;
 }
 
 function normalizeSupabaseError(message: string) {
@@ -119,17 +109,12 @@ export async function POST(request: Request) {
   const body = await request.json() as CreateEmployeeBody;
   const full_name = body.full_name?.trim();
   const phone = body.phone?.trim() || null;
-  const access_pin = body.access_pin?.trim();
   const hire_date = body.hire_date;
   const notes = body.notes?.trim() || null;
   const role = body.role ?? 'mechanic';
 
-  if (!full_name || !access_pin || !hire_date) {
-    return NextResponse.json({ error: 'Nombre, PIN y fecha de contratación son requeridos' }, { status: 400 });
-  }
-
-  if (!/^\d{4,}$/.test(access_pin)) {
-    return NextResponse.json({ error: 'El PIN debe tener al menos 4 dígitos' }, { status: 400 });
+  if (!full_name || !hire_date) {
+    return NextResponse.json({ error: 'Nombre y fecha de contratación son requeridos' }, { status: 400 });
   }
 
   const existingPrimary = await supabase
@@ -171,9 +156,6 @@ export async function POST(request: Request) {
     .insert({
       full_name,
       phone,
-      access_pin,
-      is_temporary_pin: true,
-      temporary_pin_plain: access_pin,
       hire_date,
       notes,
       role,
@@ -185,142 +167,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, employee: primaryInsert.data }, { status: 201 });
   }
 
-  if (primaryInsert.error.code !== 'PGRST205') {
-    return NextResponse.json({ error: normalizeSupabaseError(primaryInsert.error.message) }, { status: 500 });
-  }
-
-  const fallbackPayloads: Array<Record<string, unknown>> = [
-    {
-      nombre_completo: full_name,
-      telefono: phone,
-      pin: access_pin,
-      fecha_contratacion: hire_date,
-      notas: notes,
-      rol: mapRoleToLegacy(role),
-      pin_temporal: true,
-    },
-    {
-      nombre_completo: full_name,
-      telefono: phone,
-      pin_acceso: access_pin,
-      fecha_contratacion: hire_date,
-      notas: notes,
-      rol: mapRoleToLegacy(role),
-      pin_temporal: true,
-    },
-    {
-      nombre: full_name,
-      telefono: phone,
-      pin: access_pin,
-      fecha_ingreso: hire_date,
-      notas: notes,
-      rol: mapRoleToLegacy(role),
-      pin_temporal: true,
-    },
-    {
-      nombre: full_name,
-      telefono: phone,
-      pin_acceso: access_pin,
-      fecha_ingreso: hire_date,
-      notas: notes,
-      rol: mapRoleToLegacy(role),
-      pin_temporal: true,
-    },
-    {
-      nombre: full_name,
-      telefono: phone,
-      pin: access_pin,
-      fecha_contratacion: hire_date,
-      rol: mapRoleToLegacy(role),
-    },
-    {
-      nombre: full_name,
-      telefono: phone,
-      pin_acceso: access_pin,
-      fecha_contratacion: hire_date,
-      rol: mapRoleToLegacy(role),
-    },
-    {
-      nombre_completo: full_name,
-      telefono: phone,
-      pin: access_pin,
-      rol: mapRoleToLegacy(role),
-      notas: notes,
-    },
-    {
-      nombre: full_name,
-      telefono: phone,
-      pin: access_pin,
-      rol: mapRoleToLegacy(role),
-      notas: notes,
-    },
-    {
-      nombre_completo: full_name,
-      telefono: phone,
-      pin_acceso: access_pin,
-      rol: mapRoleToLegacy(role),
-      notas: notes,
-    },
-    {
-      nombre: full_name,
-      telefono: phone,
-      pin_acceso: access_pin,
-      rol: mapRoleToLegacy(role),
-      notas: notes,
-    },
-    {
-      nombre_completo: full_name,
-      pin: access_pin,
-      rol: mapRoleToLegacy(role),
-    },
-    {
-      nombre: full_name,
-      pin: access_pin,
-      rol: mapRoleToLegacy(role),
-    },
-    {
-      nombre_completo: full_name,
-      pin_acceso: access_pin,
-      rol: mapRoleToLegacy(role),
-    },
-    {
-      nombre: full_name,
-      pin_acceso: access_pin,
-      rol: mapRoleToLegacy(role),
-    },
-  ];
-
-  let fallbackError: string | null = null;
-
-  for (const payload of fallbackPayloads) {
-    const candidate: Record<string, unknown> = { ...payload };
-
-    for (let i = 0; i < 10; i += 1) {
-      const attempt = await supabase
-        .from('empleados')
-        .insert(candidate)
-        .select('*')
-        .single<GenericRow>();
-
-      if (!attempt.error && attempt.data) {
-        const mapped = mapEmployeeRow(attempt.data);
-        return NextResponse.json({ ok: true, employee: mapped ?? attempt.data }, { status: 201 });
-      }
-
-      const message = normalizeSupabaseError(attempt.error?.message ?? 'No se pudo guardar empleado en tabla legacy.');
-      fallbackError = message;
-
-      const missingColumn = getMissingColumnFromError(message);
-      if (!missingColumn || !(missingColumn in candidate)) {
-        break;
-      }
-
-      delete candidate[missingColumn];
-      if (Object.keys(candidate).length === 0) {
-        break;
-      }
-    }
-  }
-
-  return NextResponse.json({ error: normalizeSupabaseError(fallbackError ?? 'No se pudo guardar empleado.') }, { status: 500 });
+  return NextResponse.json({ error: normalizeSupabaseError(primaryInsert.error.message) }, { status: 500 });
 }

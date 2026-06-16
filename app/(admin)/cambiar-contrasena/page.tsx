@@ -42,10 +42,16 @@ export default function CambiarContrasenaPage() {
       await (supabase as any).from('profiles').update({ must_change_password: false }).eq('id', user.id);
     }
 
-    // 3. Limpiar cookie de cambio forzado
-    document.cookie = 'atr_force_change=; path=/; max-age=0';
+    // 3. Re-emitir la cookie de sesión firmada para que requires_pin_update
+    //    quede en falso (evita el loop de redirección al cambio de contraseña).
+    const { data: { session } } = await supabase.auth.getSession();
+    await fetch('/api/auth/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ access_token: session?.access_token }),
+    }).catch(() => undefined);
 
-    // 4. Redirigir al dashboard (full reload para que middleware re-evalúe la cookie)
+    // 4. Redirigir al dashboard (full reload para que el middleware re-evalúe)
     window.location.href = '/dashboard';
   }
 

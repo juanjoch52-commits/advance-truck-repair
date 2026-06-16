@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getDemoWorkOrders } from '@/lib/demoData';
+import { requireSession, requireRole, authErrorResponse } from '@/lib/apiAuth';
 
 type CreateWorkOrderBody = {
   employee_id: string;
@@ -59,6 +60,14 @@ async function uploadEvidencePhoto(
 
 export async function GET(request: Request) {
   try {
+    try {
+      await requireSession();
+    } catch (e) {
+      const resp = authErrorResponse(e);
+      if (resp) return resp;
+      throw e;
+    }
+
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status') ?? 'pending';
     const supabase = createSupabaseClient();
@@ -114,6 +123,14 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    try {
+      await requireRole('owner', 'admin', 'super_user');
+    } catch (e) {
+      const resp = authErrorResponse(e);
+      if (resp) return resp;
+      throw e;
+    }
+
     const supabase = createSupabaseClient();
     const contentType = request.headers.get('content-type') ?? '';
 

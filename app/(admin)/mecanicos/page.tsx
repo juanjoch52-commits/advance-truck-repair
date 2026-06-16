@@ -304,7 +304,7 @@ export default function PersonalPage() {
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     setAddSaving(true); setAddError('');
-    const { error: err } = await (supabase as any).from('employees').insert({ ...buildPayload(addForm), access_pin: '0000' });
+    const { error: err } = await (supabase as any).from('employees').insert(buildPayload(addForm));
     if (err) { setAddError(err.message); setAddSaving(false); return; }
     setAddForm(BLANK_FORM); setShowForm(false); setAddSaving(false);
     load();

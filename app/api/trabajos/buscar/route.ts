@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireSession, authErrorResponse } from '@/lib/apiAuth';
 
 function getClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -10,6 +11,14 @@ function getClient() {
 
 export async function GET(request: Request) {
   try {
+    try {
+      await requireSession();
+    } catch (e) {
+      const resp = authErrorResponse(e);
+      if (resp) return resp;
+      throw e;
+    }
+
     const { searchParams } = new URL(request.url);
     const unit = searchParams.get('unit')?.trim();
 

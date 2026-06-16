@@ -95,7 +95,17 @@ async function sendWebhook(url: string | undefined, payload: unknown) {
   return { sent: true };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  // Solo Vercel Cron (envía Authorization: Bearer ${CRON_SECRET}) puede ejecutar
+  // este reporte, que contiene la nómina completa.
+  const cronSecret = process.env.CRON_SECRET;
+  if (cronSecret) {
+    const authHeader = request.headers.get('authorization');
+    if (authHeader !== `Bearer ${cronSecret}`) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+  }
+
   try {
     const supabase = getClient();
     const week = getDefaultWeekRange();
