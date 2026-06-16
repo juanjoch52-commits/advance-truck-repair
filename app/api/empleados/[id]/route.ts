@@ -58,5 +58,6 @@ export async function PATCH(
     return NextResponse.json({ ok: true, employee: primary.data });
   }
 
-  return NextResponse.json({ error: primary.error.message }, { status: 500 });
+  console.error('[empleados/:id] Supabase error:', primary.error.message);
+  return NextResponse.json({ error: 'No se pudo actualizar el empleado.' }, { status: 500 });
 }

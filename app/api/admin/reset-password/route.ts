@@ -1,3 +1,4 @@
+import { randomInt } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { requireRole, authErrorResponse } from '@/lib/apiAuth';
@@ -12,7 +13,7 @@ function generateTempPassword() {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   let pass = '';
   for (let i = 0; i < 6; i++) {
-    pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    pass += chars.charAt(randomInt(chars.length));
   }
   return pass;
 }

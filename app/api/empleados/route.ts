@@ -48,7 +48,9 @@ function normalizeSupabaseError(message: string) {
   if (message.toLowerCase().includes('row-level security policy')) {
     return 'Supabase bloqueó la operación por permisos (RLS). Configura SUPABASE_SERVICE_ROLE_KEY en Vercel o habilita INSERT para esta tabla.';
   }
-  return message;
+  // No exponer detalles internos de Postgres al cliente; loguear en servidor.
+  console.error('[empleados] Supabase error:', message);
+  return 'No se pudo completar la operación. Intenta de nuevo.';
 }
 
 function getClient() {
