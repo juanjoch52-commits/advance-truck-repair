@@ -46,17 +46,21 @@ interface Line {
   part_source: PartSource;
   inventory_item_id: string;
   taxable: boolean;
+  mechanic_id: string;     // solo mano de obra: mecánico que gana la comisión
+  commission_pct: string;  // % de comisión (default 50)
 }
+interface MechanicOpt { id: string; full_name: string }
 const PART_SOURCES: PartSource[] = ['new_purchased', 'used', 'warehouse'];
 let lineSeq = 0;
 const newLine = (type: LineType = 'part'): Line => ({
   id: `l${++lineSeq}`, line_type: type, description: '', qty: '1', unit_price: '', cost: '',
   part_source: type === 'part' ? 'new_purchased' : 'new_purchased', inventory_item_id: '', taxable: type === 'part',
+  mechanic_id: '', commission_pct: '50',
 });
 
 const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'check', 'card', 'deposit', 'credit'];
 const RECEIPT_METHODS: ReceiptMethod[] = ['cash', 'check', 'card', 'deposit'];
-const STATUSES: InvoiceStatus[] = ['open', 'partial', 'paid', 'void'];
+const STATUSES: InvoiceStatus[] = ['draft', 'open', 'partial', 'paid', 'void'];
 const DOCUMENT_TYPES: DocumentType[] = ['invoice', 'estimate', 'work_order'];
 const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -78,6 +82,7 @@ export default function FacturacionPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [clients, setClients] = useState<ClientOpt[]>([]);
   const [shops, setShops] = useState<ShopOpt[]>([]);
+  const [mechanics, setMechanics] = useState<MechanicOpt[]>([]);
   const [invItems, setInvItems] = useState<InvItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('');
@@ -115,6 +120,7 @@ export default function FacturacionPage() {
     (async () => {
       try { const r = await fetch('/api/clientes'); const j = await r.json(); setClients((j.clients ?? []).map((c: any) => ({ id: c.id, name: c.name }))); } catch {}
       try { const r = await fetch('/api/shops'); if (r.ok) { const j = await r.json(); setShops((j.shops ?? []).map((s: any) => ({ id: s.id, name: s.name, tax_rate: Number(s.tax_rate) || 0 }))); } } catch {}
+      try { const r = await fetch('/api/empleados'); if (r.ok) { const j = await r.json(); setMechanics((j.employees ?? []).filter((e: any) => (e.role ?? '').toLowerCase() === 'mechanic').map((e: any) => ({ id: e.id, full_name: e.full_name }))); } } catch {}
       try { const r = await fetch('/api/inventario'); if (r.ok) { const j = await r.json(); setInvItems((j.items ?? []) as InvItem[]); } } catch {}
     })();
   }, []);
@@ -149,8 +155,8 @@ export default function FacturacionPage() {
   const isCredit = form.payment_method === 'credit';
   const isFiscal = form.document_type === 'invoice';
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleCreate(e: React.FormEvent | null, asDraft = false) {
+    if (e) e.preventDefault();
     setFormError('');
     if (totalN <= 0) { setFormError(t('invoices.errTotal')); return; }
     setSaving(true);
@@ -160,12 +166,13 @@ export default function FacturacionPage() {
         client_id: form.client_id || null,
         shop_id: form.shop_id || null,
         document_type: form.document_type,
+        draft: asDraft && isFiscal,
         issue_date: form.issue_date,
         due_date: form.due_date || null,
         payment_method: form.payment_method,
         subtotal: subtotalN, tax_amount: taxN, tax_override: form.tax_override, discount: discountN,
         description: form.description,
-        mark_paid: isFiscal && !isCredit && form.mark_paid,
+        mark_paid: !asDraft && isFiscal && !isCredit && form.mark_paid,
         items: lines.map(l => ({
           line_type: l.line_type,
           description: l.description,
@@ -175,6 +182,8 @@ export default function FacturacionPage() {
           part_source: l.line_type === 'part' ? l.part_source : null,
           inventory_item_id: l.line_type === 'part' && l.part_source === 'warehouse' ? (l.inventory_item_id || null) : null,
           taxable: l.taxable,
+          mechanic_id: l.line_type === 'labor' ? (l.mechanic_id || null) : null,
+          commission_pct: l.line_type === 'labor' ? (parseFloat(l.commission_pct) || 0) : 0,
         })),
       }),
     });
@@ -218,6 +227,53 @@ export default function FacturacionPage() {
     const res = await fetch(`/api/facturas/${inv.id}`, { method: 'DELETE' });
     if (!res.ok) { const j = await res.json().catch(() => ({})); alert((j as any).error ?? t('invoices.deleteError')); }
     setBusyId(null); load();
+  }
+
+  // ─── Borradores: tareas pendientes + emisión ───
+  const [draftItems, setDraftItems] = useState<Record<string, any[]>>({});
+  const [expandedDraft, setExpandedDraft] = useState<string | null>(null);
+  const [emittingId, setEmittingId] = useState<string | null>(null);
+
+  async function loadDraftItems(invId: string) {
+    try {
+      const r = await fetch(`/api/facturas/${invId}/items`);
+      if (r.ok) { const j = await r.json(); setDraftItems(prev => ({ ...prev, [invId]: j.items ?? [] })); }
+    } catch {}
+  }
+
+  function toggleDraft(invId: string) {
+    if (expandedDraft === invId) { setExpandedDraft(null); return; }
+    setExpandedDraft(invId);
+    if (!draftItems[invId]) loadDraftItems(invId);
+  }
+
+  async function toggleTask(invId: string, item: any) {
+    await fetch(`/api/facturas/${invId}/items`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: item.id, done: !item.done }),
+    });
+    loadDraftItems(invId);
+  }
+
+  async function emitInvoice(inv: Invoice, force = false) {
+    setEmittingId(inv.id);
+    const res = await fetch(`/api/facturas/${inv.id}/emitir`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force }),
+    });
+    const j = await res.json().catch(() => ({}));
+    setEmittingId(null);
+    if (res.status === 409 && j.error === 'pending_tasks') {
+      if (confirm(t('invoices.emitPendingConfirm').replace('{n}', String(j.pending)))) emitInvoice(inv, true);
+      return;
+    }
+    if (!res.ok) { alert(j.error ?? 'Error'); return; }
+    const msg = j.commissions_created > 0
+      ? t('invoices.emitDoneCommissions').replace('{n}', String(j.commissions_created)).replace('{a}', money(j.commissions_total))
+      : t('invoices.emitDone');
+    alert(msg);
+    setExpandedDraft(null);
+    load();
   }
 
   return (
@@ -337,6 +393,21 @@ export default function FacturacionPage() {
                             </label>
                           </div>
                         )}
+                        {l.line_type === 'labor' && isFiscal && (
+                          <div className="flex items-center gap-2 flex-wrap border-t border-white/5 pt-2">
+                            <span className="text-slate-500 text-[10px]">{t('invoices.lines.mechanic')}:</span>
+                            <select value={l.mechanic_id} onChange={e => updateLine(l.id, { mechanic_id: e.target.value })} className="bg-slate-800 border border-white/10 rounded px-2 py-1 text-slate-100 text-xs">
+                              <option value="">{t('invoices.lines.noMechanic')}</option>
+                              {mechanics.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+                            </select>
+                            {l.mechanic_id && (
+                              <span className="flex items-center gap-1 text-xs text-slate-400">
+                                <input type="number" min="0" max="100" step="1" value={l.commission_pct} onChange={e => updateLine(l.id, { commission_pct: e.target.value })} className="w-12 bg-slate-800 border border-white/10 rounded px-1.5 py-1 text-slate-100 text-xs" />%
+                                <span className="text-emerald-400/70">= {money(lineAmount(l) * (parseFloat(l.commission_pct) || 0) / 100)}</span>
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -393,12 +464,18 @@ export default function FacturacionPage() {
                 </label>
               )}
               {formError && <div className="md:col-span-2 bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2.5 text-red-400 text-sm">{formError}</div>}
-              <div className="md:col-span-2 flex gap-3">
+              <div className="md:col-span-2 flex gap-3 flex-wrap">
                 <button type="submit" disabled={saving} className="bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-slate-950 font-bold py-2.5 px-6 rounded-lg transition display-font tracking-wide">
                   {saving ? t('common.saving') : t('invoices.create')}
                 </button>
+                {isFiscal && (
+                  <button type="button" disabled={saving} onClick={() => handleCreate(null, true)} className="bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-amber-300 border border-amber-500/30 py-2.5 px-5 rounded-lg transition text-sm font-semibold">
+                    {t('invoices.saveDraft')}
+                  </button>
+                )}
                 <button type="button" onClick={() => setShowForm(false)} className="bg-slate-700 hover:bg-slate-600 text-slate-300 py-2.5 px-5 rounded-lg transition text-sm">{t('common.cancel')}</button>
               </div>
+              {isFiscal && <p className="md:col-span-2 text-slate-600 text-xs -mt-1">{t('invoices.draftHint')}</p>}
             </form>
           </div>
         </div>
@@ -472,15 +549,21 @@ export default function FacturacionPage() {
         <div className="bg-slate-900/60 border border-white/5 rounded-xl p-12 text-center"><p className="text-slate-500">{t('invoices.empty')}</p></div>
       ) : (
         <div className="space-y-3">
-          {invoices.map(inv => (
-            <div key={inv.id} className={`bg-slate-900/60 border border-white/5 rounded-xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap ${inv.status === 'void' ? 'opacity-60' : ''}`}>
+          {invoices.map(inv => {
+            const isPending = inv.status === 'draft' && (inv.document_type ?? 'invoice') === 'invoice';
+            const tasks = draftItems[inv.id] ?? [];
+            const laborTasks = tasks.filter((it: any) => it.line_type === 'labor');
+            const pendingTasks = laborTasks.filter((it: any) => !it.done).length;
+            return (
+            <div key={inv.id} className={`bg-slate-900/60 border rounded-xl ${inv.status === 'void' ? 'opacity-60' : ''} ${isPending ? 'border-amber-500/25' : 'border-white/5'}`}>
+              <div className="px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="display-font font-semibold tracking-wide text-slate-200">{inv.document_number}</span>
+                  <span className="display-font font-semibold tracking-wide text-slate-200">{inv.document_number || t('invoices.draftLabel')}</span>
                   {inv.document_type && inv.document_type !== 'invoice' && (
                     <span className="text-xs px-2 py-0.5 rounded-full border bg-purple-500/10 border-purple-500/30 text-purple-300">{t(`invoices.docType.${inv.document_type}`)}</span>
                   )}
-                  <span className={`text-xs px-2 py-0.5 rounded-full border ${STATUS_STYLE[inv.status]}`}>{t(`invoices.status.${inv.status}`)}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full border ${STATUS_STYLE[inv.status]}`}>{isPending ? t('invoices.pendingLabel') : t(`invoices.status.${inv.status}`)}</span>
                   <span className="text-xs px-2 py-0.5 rounded-full border bg-slate-700/40 border-white/10 text-slate-400">{t(`invoices.pm.${inv.payment_method}`)}</span>
                 </div>
                 <div className="flex items-center gap-3 mt-1.5 flex-wrap text-xs text-slate-500">
@@ -494,6 +577,16 @@ export default function FacturacionPage() {
                 {inv.balance > 0.001 && inv.status !== 'void' && inv.status !== 'draft' && <p className="text-amber-400 text-xs">{t('invoices.balance')}: {money(inv.balance)}</p>}
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
+                {isPending && (
+                  <>
+                    <button onClick={() => toggleDraft(inv.id)} className="text-xs px-2.5 py-1.5 rounded border border-white/10 text-slate-300 hover:bg-slate-700 transition">
+                      {expandedDraft === inv.id ? t('invoices.hideTasks') : t('invoices.viewTasks')}
+                    </button>
+                    <button onClick={() => emitInvoice(inv)} disabled={emittingId === inv.id} className="text-xs font-bold px-3 py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 transition display-font">
+                      {emittingId === inv.id ? t('common.saving') : t('invoices.emit')}
+                    </button>
+                  </>
+                )}
                 <InvoicePdfButton invoiceId={inv.id} />
                 {inv.balance > 0.001 && inv.status !== 'void' && inv.status !== 'draft' && (
                   <button onClick={() => openPay(inv)} title={t('invoices.recordPayment')} className="p-1.5 rounded text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition">
@@ -509,8 +602,32 @@ export default function FacturacionPage() {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                 </button>
               </div>
+              </div>
+
+              {isPending && expandedDraft === inv.id && (
+                <div className="border-t border-white/5 px-5 py-3">
+                  <p className="text-slate-400 text-xs mb-2">{t('invoices.tasksTitle')} {laborTasks.length > 0 && <span className="text-slate-600">· {pendingTasks} {t('invoices.tasksPending')}</span>}</p>
+                  {tasks.length === 0 ? (
+                    <p className="text-slate-600 text-xs">{t('common.loading')}</p>
+                  ) : laborTasks.length === 0 ? (
+                    <p className="text-slate-600 text-xs">{t('invoices.noLaborTasks')}</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {laborTasks.map((it: any) => (
+                        <label key={it.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input type="checkbox" checked={!!it.done} onChange={() => toggleTask(inv.id, it)} className="accent-emerald-500 w-4 h-4" />
+                          <span className={it.done ? 'text-slate-500 line-through' : 'text-slate-300'}>{it.description || t('invoices.lineType.labor')}</span>
+                          <span className="text-slate-600 text-xs">{money(it.amount)}</span>
+                          {it.mechanic_id && <span className="text-emerald-400/70 text-xs">→ {t('invoices.commissionBadge').replace('{a}', money(Number(it.amount) * Number(it.commission_pct ?? 50) / 100))}</span>}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

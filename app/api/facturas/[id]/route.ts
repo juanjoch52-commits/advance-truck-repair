@@ -15,7 +15,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
     const [{ data: payments }, { data: items }, clientRes, shopRes] = await Promise.all([
       supabase.from('invoice_payments').select('id,amount,method,reference,paid_at,notes,created_at').eq('invoice_id', id).order('paid_at', { ascending: false }),
-      supabase.from('invoice_items').select('id,line_type,description,qty,unit_price,amount,cost,part_source,taxable,sort_order').eq('invoice_id', id).order('sort_order', { ascending: true }),
+      supabase.from('invoice_items').select('id,line_type,description,qty,unit_price,amount,cost,part_source,taxable,mechanic_id,commission_pct,done,sort_order').eq('invoice_id', id).order('sort_order', { ascending: true }),
       invoice.client_id
         ? supabase.from('clients').select('id,name,billing_address_line,city,state,zip,phone,email').eq('id', invoice.client_id).maybeSingle()
         : Promise.resolve({ data: null }),

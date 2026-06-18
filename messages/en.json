@@ -112,7 +112,10 @@
       "qty": "Qty",
       "unitPrice": "Unit price",
       "cost": "Cost",
-      "taxable": "Taxable"
+      "taxable": "Taxable",
+      "mechanic": "Mechanic",
+      "noMechanic": "— No commission —",
+      "commission": "Commission"
     },
     "lineType": {
       "labor": "Labor",
@@ -155,7 +158,21 @@
     "nonFiscalHint": "NON-fiscal document: it does not enter Accounts Receivable or reduce inventory.",
     "taxAuto": "auto {rate}%",
     "taxOverride": "Enter tax manually",
-    "taxBackToAuto": "Back to automatic tax"
+    "taxBackToAuto": "Back to automatic tax",
+    "saveDraft": "Save draft",
+    "draftHint": "Save as a draft to finish the work; on emit the fiscal number is assigned and mechanic commissions are generated.",
+    "draftLabel": "DRAFT",
+    "pendingLabel": "Pending",
+    "emit": "Emit",
+    "viewTasks": "View tasks",
+    "hideTasks": "Hide",
+    "tasksTitle": "Tasks (labor)",
+    "tasksPending": "pending",
+    "noLaborTasks": "No labor lines.",
+    "commissionBadge": "commission {a}",
+    "emitDone": "Invoice emitted.",
+    "emitDoneCommissions": "Invoice emitted. {n} commission(s) generated for {a}.",
+    "emitPendingConfirm": "{n} task(s) still pending. Emit anyway?"
   },
   "receivables": {
     "title": "ACCOUNTS RECEIVABLE",

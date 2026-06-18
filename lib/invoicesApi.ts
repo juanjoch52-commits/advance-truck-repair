@@ -16,7 +16,7 @@ export function isFiscalDocument(t: unknown): boolean {
 }
 
 export const INVOICE_COLS =
-  'id,shop_id,client_id,location_id,document_number,document_type,issue_date,due_date,payment_method,status,subtotal,tax_amount,discount,total,amount_paid,balance,description,notes,created_by,created_at,updated_at';
+  'id,shop_id,client_id,location_id,document_number,document_type,issue_date,due_date,payment_method,status,subtotal,tax_amount,discount,total,amount_paid,balance,description,notes,emitted_at,commissions_generated,created_by,created_at,updated_at';
 
 // Facturación / cuentas por cobrar: owner / admin / super_user (gestión diaria).
 export async function requireInvoicesAccess() {
@@ -33,6 +33,43 @@ export function round2(n: number) {
 // se grava en FL; el flag `taxable` por renglón decide qué entra a la base.
 export function computeAutoTax(taxableBase: number, taxRatePct: number): number {
   return round2((Number(taxableBase) || 0) * (Number(taxRatePct) || 0) / 100);
+}
+
+// Semana Lun–Dom de una fecha ISO (misma convención que las órdenes de trabajo,
+// para que la comisión de factura caiga en el mismo corte que la de las órdenes).
+export function weekRangeMonSun(dateISO: string): { start: string; end: string } {
+  const date = new Date(dateISO + 'T12:00:00');
+  const day = date.getDay();
+  const diffToMon = day === 0 ? -6 : 1 - day;
+  const monday = new Date(date);
+  monday.setDate(date.getDate() + diffToMon);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return { start: monday.toISOString().split('T')[0], end: sunday.toISOString().split('T')[0] };
+}
+
+// Descuenta de bodega las piezas de inventario de los renglones (movimiento
+// 'sale' + baja de stock). Se ejecuta al FINALIZAR la factura: al crearla si es
+// directa, o al emitirla si venía como borrador. `items` deben traer su `id`.
+export async function applyWarehouseDeduction(supabase: any, items: any[], invoiceId: string, createdBy: string | null) {
+  for (const it of items) {
+    if (it.line_type === 'part' && it.inventory_item_id && Number(it.qty) > 0) {
+      await supabase.from('inventory_movements').insert({
+        inventory_item_id: it.inventory_item_id,
+        movement_type: 'sale',
+        quantity: -Number(it.qty),
+        unit_cost: round2(it.cost),
+        invoice_id: invoiceId,
+        created_by: createdBy,
+      });
+      const { data: invItem } = await supabase.from('inventory_items').select('quantity_on_hand').eq('id', it.inventory_item_id).maybeSingle();
+      if (invItem) {
+        await supabase.from('inventory_items')
+          .update({ quantity_on_hand: round2(Number(invItem.quantity_on_hand) - Number(it.qty)) })
+          .eq('id', it.inventory_item_id);
+      }
+    }
+  }
 }
 
 // Calcula saldo y estado a partir del total, lo pagado y el método.

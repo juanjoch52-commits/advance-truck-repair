@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireInvoicesAccess, INVOICE_COLS, PAYMENT_METHODS, DOCUMENT_TYPES, isFiscalDocument, computeAutoTax, round2, deriveBalanceStatus } from '@/lib/invoicesApi';
+import { requireInvoicesAccess, INVOICE_COLS, PAYMENT_METHODS, DOCUMENT_TYPES, isFiscalDocument, computeAutoTax, applyWarehouseDeduction, round2, deriveBalanceStatus } from '@/lib/invoicesApi';
 import { sanitizeDbError } from '@/lib/clientsApi';
 import { authErrorResponse, requireRole } from '@/lib/apiAuth';
 import { getSupabaseServerClient } from '@/lib/supabaseServer';
@@ -46,6 +46,9 @@ export async function POST(request: Request) {
     const payment_method = PAYMENT_METHODS.includes(body.payment_method) ? body.payment_method : 'cash';
     const document_type = DOCUMENT_TYPES.includes(body.document_type) ? body.document_type : 'invoice';
     const isFiscal = isFiscalDocument(document_type);
+    // Borrador: factura con trabajo pendiente. NO consume número fiscal, NO
+    // descuenta inventario y NO cobra; todo eso ocurre al EMITIR (/emitir).
+    const isDraft = body.draft === true && isFiscal;
 
     // Datos del taller (una sola consulta): tasa para el tax automático y
     // prefijo/correlativo para la numeración fiscal.
@@ -71,6 +74,11 @@ export async function POST(request: Request) {
         part_source: ['new_purchased', 'used', 'warehouse'].includes(it.part_source) ? it.part_source : null,
         inventory_item_id: it.inventory_item_id || null,
         taxable: Boolean(it.taxable),
+        // Comisión de mecánico (opt-in, solo mano de obra): si el renglón de
+        // labor lleva mecánico, al emitir genera comisión (commission_pct % del monto).
+        mechanic_id: it.line_type === 'labor' ? (it.mechanic_id || null) : null,
+        commission_pct: it.line_type === 'labor' ? round2(it.commission_pct ?? 50) : 0,
+        done: Boolean(it.done),
         sort_order: idx,
       };
     });
@@ -95,26 +103,29 @@ export async function POST(request: Request) {
     //    consume e incrementa shops.next_invoice_number sin huecos por carreras;
     //  - resto (no fiscal, o sin taller) → prefijo por tipo + conteo de respaldo.
     let document_number = String(body.document_number ?? '').trim();
-    if (!document_number && isFiscal && shop) {
+    if (!document_number && !isDraft && isFiscal && shop) {
       const { data: num } = await supabase.rpc('next_shop_invoice_number', { p_shop_id: shop.id });
       if (num) document_number = String(num);
     }
-    if (!document_number) {
+    if (!document_number && !isDraft) {
       const { count } = await supabase.from('invoices').select('id', { count: 'exact', head: true });
       const prefix = document_type === 'estimate' ? 'EST-'
         : document_type === 'work_order' ? 'WO-'
         : (shop?.invoice_prefix || 'INV-');
       document_number = `${prefix}${(count ?? 0) + 1}`;
     }
+    // Borrador sin número aún → null (se asigna al emitir).
+    if (!document_number) document_number = null as any;
 
     // Crédito (préstamo) → factura abierta, sin pago. Otros métodos → opción de
     // marcarla pagada de una vez (mark_paid). Documentos NO fiscales
     // (estimate/work_order) nunca se cobran ni entran a CxC: quedan en 'draft'.
-    const markPaid = isFiscal && payment_method !== 'credit' && body.mark_paid === true;
+    const markPaid = !isDraft && isFiscal && payment_method !== 'credit' && body.mark_paid === true;
     const amount_paid = markPaid ? total : 0;
     const derived = deriveBalanceStatus(total, amount_paid);
     const balance = derived.balance;
-    const status = isFiscal ? derived.status : 'draft';
+    // Borrador y documentos no fiscales → 'draft' (pendiente). Factura emitida → según pago.
+    const status = (isFiscal && !isDraft) ? derived.status : 'draft';
 
     const payload = {
       shop_id: body.shop_id || null,
@@ -146,31 +157,15 @@ export async function POST(request: Request) {
       });
     }
 
-    // Renglones + descuento de bodega para piezas que salen del inventario.
+    // Renglones. El descuento de bodega solo ocurre al FINALIZAR: si es factura
+    // fiscal directa, ahora; si es borrador, se difiere a /emitir.
     if (items.length) {
       const rows = items.map(it => ({ ...it, invoice_id: invoice.id }));
       const { error: itErr } = await supabase.from('invoice_items').insert(rows);
       if (itErr) return NextResponse.json({ error: sanitizeDbError('facturas.POST.items', itErr.message) }, { status: 500 });
 
-      // Solo la factura fiscal mueve inventario; estimate/work_order no.
-      for (const it of (isFiscal ? items : [])) {
-        if (it.line_type === 'part' && it.inventory_item_id && it.qty > 0) {
-          // Salida de bodega: movimiento 'sale' (negativo) + baja de stock.
-          await supabase.from('inventory_movements').insert({
-            inventory_item_id: it.inventory_item_id,
-            movement_type: 'sale',
-            quantity: -it.qty,
-            unit_cost: it.cost,
-            invoice_id: invoice.id,
-            created_by: (session as any)?.id ?? null,
-          });
-          const { data: invItem } = await supabase.from('inventory_items').select('quantity_on_hand').eq('id', it.inventory_item_id).maybeSingle();
-          if (invItem) {
-            await supabase.from('inventory_items')
-              .update({ quantity_on_hand: round2(Number(invItem.quantity_on_hand) - it.qty) })
-              .eq('id', it.inventory_item_id);
-          }
-        }
+      if (isFiscal && !isDraft) {
+        await applyWarehouseDeduction(supabase, items, invoice.id, (session as any)?.id ?? null);
       }
     }
 

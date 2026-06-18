@@ -112,7 +112,10 @@
       "qty": "Cant.",
       "unitPrice": "Precio unit.",
       "cost": "Costo",
-      "taxable": "Gravable"
+      "taxable": "Gravable",
+      "mechanic": "Mecánico",
+      "noMechanic": "— Sin comisión —",
+      "commission": "Comisión"
     },
     "lineType": {
       "labor": "Mano de obra",
@@ -155,7 +158,21 @@
     "nonFiscalHint": "Documento NO fiscal: no entra a Cuentas por Cobrar ni descuenta inventario.",
     "taxAuto": "auto {rate}%",
     "taxOverride": "Capturar impuesto manualmente",
-    "taxBackToAuto": "Volver a impuesto automático"
+    "taxBackToAuto": "Volver a impuesto automático",
+    "saveDraft": "Guardar borrador",
+    "draftHint": "Guarda como borrador para terminar el trabajo; al emitir se asigna el número fiscal y se generan las comisiones de los mecánicos.",
+    "draftLabel": "BORRADOR",
+    "pendingLabel": "Pendiente",
+    "emit": "Emitir",
+    "viewTasks": "Ver tareas",
+    "hideTasks": "Ocultar",
+    "tasksTitle": "Tareas (mano de obra)",
+    "tasksPending": "pendientes",
+    "noLaborTasks": "Sin renglones de mano de obra.",
+    "commissionBadge": "comisión {a}",
+    "emitDone": "Factura emitida.",
+    "emitDoneCommissions": "Factura emitida. Se generaron {n} comisión(es) por {a}.",
+    "emitPendingConfirm": "Quedan {n} tarea(s) pendiente(s). ¿Emitir de todas formas?"
   },
   "receivables": {
     "title": "CUENTAS POR COBRAR",
