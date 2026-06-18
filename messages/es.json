@@ -14,6 +14,8 @@
     "clients": "Clientes",
     "invoices": "Facturación",
     "receivables": "Cuentas por Cobrar",
+    "inventory": "Inventario / Bodega",
+    "expenses": "Gastos de Piezas",
     "settings": "Datos de Facturación"
   },
   "settings": {
@@ -94,6 +96,29 @@
     "deleteConfirm": "¿Eliminar la factura {n}? Esta acción no se puede deshacer.",
     "deleteError": "No se pudo eliminar la factura.",
     "filterAll": "Todas",
+    "lines": {
+      "title": "Renglones (mano de obra / piezas)",
+      "labor": "Mano de obra",
+      "part": "Pieza",
+      "empty": "Sin renglones. Agrega mano de obra o piezas, o usa el subtotal manual abajo.",
+      "oneoff": "— Pieza nueva / usada (no de bodega) —",
+      "inStock": "en stock",
+      "description": "Descripción",
+      "qty": "Cant.",
+      "unitPrice": "Precio unit.",
+      "cost": "Costo",
+      "taxable": "Gravable"
+    },
+    "lineType": {
+      "labor": "Mano de obra",
+      "part": "Pieza",
+      "fee": "Cargo"
+    },
+    "source": {
+      "new_purchased": "Nueva (comprada)",
+      "used": "Usada / segunda",
+      "warehouse": "De bodega"
+    },
     "status": {
       "draft": "Borrador",
       "open": "Abierta",
@@ -135,6 +160,60 @@
       "d61_90": "61–90 días",
       "d90_plus": "90+ días"
     }
+  },
+  "inventory": {
+    "title": "INVENTARIO / BODEGA",
+    "registered": "piezas en bodega",
+    "lowStock": "bajo stock",
+    "addItem": "Agregar pieza",
+    "newItem": "Nueva pieza",
+    "editItem": "Editar pieza",
+    "empty": "Aún no hay piezas en bodega.",
+    "searchPlaceholder": "Buscar por nombre, # parte, ubicación...",
+    "name": "Nombre de la pieza",
+    "namePlaceholder": "Ej: Filtro de aceite",
+    "partNumber": "# de parte",
+    "location": "Ubicación",
+    "locationPlaceholder": "Ej: Estante A3",
+    "unitCost": "Costo",
+    "salePrice": "Precio de venta",
+    "price": "Precio",
+    "cost": "Costo",
+    "initialStock": "Stock inicial",
+    "stock": "Stock",
+    "reorderLevel": "Nivel de reorden",
+    "reorderHint": "Avisa cuando el stock baje a este nivel (0 = sin alerta).",
+    "description": "Descripción",
+    "errName": "El nombre de la pieza es requerido.",
+    "deleteConfirm": "¿Eliminar la pieza \"{name}\"?",
+    "deleteError": "No se pudo eliminar la pieza.",
+    "stockMove": "Movimiento de stock",
+    "moveType": "Tipo de movimiento",
+    "quantity": "Cantidad",
+    "reference": "Referencia",
+    "referenceHint": "# factura proveedor, nota...",
+    "adjustHint": "Usa negativo para restar (ej: -2).",
+    "mv": {
+      "purchase": "Compra / Reabastecer (entra)",
+      "adjustment": "Ajuste (+/-)",
+      "return": "Devolución (entra)"
+    }
+  },
+  "expenses": {
+    "title": "GASTOS DE PIEZAS",
+    "subtitle": "Compras de piezas y ganancia en piezas por período",
+    "empty": "Sin datos para el período seleccionado.",
+    "purchasesInventory": "Compras a bodega",
+    "purchasesOneOff": "Piezas one-off (por trabajo)",
+    "totalPurchases": "Total compras",
+    "partsCharged": "Piezas cobradas",
+    "partsCost": "Costo de piezas",
+    "partsProfit": "Ganancia en piezas",
+    "byInvoice": "Detalle por factura",
+    "noParts": "No hay piezas facturadas en el período.",
+    "charged": "Cobrado",
+    "cost": "Costo",
+    "profit": "Ganancia"
   },
   "workReports": {
     "title": "REPORTES DE TRABAJO",

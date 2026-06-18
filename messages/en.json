@@ -14,6 +14,8 @@
     "clients": "Clients",
     "invoices": "Invoicing",
     "receivables": "Accounts Receivable",
+    "inventory": "Inventory / Warehouse",
+    "expenses": "Parts Expenses",
     "settings": "Billing Settings"
   },
   "settings": {
@@ -94,6 +96,29 @@
     "deleteConfirm": "Delete invoice {n}? This cannot be undone.",
     "deleteError": "Could not delete the invoice.",
     "filterAll": "All",
+    "lines": {
+      "title": "Line items (labor / parts)",
+      "labor": "Labor",
+      "part": "Part",
+      "empty": "No line items. Add labor or parts, or use the manual subtotal below.",
+      "oneoff": "— New / used part (not from warehouse) —",
+      "inStock": "in stock",
+      "description": "Description",
+      "qty": "Qty",
+      "unitPrice": "Unit price",
+      "cost": "Cost",
+      "taxable": "Taxable"
+    },
+    "lineType": {
+      "labor": "Labor",
+      "part": "Part",
+      "fee": "Fee"
+    },
+    "source": {
+      "new_purchased": "New (purchased)",
+      "used": "Used / second-hand",
+      "warehouse": "From warehouse"
+    },
     "status": {
       "draft": "Draft",
       "open": "Open",
@@ -135,6 +160,60 @@
       "d61_90": "61–90 days",
       "d90_plus": "90+ days"
     }
+  },
+  "inventory": {
+    "title": "INVENTORY / WAREHOUSE",
+    "registered": "parts in stock",
+    "lowStock": "low stock",
+    "addItem": "Add part",
+    "newItem": "New part",
+    "editItem": "Edit part",
+    "empty": "No parts in the warehouse yet.",
+    "searchPlaceholder": "Search by name, part #, location...",
+    "name": "Part name",
+    "namePlaceholder": "e.g. Oil filter",
+    "partNumber": "Part #",
+    "location": "Location",
+    "locationPlaceholder": "e.g. Shelf A3",
+    "unitCost": "Cost",
+    "salePrice": "Sale price",
+    "price": "Price",
+    "cost": "Cost",
+    "initialStock": "Initial stock",
+    "stock": "Stock",
+    "reorderLevel": "Reorder level",
+    "reorderHint": "Alerts when stock drops to this level (0 = no alert).",
+    "description": "Description",
+    "errName": "Part name is required.",
+    "deleteConfirm": "Delete part \"{name}\"?",
+    "deleteError": "Could not delete the part.",
+    "stockMove": "Stock movement",
+    "moveType": "Movement type",
+    "quantity": "Quantity",
+    "reference": "Reference",
+    "referenceHint": "supplier invoice #, note...",
+    "adjustHint": "Use negative to subtract (e.g. -2).",
+    "mv": {
+      "purchase": "Purchase / Restock (in)",
+      "adjustment": "Adjustment (+/-)",
+      "return": "Return (in)"
+    }
+  },
+  "expenses": {
+    "title": "PARTS EXPENSES",
+    "subtitle": "Parts purchases and parts profit by period",
+    "empty": "No data for the selected period.",
+    "purchasesInventory": "Warehouse purchases",
+    "purchasesOneOff": "One-off parts (per job)",
+    "totalPurchases": "Total purchases",
+    "partsCharged": "Parts charged",
+    "partsCost": "Parts cost",
+    "partsProfit": "Parts profit",
+    "byInvoice": "Detail by invoice",
+    "noParts": "No parts billed in the period.",
+    "charged": "Charged",
+    "cost": "Cost",
+    "profit": "Profit"
   },
   "workReports": {
     "title": "WORK REPORTS",

@@ -28,6 +28,27 @@ interface Invoice {
 
 interface ClientOpt { id: string; name: string }
 interface ShopOpt { id: string; name: string }
+interface InvItem { id: string; name: string; part_number: string | null; sale_price: number; unit_cost: number; quantity_on_hand: number }
+
+type LineType = 'labor' | 'part' | 'fee';
+type PartSource = 'new_purchased' | 'used' | 'warehouse';
+interface Line {
+  id: string;
+  line_type: LineType;
+  description: string;
+  qty: string;
+  unit_price: string;
+  cost: string;
+  part_source: PartSource;
+  inventory_item_id: string;
+  taxable: boolean;
+}
+const PART_SOURCES: PartSource[] = ['new_purchased', 'used', 'warehouse'];
+let lineSeq = 0;
+const newLine = (type: LineType = 'part'): Line => ({
+  id: `l${++lineSeq}`, line_type: type, description: '', qty: '1', unit_price: '', cost: '',
+  part_source: type === 'part' ? 'new_purchased' : 'new_purchased', inventory_item_id: '', taxable: type === 'part',
+});
 
 const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'check', 'card', 'deposit', 'credit'];
 const RECEIPT_METHODS: ReceiptMethod[] = ['cash', 'check', 'card', 'deposit'];
@@ -51,6 +72,7 @@ export default function FacturacionPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [clients, setClients] = useState<ClientOpt[]>([]);
   const [shops, setShops] = useState<ShopOpt[]>([]);
+  const [invItems, setInvItems] = useState<InvItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -62,6 +84,7 @@ export default function FacturacionPage() {
     due_date: '', payment_method: 'cash' as PaymentMethod,
     subtotal: '', tax_amount: '', discount: '', description: '', mark_paid: true,
   });
+  const [lines, setLines] = useState<Line[]>([]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -85,10 +108,27 @@ export default function FacturacionPage() {
     (async () => {
       try { const r = await fetch('/api/clientes'); const j = await r.json(); setClients((j.clients ?? []).map((c: any) => ({ id: c.id, name: c.name }))); } catch {}
       try { const r = await fetch('/api/shops'); if (r.ok) { const j = await r.json(); setShops((j.shops ?? []).map((s: any) => ({ id: s.id, name: s.name }))); } } catch {}
+      try { const r = await fetch('/api/inventario'); if (r.ok) { const j = await r.json(); setInvItems((j.items ?? []) as InvItem[]); } } catch {}
     })();
   }, []);
 
-  const subtotalN = parseFloat(form.subtotal) || 0;
+  // ─── Renglones (mano de obra / piezas) ───
+  const lineAmount = (l: Line) => (parseFloat(l.qty) || 0) * (parseFloat(l.unit_price) || 0);
+  function addLine(type: LineType) { setLines(prev => [...prev, newLine(type)]); }
+  function removeLine(id: string) { setLines(prev => prev.filter(l => l.id !== id)); }
+  function updateLine(id: string, patch: Partial<Line>) { setLines(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l)); }
+  function pickInventory(id: string, invId: string) {
+    const inv = invItems.find(i => i.id === invId);
+    if (!inv) { updateLine(id, { inventory_item_id: '', part_source: 'new_purchased' }); return; }
+    updateLine(id, {
+      inventory_item_id: invId, part_source: 'warehouse',
+      description: inv.name, cost: String(inv.unit_cost),
+      unit_price: String(inv.sale_price || ''), taxable: true,
+    });
+  }
+
+  const linesSubtotal = Math.round(lines.reduce((s, l) => s + lineAmount(l), 0) * 100) / 100;
+  const subtotalN = lines.length ? linesSubtotal : (parseFloat(form.subtotal) || 0);
   const taxN = parseFloat(form.tax_amount) || 0;
   const discountN = parseFloat(form.discount) || 0;
   const totalN = Math.max(0, subtotalN + taxN - discountN);
@@ -110,12 +150,23 @@ export default function FacturacionPage() {
         subtotal: subtotalN, tax_amount: taxN, discount: discountN,
         description: form.description,
         mark_paid: !isCredit && form.mark_paid,
+        items: lines.map(l => ({
+          line_type: l.line_type,
+          description: l.description,
+          qty: parseFloat(l.qty) || 0,
+          unit_price: parseFloat(l.unit_price) || 0,
+          cost: l.line_type === 'part' ? (parseFloat(l.cost) || 0) : 0,
+          part_source: l.line_type === 'part' ? l.part_source : null,
+          inventory_item_id: l.line_type === 'part' && l.part_source === 'warehouse' ? (l.inventory_item_id || null) : null,
+          taxable: l.taxable,
+        })),
       }),
     });
     const j = await res.json();
     if (!res.ok) { setFormError(j.error ?? 'Error'); setSaving(false); return; }
     setSaving(false); setShowForm(false);
     setForm({ client_id: '', shop_id: '', issue_date: new Date().toISOString().slice(0, 10), due_date: '', payment_method: 'cash', subtotal: '', tax_amount: '', discount: '', description: '', mark_paid: true });
+    setLines([]);
     load();
   }
 
@@ -197,9 +248,80 @@ export default function FacturacionPage() {
                 </select>
                 {isCredit && <p className="text-amber-400/80 text-xs mt-1">{t('invoices.creditHint')}</p>}
               </div>
+              {/* Renglones (mano de obra / piezas) */}
+              <div className="md:col-span-2 bg-slate-800/40 border border-white/5 rounded-xl p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-slate-400 text-sm">{t('invoices.lines.title')}</label>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => addLine('labor')} className="text-sky-400 hover:text-sky-300 text-xs border border-sky-500/20 rounded px-2 py-1 transition">+ {t('invoices.lines.labor')}</button>
+                    <button type="button" onClick={() => addLine('part')} className="text-amber-400 hover:text-amber-300 text-xs border border-amber-500/20 rounded px-2 py-1 transition">+ {t('invoices.lines.part')}</button>
+                  </div>
+                </div>
+                {lines.length === 0 ? (
+                  <p className="text-slate-600 text-xs">{t('invoices.lines.empty')}</p>
+                ) : (
+                  <div className="space-y-2">
+                    {lines.map(l => (
+                      <div key={l.id} className="bg-slate-900/50 border border-white/5 rounded-lg p-2.5 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${l.line_type === 'part' ? 'bg-amber-500/15 text-amber-300' : 'bg-sky-500/15 text-sky-300'}`}>{t(`invoices.lineType.${l.line_type}`)}</span>
+                          {l.line_type === 'part' && (
+                            <select value={l.inventory_item_id} onChange={e => pickInventory(l.id, e.target.value)}
+                              className="flex-1 bg-slate-800 border border-white/10 rounded px-2 py-1 text-slate-100 text-xs">
+                              <option value="">{t('invoices.lines.oneoff')}</option>
+                              {invItems.map(i => <option key={i.id} value={i.id}>{i.name}{i.part_number ? ` (#${i.part_number})` : ''} · {i.quantity_on_hand} {t('invoices.lines.inStock')}</option>)}
+                            </select>
+                          )}
+                          <button type="button" onClick={() => removeLine(l.id)} className="text-slate-600 hover:text-red-400 p-1 flex-shrink-0">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </div>
+                        <input value={l.description} onChange={e => updateLine(l.id, { description: e.target.value })} placeholder={t('invoices.lines.description')}
+                          className="w-full bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-slate-100 text-sm" />
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          <div>
+                            <label className="block text-slate-600 text-[10px] mb-0.5">{t('invoices.lines.qty')}</label>
+                            <input type="number" min="0" step="0.01" value={l.qty} onChange={e => updateLine(l.id, { qty: e.target.value })} className="w-full bg-slate-800 border border-white/10 rounded px-2 py-1 text-slate-100 text-sm" />
+                          </div>
+                          <div>
+                            <label className="block text-slate-600 text-[10px] mb-0.5">{t('invoices.lines.unitPrice')}</label>
+                            <input type="number" min="0" step="0.01" value={l.unit_price} onChange={e => updateLine(l.id, { unit_price: e.target.value })} className="w-full bg-slate-800 border border-white/10 rounded px-2 py-1 text-slate-100 text-sm" />
+                          </div>
+                          {l.line_type === 'part' && (
+                            <div>
+                              <label className="block text-slate-600 text-[10px] mb-0.5">{t('invoices.lines.cost')}</label>
+                              <input type="number" min="0" step="0.01" value={l.cost} disabled={l.part_source === 'warehouse'} onChange={e => updateLine(l.id, { cost: e.target.value })} className="w-full bg-slate-800 border border-white/10 rounded px-2 py-1 text-slate-100 text-sm disabled:opacity-50" />
+                            </div>
+                          )}
+                          <div className="flex items-end justify-end">
+                            <span className="text-emerald-300 text-sm font-semibold">{money(lineAmount(l))}</span>
+                          </div>
+                        </div>
+                        {l.line_type === 'part' && l.part_source !== 'warehouse' && (
+                          <div className="flex items-center gap-3">
+                            <select value={l.part_source} onChange={e => updateLine(l.id, { part_source: e.target.value as PartSource })} className="bg-slate-800 border border-white/10 rounded px-2 py-1 text-slate-100 text-xs">
+                              <option value="new_purchased">{t('invoices.source.new_purchased')}</option>
+                              <option value="used">{t('invoices.source.used')}</option>
+                            </select>
+                            <label className="flex items-center gap-1.5 text-xs text-slate-400">
+                              <input type="checkbox" checked={l.taxable} onChange={e => updateLine(l.id, { taxable: e.target.checked })} className="accent-amber-500" />
+                              {t('invoices.lines.taxable')}
+                            </label>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.subtotal')} ($)</label>
-                <input type="number" min="0" step="0.01" value={form.subtotal} onChange={e => setForm(f => ({ ...f, subtotal: e.target.value }))} className={inputCls} />
+                {lines.length ? (
+                  <div className={inputCls + ' bg-slate-800/60'}>{money(subtotalN)}</div>
+                ) : (
+                  <input type="number" min="0" step="0.01" value={form.subtotal} onChange={e => setForm(f => ({ ...f, subtotal: e.target.value }))} className={inputCls} />
+                )}
               </div>
               <div>
                 <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.tax')} ($)</label>

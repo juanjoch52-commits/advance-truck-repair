@@ -44,7 +44,30 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     const payment_method = PAYMENT_METHODS.includes(body.payment_method) ? body.payment_method : 'cash';
-    const subtotal = round2(body.subtotal);
+
+    // Renglones opcionales (mano de obra / piezas / cargos). Si vienen, el
+    // subtotal se calcula a partir de ellos (si no, se usa el subtotal plano).
+    const rawItems: any[] = Array.isArray(body.items) ? body.items : [];
+    const items = rawItems.map((it: any, idx: number) => {
+      const qty = round2(it.qty ?? 1) || 1;
+      const unit_price = round2(it.unit_price);
+      return {
+        line_type: ['labor', 'part', 'fee'].includes(it.line_type) ? it.line_type : 'part',
+        description: String(it.description ?? '').trim() || null,
+        qty,
+        unit_price,
+        amount: round2(qty * unit_price),
+        cost: round2(it.cost),
+        part_source: ['new_purchased', 'used', 'warehouse'].includes(it.part_source) ? it.part_source : null,
+        inventory_item_id: it.inventory_item_id || null,
+        taxable: Boolean(it.taxable),
+        sort_order: idx,
+      };
+    });
+
+    const subtotal = items.length
+      ? round2(items.reduce((s, it) => s + it.amount, 0))
+      : round2(body.subtotal);
     const tax_amount = round2(body.tax_amount);
     const discount = round2(body.discount);
     const total = round2(subtotal + tax_amount - discount);
@@ -96,6 +119,33 @@ export async function POST(request: Request) {
         paid_at: payload.issue_date,
         created_by: (session as any)?.id ?? null,
       });
+    }
+
+    // Renglones + descuento de bodega para piezas que salen del inventario.
+    if (items.length) {
+      const rows = items.map(it => ({ ...it, invoice_id: invoice.id }));
+      const { error: itErr } = await supabase.from('invoice_items').insert(rows);
+      if (itErr) return NextResponse.json({ error: sanitizeDbError('facturas.POST.items', itErr.message) }, { status: 500 });
+
+      for (const it of items) {
+        if (it.line_type === 'part' && it.inventory_item_id && it.qty > 0) {
+          // Salida de bodega: movimiento 'sale' (negativo) + baja de stock.
+          await supabase.from('inventory_movements').insert({
+            inventory_item_id: it.inventory_item_id,
+            movement_type: 'sale',
+            quantity: -it.qty,
+            unit_cost: it.cost,
+            invoice_id: invoice.id,
+            created_by: (session as any)?.id ?? null,
+          });
+          const { data: invItem } = await supabase.from('inventory_items').select('quantity_on_hand').eq('id', it.inventory_item_id).maybeSingle();
+          if (invItem) {
+            await supabase.from('inventory_items')
+              .update({ quantity_on_hand: round2(Number(invItem.quantity_on_hand) - it.qty) })
+              .eq('id', it.inventory_item_id);
+          }
+        }
+      }
     }
 
     return NextResponse.json({ ok: true, invoice }, { status: 201 });
