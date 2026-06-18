@@ -3,7 +3,7 @@ import { requireRole } from '@/lib/apiAuth';
 
 // Columnas expuestas de shops (datos de facturación por taller).
 export const SHOP_COLS =
-  'id,name,legal_name,ein,sales_tax_certificate,county,billing_address_line,city,state,zip,phone,email,tax_rate,invoice_prefix,next_invoice_number,notes,is_active,sort_order,created_at,updated_at';
+  'id,name,legal_name,ein,sales_tax_certificate,county,billing_address_line,city,state,zip,phone,email,tax_rate,invoice_prefix,next_invoice_number,logo_url,notes,is_active,sort_order,created_at,updated_at';
 
 // Datos fiscales/facturación: solo owner / super_user (más restringido que el
 // CRM de clientes, que permite admin). Tabla con RLS deny-all → service_role.

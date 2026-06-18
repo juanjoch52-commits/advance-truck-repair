@@ -26,6 +26,10 @@
     "editShop": "Editar taller",
     "empty": "Aún no hay talleres configurados. Agrega uno para empezar.",
     "optional": "Opcional",
+    "logo": "Logo del taller",
+    "noLogo": "Sin logo",
+    "uploadLogo": "Subir logo",
+    "logoHint": "PNG, JPG o WEBP, máx 2 MB. Aparece en la factura. (Edita el taller para subirlo.)",
     "legalNote": "En EE.UU. no existe un folio fiscal validado por el gobierno. Los \"números legales\" de una factura son el EIN (Federal Tax ID del IRS), el Sales Tax Certificate (Florida Dept. of Revenue, si cobras impuesto) y el número correlativo de factura que define el propio taller. Captura aquí los datos de cada negocio.",
     "section": {
       "identity": "Identificación del taller",

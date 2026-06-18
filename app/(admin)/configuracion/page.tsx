@@ -19,6 +19,7 @@ interface Shop {
   tax_rate: number;
   invoice_prefix: string | null;
   next_invoice_number: number;
+  logo_url: string | null;
   notes: string | null;
   is_active: boolean;
 }
@@ -42,9 +43,9 @@ interface ShopFormState {
 }
 
 const BLANK_FORM: ShopFormState = {
-  name: '', legalName: '', ein: '', salesTaxCert: '', county: '',
+  name: '', legalName: '', ein: '', salesTaxCert: '', county: 'Orange',
   billingAddress: '', city: '', state: 'FL', zip: '', phone: '', email: '',
-  taxRate: '0', invoicePrefix: '', nextInvoiceNumber: '1', notes: '',
+  taxRate: '6.5', invoicePrefix: '', nextInvoiceNumber: '1', notes: '',
 };
 
 const inputCls =
@@ -197,6 +198,21 @@ export default function ConfiguracionPage() {
   const [editForm, setEditForm] = useState<ShopFormState>(BLANK_FORM);
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
+  const [logoUploading, setLogoUploading] = useState(false);
+
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !editing) return;
+    setLogoUploading(true);
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch(`/api/shops/${editing.id}/logo`, { method: 'POST', body: fd });
+    const j = await res.json();
+    setLogoUploading(false);
+    if (!res.ok) { alert(j.error ?? 'Error'); return; }
+    setEditing({ ...editing, logo_url: j.logo_url });
+    load();
+  }
 
   async function load() {
     try {
@@ -311,6 +327,21 @@ export default function ConfiguracionPage() {
               <button onClick={closeEdit} className="text-slate-500 hover:text-slate-300 p-1.5 rounded-lg hover:bg-slate-700 transition">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
+            </div>
+            <div className="mb-5 flex items-center gap-4">
+              <div className="w-20 h-20 rounded-lg bg-slate-800 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
+                {editing.logo_url
+                  ? <img src={editing.logo_url} alt="logo" className="object-contain w-full h-full" />
+                  : <span className="text-slate-600 text-xs text-center px-1">{t('settings.noLogo')}</span>}
+              </div>
+              <div>
+                <label className="block text-slate-400 text-sm mb-1.5">{t('settings.logo')}</label>
+                <label className="inline-block cursor-pointer bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm py-2 px-4 rounded-lg transition">
+                  {logoUploading ? t('common.saving') : t('settings.uploadLogo')}
+                  <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleLogoUpload} disabled={logoUploading} />
+                </label>
+                <p className="text-slate-600 text-xs mt-1">{t('settings.logoHint')}</p>
+              </div>
             </div>
             <ShopFormBody form={editForm} onChange={p => setEditForm(prev => ({ ...prev, ...p }))}
               saving={editSaving} error={editError} onSubmit={handleEditSave} onCancel={closeEdit} isEdit={true} t={t} />

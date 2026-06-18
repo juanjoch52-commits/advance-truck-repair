@@ -13,14 +13,24 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     if (error) return NextResponse.json({ error: sanitizeDbError('facturas/[id].GET', error.message) }, { status: 500 });
     if (!invoice) return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
 
-    const [{ data: payments }, clientRes] = await Promise.all([
+    const [{ data: payments }, { data: items }, clientRes, shopRes] = await Promise.all([
       supabase.from('invoice_payments').select('id,amount,method,reference,paid_at,notes,created_at').eq('invoice_id', id).order('paid_at', { ascending: false }),
+      supabase.from('invoice_items').select('id,line_type,description,qty,unit_price,amount,cost,part_source,taxable,sort_order').eq('invoice_id', id).order('sort_order', { ascending: true }),
       invoice.client_id
-        ? supabase.from('clients').select('id,name,billing_address_line,city,state,zip').eq('id', invoice.client_id).maybeSingle()
+        ? supabase.from('clients').select('id,name,billing_address_line,city,state,zip,phone,email').eq('id', invoice.client_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+      invoice.shop_id
+        ? supabase.from('shops').select('id,name,legal_name,ein,sales_tax_certificate,billing_address_line,city,state,zip,phone,email,logo_url').eq('id', invoice.shop_id).maybeSingle()
         : Promise.resolve({ data: null }),
     ]);
 
-    return NextResponse.json({ invoice, payments: payments ?? [], client: (clientRes as any).data ?? null });
+    return NextResponse.json({
+      invoice,
+      payments: payments ?? [],
+      items: items ?? [],
+      client: (clientRes as any).data ?? null,
+      shop: (shopRes as any).data ?? null,
+    });
   } catch (err) {
     const authResp = authErrorResponse(err);
     if (authResp) return authResp;

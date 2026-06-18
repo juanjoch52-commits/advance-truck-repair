@@ -26,6 +26,10 @@
     "editShop": "Edit shop",
     "empty": "No shops configured yet. Add one to get started.",
     "optional": "Optional",
+    "logo": "Shop logo",
+    "noLogo": "No logo",
+    "uploadLogo": "Upload logo",
+    "logoHint": "PNG, JPG or WEBP, max 2 MB. Shows on the invoice. (Edit the shop to upload it.)",
     "legalNote": "In the U.S. there is no government-validated tax folio. The \"legal numbers\" on an invoice are the EIN (Federal Tax ID from the IRS), the Sales Tax Certificate (Florida Dept. of Revenue, if you collect tax), and the sequential invoice number set by the shop itself. Enter each business's details here.",
     "section": {
       "identity": "Shop identity",
