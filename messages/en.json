@@ -16,7 +16,8 @@
     "receivables": "Accounts Receivable",
     "inventory": "Inventory / Warehouse",
     "expenses": "Parts Expenses",
-    "settings": "Billing Settings"
+    "settings": "Billing Settings",
+    "attendance": "Attendance"
   },
   "settings": {
     "title": "BILLING SETTINGS",
@@ -859,6 +860,35 @@
       "noLocation": "No district",
       "selectTruck": "Select truck",
       "deleteConfirm": "Delete truck \"{name}\"?"
+    }
+  },
+  "attendance": {
+    "title": "ATTENDANCE",
+    "subtitle": "Record absences; payroll pays only the days worked.",
+    "dayUnit": "day",
+    "workDays": "Work days",
+    "editWorkDays": "work days",
+    "daysPresent": "{p}/{t} days",
+    "rest": "Off",
+    "presentShort": "Present",
+    "absentShort": "Absent",
+    "absencesTitle": "Absences",
+    "reasonPlaceholder": "Reason for absence",
+    "reasonRequired": "needs reason",
+    "reasonRequired_note": "needs reason",
+    "tapHint": "Tap a work day to mark absent; everything else counts as present.",
+    "markAllPresent": "Mark week present",
+    "noStaff": "No salaried staff (fixed weekly).",
+    "daysWorkedShort": "days wkd",
+    "absencesShort": "absences",
+    "dow": {
+      "sun": "Sun",
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat"
     }
   }
 }

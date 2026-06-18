@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { fmtDate } from '@/lib/fmt';
+import { normalizeWorkDays, computeWeekPay } from '@/lib/attendance';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -13,6 +14,7 @@ interface AdminEmployee {
   payment_type: string;
   weekly_salary: number | null;
   hourly_rate: number | null;
+  work_days: number[] | null;
 }
 
 interface AdminEntry {
@@ -56,6 +58,7 @@ export default function NominaAdminPage() {
 
   const [admins, setAdmins] = useState<AdminEmployee[]>([]);
   const [entries, setEntries] = useState<AdminEntry[]>([]);
+  const [absencesByEmp, setAbsencesByEmp] = useState<Record<string, number>>({});
   const [deductionsByEmp, setDeductionsByEmp] = useState<Record<string, DeductionItem[]>>({});
   const [loading, setLoading] = useState(true);
   const [allowed, setAllowed] = useState<boolean | null>(null);
@@ -101,11 +104,22 @@ export default function NominaAdminPage() {
 
     const { data: empData } = await (supabase as any)
       .from('employees')
-      .select('id, full_name, payment_type, weekly_salary, hourly_rate')
+      .select('id, full_name, payment_type, weekly_salary, hourly_rate, work_days')
       .neq('payment_type', 'mechanic_commission')
       .order('full_name');
     const adminList = (empData ?? []) as AdminEmployee[];
     setAdmins(adminList);
+
+    // Faltas de la semana (status='absent') por empleado → prorratea el sueldo fijo.
+    const { data: attData } = await (supabase as any)
+      .from('attendance')
+      .select('employee_id, status')
+      .eq('status', 'absent')
+      .gte('work_date', weekStart)
+      .lte('work_date', weekEnd);
+    const absMap: Record<string, number> = {};
+    for (const a of attData ?? []) absMap[a.employee_id] = (absMap[a.employee_id] ?? 0) + 1;
+    setAbsencesByEmp(absMap);
 
     const { data: entryData } = await (supabase as any)
       .from('earned_entries')
@@ -144,6 +158,15 @@ export default function NominaAdminPage() {
     return 'admin_manual';
   }
 
+  // Sueldo fijo prorrateado por asistencia: salario − (faltas × salario/díasLaborales).
+  function fixedPayForEmp(emp: AdminEmployee) {
+    const workDays = normalizeWorkDays(emp.work_days).length;
+    const absent = absencesByEmp[emp.id] ?? 0;
+    const present = Math.max(0, workDays - absent);
+    const amount = computeWeekPay(Number(emp.weekly_salary ?? 0), workDays, absent);
+    return { amount, present, workDays, absent };
+  }
+
   function entriesForEmp(empId: string) {
     return entries.filter(e => e.employee_id === empId);
   }
@@ -168,17 +191,20 @@ export default function NominaAdminPage() {
     if (fixedPending.length === 0) return;
     setGeneratingAll(true);
 
-    const rows = fixedPending.map(emp => ({
-      employee_id: emp.id,
-      amount: parseFloat(Number(emp.weekly_salary).toFixed(2)),
-      hours_worked: null,
-      work_date: weekEnd,
-      week_start: weekStart,
-      week_end: weekEnd,
-      description: null,
-      entry_type: 'admin_fixed',
-      mechanic_role: 'admin',
-    }));
+    const rows = fixedPending.map(emp => {
+      const { amount, present, workDays, absent } = fixedPayForEmp(emp);
+      return {
+        employee_id: emp.id,
+        amount,
+        hours_worked: null,
+        work_date: weekEnd,
+        week_start: weekStart,
+        week_end: weekEnd,
+        description: absent > 0 ? `${present}/${workDays} ${t('attendance.daysWorkedShort')}` : null,
+        entry_type: 'admin_fixed',
+        mechanic_role: 'admin',
+      };
+    });
 
     const { error } = await (supabase as any).from('earned_entries').insert(rows);
     if (error) alert(error.message);
@@ -192,7 +218,7 @@ export default function NominaAdminPage() {
     let hours: number | null = null;
 
     if (emp.payment_type === 'fixed_weekly') {
-      amount = Number(emp.weekly_salary ?? 0);
+      amount = fixedPayForEmp(emp).amount;
     } else if (emp.payment_type === 'hourly') {
       hours = Number(f.hours || 0);
       amount = hours * Number(emp.hourly_rate ?? 0);
@@ -602,8 +628,13 @@ export default function NominaAdminPage() {
                     <>
                       <div className="flex-1 min-w-32">
                         <label className="block text-slate-500 text-xs mb-1">Monto</label>
-                        <input type="text" disabled value={fmtMoney(Number(emp.weekly_salary ?? 0))}
+                        <input type="text" disabled value={fmtMoney(fixedPayForEmp(emp).amount)}
                           className="w-full bg-slate-800/40 border border-white/5 rounded-lg px-3 py-2 text-slate-400 text-sm" />
+                        {fixedPayForEmp(emp).absent > 0 && (
+                          <p className="text-amber-400/80 text-[11px] mt-1">
+                            {fixedPayForEmp(emp).present}/{fixedPayForEmp(emp).workDays} {t('attendance.daysWorkedShort')} · {fixedPayForEmp(emp).absent} {t('attendance.absencesShort')}
+                          </p>
+                        )}
                       </div>
                       <div className="flex-1 min-w-40">
                         <label className="block text-slate-500 text-xs mb-1">{t('adminPayroll.note')} (opcional)</label>

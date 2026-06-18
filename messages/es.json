@@ -16,7 +16,8 @@
     "receivables": "Cuentas por Cobrar",
     "inventory": "Inventario / Bodega",
     "expenses": "Gastos de Piezas",
-    "settings": "Datos de Facturación"
+    "settings": "Datos de Facturación",
+    "attendance": "Asistencia"
   },
   "settings": {
     "title": "DATOS DE FACTURACIÓN",
@@ -859,6 +860,35 @@
       "noLocation": "Sin distrito",
       "selectTruck": "Seleccionar camión",
       "deleteConfirm": "¿Eliminar el camión \"{name}\"?"
+    }
+  },
+  "attendance": {
+    "title": "ASISTENCIA",
+    "subtitle": "Registra faltas; la planilla paga solo los días trabajados.",
+    "dayUnit": "día",
+    "workDays": "Días laborales",
+    "editWorkDays": "días laborales",
+    "daysPresent": "{p}/{t} días",
+    "rest": "Descanso",
+    "presentShort": "Presente",
+    "absentShort": "Falta",
+    "absencesTitle": "Faltas",
+    "reasonPlaceholder": "Razón de la falta",
+    "reasonRequired": "falta razón",
+    "reasonRequired_note": "falta razón",
+    "tapHint": "Toca un día laboral para marcar falta; lo demás cuenta como presente.",
+    "markAllPresent": "Marcar semana presente",
+    "noStaff": "No hay empleados en planilla (sueldo fijo semanal).",
+    "daysWorkedShort": "días trab.",
+    "absencesShort": "faltas",
+    "dow": {
+      "sun": "Dom",
+      "mon": "Lun",
+      "tue": "Mar",
+      "wed": "Mié",
+      "thu": "Jue",
+      "fri": "Vie",
+      "sat": "Sáb"
     }
   }
 }
