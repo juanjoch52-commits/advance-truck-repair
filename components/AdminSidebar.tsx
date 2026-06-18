@@ -172,7 +172,7 @@ const NAV_ITEMS = [
 ];
 
 // Items only visible to owner / super-admin / super-user
-const PRIVILEGED_ONLY_HREFS = new Set<string>(['/nomina-admin', '/asistencia', '/deducciones', '/configuracion']);
+const PRIVILEGED_ONLY_HREFS = new Set<string>(['/nomina-admin', '/deducciones', '/configuracion']);
 
 export default function AdminSidebar() {
   const pathname = usePathname();

@@ -44,7 +44,9 @@ export default function AsistenciaPage() {
   const [employees, setEmployees] = useState<SalariedEmployee[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRow[]>([]);
   const [loading, setLoading] = useState(true);
+  // allowed: puede entrar (admin + owner/super). privileged: ve los montos de salario (solo owner/super).
   const [allowed, setAllowed] = useState<boolean | null>(null);
+  const [privileged, setPrivileged] = useState<boolean | null>(null);
   const [busyCell, setBusyCell] = useState<string | null>(null);
   const [editDaysFor, setEditDaysFor] = useState<string | null>(null);
 
@@ -57,15 +59,23 @@ export default function AsistenciaPage() {
         const res = await fetch('/api/auth/me');
         if (res.ok) { const j = await res.json(); role = (j?.user?.role ?? '').toLowerCase(); }
       } catch {}
-      setAllowed(role === 'super_user' || role === 'super_admin' || role === 'owner');
+      const priv = role === 'super_user' || role === 'super_admin' || role === 'owner';
+      setPrivileged(priv);
+      // La administración registra asistencia; el salario solo lo ven los privilegiados.
+      setAllowed(priv || role === 'admin');
     })();
   }, []);
 
   const load = useCallback(async () => {
+    if (privileged === null) return; // esperar a saber el rol (para no pedir el salario si es admin)
     setLoading(true);
+    // A la administración NO se le envía weekly_salary (no solo se oculta en UI).
+    const cols = privileged
+      ? 'id, full_name, weekly_salary, work_days'
+      : 'id, full_name, work_days';
     const { data: empData } = await (supabase as any)
       .from('employees')
-      .select('id, full_name, weekly_salary, work_days')
+      .select(cols)
       .eq('payment_type', 'fixed_weekly')
       .order('full_name');
     setEmployees((empData ?? []) as SalariedEmployee[]);
@@ -77,7 +87,7 @@ export default function AsistenciaPage() {
       .lte('work_date', weekEnd);
     setAttendance((attData ?? []) as AttendanceRow[]);
     setLoading(false);
-  }, [weekStart, weekEnd]);
+  }, [weekStart, weekEnd, privileged]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -192,15 +202,23 @@ export default function AsistenciaPage() {
                   <div>
                     <p className="display-font text-slate-200 font-semibold tracking-wide">{emp.full_name}</p>
                     <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-500">
-                      <span>{fmtMoney(weekly)}/sem · {fmtMoney(rate)}/{t('attendance.dayUnit')}</span>
+                      {privileged && <span>{fmtMoney(weekly)}/sem · {fmtMoney(rate)}/{t('attendance.dayUnit')}</span>}
                       <button onClick={() => setEditDaysFor(isEditingDays ? null : emp.id)} className="text-slate-600 hover:text-amber-400 transition underline">
                         {t('attendance.editWorkDays')}
                       </button>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className={`display-font font-bold text-lg ${absentCount > 0 ? 'text-amber-400' : 'text-green-400'}`}>{fmtMoney(pay)}</p>
-                    <p className="text-slate-500 text-xs">{t('attendance.daysPresent').replace('{p}', String(presentCount)).replace('{t}', String(workDays.length))}</p>
+                    {privileged ? (
+                      <>
+                        <p className={`display-font font-bold text-lg ${absentCount > 0 ? 'text-amber-400' : 'text-green-400'}`}>{fmtMoney(pay)}</p>
+                        <p className="text-slate-500 text-xs">{t('attendance.daysPresent').replace('{p}', String(presentCount)).replace('{t}', String(workDays.length))}</p>
+                      </>
+                    ) : (
+                      <p className={`display-font font-bold text-lg ${absentCount > 0 ? 'text-amber-400' : 'text-green-400'}`}>
+                        {t('attendance.daysPresent').replace('{p}', String(presentCount)).replace('{t}', String(workDays.length))}
+                      </p>
+                    )}
                   </div>
                 </div>
 
