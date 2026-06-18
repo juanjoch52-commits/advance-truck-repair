@@ -4,7 +4,8 @@ import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import { useLanguage } from '@/contexts/LanguageContext';
-import ReportForm, { uid, type Employee, type ReportFormData, type ReportTask } from '@/components/reports/ReportForm';
+import ReportForm, { uid, type Employee, type ReportFormData, type ReportTask, type ClientOption } from '@/components/reports/ReportForm';
+import { computePayout } from '@/lib/money';
 
 function getWeekRange(dateStr: string) {
   const date = new Date(dateStr + 'T12:00:00');
@@ -27,6 +28,7 @@ export default function EditarOrdenPage({ params }: { params: Promise<{ id: stri
   const supabase = createClient();
 
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [clients, setClients] = useState<ClientOption[]>([]);
   const [initialData, setInitialData] = useState<ReportFormData | null>(null);
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -70,11 +72,17 @@ export default function EditarOrdenPage({ params }: { params: Promise<{ id: stri
         setEmployees(mechanics.map((e: any) => ({ id: e.id, full_name: e.full_name })));
       });
 
+    // Árbol de clientes para los selects encadenados.
+    fetch('/api/clientes?tree=1')
+      .then(r => r.ok ? r.json() : { clients: [] })
+      .then(j => setClients((j.clients ?? []) as ClientOption[]))
+      .catch(() => setClients([]));
+
     // Load report
     (async () => {
       const { data: header, error: headerErr } = await (supabase as any)
         .from('work_reports')
-        .select('id, external_order_number, truck_number, company, work_date, notes')
+        .select('id, external_order_number, truck_number, company, work_date, notes, client_id, location_id, truck_id')
         .eq('id', reportId)
         .single();
 
@@ -120,6 +128,9 @@ export default function EditarOrdenPage({ params }: { params: Promise<{ id: stri
         workDate: header.work_date,
         notes: header.notes ?? '',
         tasks: tasks.length > 0 ? tasks : [],
+        clientId: header.client_id ?? '',
+        locationId: header.location_id ?? '',
+        truckId: header.truck_id ?? '',
       });
     })();
   }, [reportId]);
@@ -138,6 +149,9 @@ export default function EditarOrdenPage({ params }: { params: Promise<{ id: stri
           company: data.company.trim(),
           work_date: data.workDate,
           notes: data.notes.trim() || null,
+          client_id: data.clientId || null,
+          location_id: data.locationId || null,
+          truck_id: data.truckId || null,
         })
         .eq('id', reportId);
       if (updErr) return { ok: false, error: 'Error al actualizar reporte: ' + updErr.message };
@@ -177,7 +191,7 @@ export default function EditarOrdenPage({ params }: { params: Promise<{ id: stri
 
         for (const m of task.mechanics) {
           const pct = parseFloat(m.commission_percentage);
-          const payout = parseFloat(((amountCharged * pct) / 100).toFixed(2));
+          const payout = computePayout(amountCharged, pct);
 
           const { data: assignment, error: assignErr } = await (supabase as any)
             .from('task_assignments')
@@ -247,6 +261,7 @@ export default function EditarOrdenPage({ params }: { params: Promise<{ id: stri
       reportId={reportId}
       initialData={initialData}
       employees={employees}
+      clients={clients}
       onSubmit={handleSubmit}
       title={t('editReport.title')}
       submitLabel={t('editReport.save')}

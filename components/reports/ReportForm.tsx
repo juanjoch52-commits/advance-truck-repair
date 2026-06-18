@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { computePayout, roundMoney } from '@/lib/money';
 
 export interface Employee {
   id: string;
@@ -28,12 +29,37 @@ export interface ReportFormData {
   workDate: string;
   notes: string;
   tasks: ReportTask[];
+  // CRM (Fase 1): FKs opcionales. company/truckNumber siguen siendo el snapshot
+  // de texto (compatibilidad + walk-ins).
+  clientId: string;
+  locationId: string;
+  truckId: string;
+}
+
+// Árbol de clientes para los selects encadenados Cliente → Distrito → Camión.
+export interface ClientTruckOption {
+  id: string;
+  location_id: string | null;
+  unit_number: string | null;
+  plate: string | null;
+}
+export interface ClientLocationOption {
+  id: string;
+  name: string;
+}
+export interface ClientOption {
+  id: string;
+  name: string;
+  locations: ClientLocationOption[];
+  trucks: ClientTruckOption[];
 }
 
 interface Props {
   mode: 'create' | 'edit';
   initialData: ReportFormData;
   employees: Employee[];
+  /** Árbol de clientes (con distritos y camiones) para los selects encadenados. */
+  clients?: ClientOption[];
   onSubmit: (data: ReportFormData) => Promise<{ ok: boolean; error?: string }>;
   title: string;
   backHref?: string;
@@ -65,6 +91,7 @@ export default function ReportForm({
   mode,
   initialData,
   employees,
+  clients = [],
   onSubmit,
   title,
   backHref = '/ordenes',
@@ -81,6 +108,50 @@ export default function ReportForm({
   const [workDate, setWorkDate] = useState(initialData.workDate);
   const [notes, setNotes] = useState(initialData.notes);
   const [tasks, setTasks] = useState<ReportTask[]>(initialData.tasks);
+
+  // ─── CRM: selects encadenados Cliente → Distrito → Camión ──────────────────
+  const [clientId, setClientId] = useState(initialData.clientId);
+  const [locationId, setLocationId] = useState(initialData.locationId);
+  const [truckId, setTruckId] = useState(initialData.truckId);
+
+  const selectedClient = clients.find(c => c.id === clientId) ?? null;
+  const clientLocations = selectedClient?.locations ?? [];
+  // Camiones del distrito elegido; si no hay distrito, los del cliente sin distrito.
+  const clientTrucks = (selectedClient?.trucks ?? []).filter(tk =>
+    locationId ? tk.location_id === locationId : true
+  );
+
+  function truckLabel(tk: ClientTruckOption) {
+    return [tk.unit_number, tk.plate].filter(Boolean).join(' · ') || '—';
+  }
+
+  function onSelectClient(id: string) {
+    setClientId(id);
+    setLocationId('');
+    setTruckId('');
+    const c = clients.find(x => x.id === id);
+    // Snapshot de texto: nombre del cliente como empresa.
+    setCompany(c ? c.name : '');
+    setTruckNumber('');
+  }
+  function onSelectLocation(id: string) {
+    setLocationId(id);
+    setTruckId('');
+    setTruckNumber('');
+  }
+  function onSelectTruck(id: string) {
+    setTruckId(id);
+    const tk = (selectedClient?.trucks ?? []).find(x => x.id === id);
+    // Snapshot de texto del camión (unidad o placa).
+    if (tk) setTruckNumber(tk.unit_number || tk.plate || '');
+  }
+  function clearClientSelection() {
+    setClientId('');
+    setLocationId('');
+    setTruckId('');
+    setCompany('');
+    setTruckNumber('');
+  }
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -126,17 +197,16 @@ export default function ReportForm({
   function totalCommissionPct(task: ReportTask) {
     return task.mechanics.reduce((s, m) => s + (parseFloat(m.commission_percentage) || 0), 0);
   }
+  // Pago a mecánico redondeado a centavos (mismo cálculo que se guarda en BD).
   function mechanicPayout(amount: string, pct: string) {
-    const a = parseFloat(amount) || 0;
-    const p = parseFloat(pct) || 0;
-    return (a * p) / 100;
+    return computePayout(amount, pct);
   }
   function taskProfit(task: ReportTask) {
     const amount = parseFloat(task.amount_charged_to_client) || 0;
     const totalPayout = task.mechanics.reduce(
       (s, m) => s + mechanicPayout(task.amount_charged_to_client, m.commission_percentage), 0
     );
-    return amount - totalPayout;
+    return roundMoney(amount - totalPayout);
   }
 
   // ─── Validation ───────────────────────────────────────────────────────────
@@ -193,6 +263,9 @@ export default function ReportForm({
       workDate,
       notes,
       tasks,
+      clientId,
+      locationId,
+      truckId,
     });
 
     if (!result.ok) {
@@ -205,11 +278,11 @@ export default function ReportForm({
     setLoading(false);
   }
 
-  const grandTotalCharged = tasks.reduce((s, ttask) => s + (parseFloat(ttask.amount_charged_to_client) || 0), 0);
-  const grandTotalPayout = tasks.reduce((s, task) =>
+  const grandTotalCharged = roundMoney(tasks.reduce((s, ttask) => s + (parseFloat(ttask.amount_charged_to_client) || 0), 0));
+  const grandTotalPayout = roundMoney(tasks.reduce((s, task) =>
     s + task.mechanics.reduce((ms, m) => ms + mechanicPayout(task.amount_charged_to_client, m.commission_percentage), 0), 0
-  );
-  const grandTotalProfit = grandTotalCharged - grandTotalPayout;
+  ));
+  const grandTotalProfit = roundMoney(grandTotalCharged - grandTotalPayout);
 
   const fmt = (n: number) => '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -247,6 +320,51 @@ export default function ReportForm({
           <h2 className="display-font text-slate-300 font-semibold mb-5 tracking-wide text-lg">
             {t('newReport.header.sectionTitle')}
           </h2>
+
+          {/* ─── CRM: Cliente registrado (opcional) → Distrito → Camión ─── */}
+          {clients.length > 0 && (
+            <div className="bg-slate-800/40 border border-white/5 rounded-xl p-4 mb-4">
+              <div className="flex items-center justify-between mb-3">
+                <label className="text-slate-400 text-sm">{t('newReport.client.sectionTitle')}</label>
+                {clientId && (
+                  <button type="button" onClick={clearClientSelection}
+                    className="text-slate-500 hover:text-amber-400 text-xs transition">
+                    {t('newReport.client.clear')}
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-500 text-xs mb-1.5">{t('newReport.client.client')}</label>
+                  <select value={clientId} onChange={e => onSelectClient(e.target.value)}
+                    className="w-full bg-slate-700/60 border border-white/10 rounded-lg px-3 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 text-sm transition">
+                    <option value="">{t('newReport.client.walkin')}</option>
+                    {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-500 text-xs mb-1.5">{t('newReport.client.location')}</label>
+                  <select value={locationId} onChange={e => onSelectLocation(e.target.value)}
+                    disabled={!clientId || clientLocations.length === 0}
+                    className="w-full bg-slate-700/60 border border-white/10 rounded-lg px-3 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 text-sm transition disabled:opacity-40">
+                    <option value="">{t('newReport.client.noLocation')}</option>
+                    {clientLocations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-500 text-xs mb-1.5">{t('newReport.client.truck')}</label>
+                  <select value={truckId} onChange={e => onSelectTruck(e.target.value)}
+                    disabled={!clientId || clientTrucks.length === 0}
+                    className="w-full bg-slate-700/60 border border-white/10 rounded-lg px-3 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 text-sm transition disabled:opacity-40">
+                    <option value="">{t('newReport.client.selectTruck')}</option>
+                    {clientTrucks.map(tk => <option key={tk.id} value={tk.id}>{truckLabel(tk)}</option>)}
+                  </select>
+                </div>
+              </div>
+              <p className="text-slate-600 text-xs mt-2">{t('newReport.client.hint')}</p>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-slate-400 text-sm mb-2">{t('newReport.header.orderNumber')}</label>

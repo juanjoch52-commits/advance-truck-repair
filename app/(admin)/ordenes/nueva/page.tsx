@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import { useLanguage } from '@/contexts/LanguageContext';
-import ReportForm, { newTask, type Employee, type ReportFormData } from '@/components/reports/ReportForm';
+import ReportForm, { newTask, type Employee, type ReportFormData, type ClientOption } from '@/components/reports/ReportForm';
+import { computePayout } from '@/lib/money';
 
 interface CurrentUser {
   id: string;
@@ -33,9 +34,16 @@ export default function NuevaOrdenPage() {
   const supabase = createClient();
 
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [clients, setClients] = useState<ClientOption[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
 
   useEffect(() => {
+    // Árbol de clientes (cliente → distritos → camiones) para los selects.
+    fetch('/api/clientes?tree=1')
+      .then(r => r.ok ? r.json() : { clients: [] })
+      .then(j => setClients((j.clients ?? []) as ClientOption[]))
+      .catch(() => setClients([]));
+
     // Only show mechanics in the dropdown.
     // We accept rows where role='mechanic' OR payment_type='mechanic_commission'
     // (covers legacy rows where payment_type was never set).
@@ -103,6 +111,9 @@ export default function NuevaOrdenPage() {
         company: data.company.trim(),
         work_date: data.workDate,
         notes: data.notes.trim() || null,
+        client_id: data.clientId || null,
+        location_id: data.locationId || null,
+        truck_id: data.truckId || null,
         created_by: currentUser?.id ?? null,
         created_by_name: currentUser?.full_name ?? null,
         created_by_role: currentUser?.role ?? null,
@@ -136,7 +147,7 @@ export default function NuevaOrdenPage() {
 
       for (const m of task.mechanics) {
         const pct = parseFloat(m.commission_percentage);
-        const payout = parseFloat(((amountCharged * pct) / 100).toFixed(2));
+        const payout = computePayout(amountCharged, pct);
 
         const { data: assignment, error: assignErr } = await (supabase as any)
           .from('task_assignments')
@@ -180,6 +191,9 @@ export default function NuevaOrdenPage() {
     workDate: new Date().toISOString().split('T')[0],
     notes: '',
     tasks: [newTask()],
+    clientId: '',
+    locationId: '',
+    truckId: '',
   };
 
   return (
@@ -187,6 +201,7 @@ export default function NuevaOrdenPage() {
       mode="create"
       initialData={initialData}
       employees={employees}
+      clients={clients}
       onSubmit={handleSubmit}
       title={t('newReport.title')}
       submitLabel={t('newReport.save')}

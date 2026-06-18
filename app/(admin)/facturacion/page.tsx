@@ -1,0 +1,348 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useLanguage } from '@/contexts/LanguageContext';
+
+type PaymentMethod = 'cash' | 'check' | 'card' | 'deposit' | 'credit';
+type ReceiptMethod = 'cash' | 'check' | 'card' | 'deposit';
+type InvoiceStatus = 'draft' | 'open' | 'partial' | 'paid' | 'void';
+
+interface Invoice {
+  id: string;
+  document_number: string | null;
+  client_id: string | null;
+  client_name: string | null;
+  shop_id: string | null;
+  issue_date: string;
+  due_date: string | null;
+  payment_method: PaymentMethod;
+  status: InvoiceStatus;
+  subtotal: number;
+  tax_amount: number;
+  discount: number;
+  total: number;
+  amount_paid: number;
+  balance: number;
+  description: string | null;
+}
+
+interface ClientOpt { id: string; name: string }
+interface ShopOpt { id: string; name: string }
+
+const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'check', 'card', 'deposit', 'credit'];
+const RECEIPT_METHODS: ReceiptMethod[] = ['cash', 'check', 'card', 'deposit'];
+const STATUSES: InvoiceStatus[] = ['open', 'partial', 'paid', 'void'];
+
+const inputCls =
+  'w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition';
+const money = (n: any) => `$${(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const STATUS_STYLE: Record<InvoiceStatus, string> = {
+  draft: 'bg-slate-700/40 border-white/10 text-slate-400',
+  open: 'bg-amber-500/10 border-amber-500/30 text-amber-300',
+  partial: 'bg-sky-500/10 border-sky-500/30 text-sky-300',
+  paid: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300',
+  void: 'bg-red-500/10 border-red-500/30 text-red-300',
+};
+
+export default function FacturacionPage() {
+  const { t } = useLanguage();
+
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [clients, setClients] = useState<ClientOpt[]>([]);
+  const [shops, setShops] = useState<ShopOpt[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  // Crear
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({
+    client_id: '', shop_id: '', issue_date: new Date().toISOString().slice(0, 10),
+    due_date: '', payment_method: 'cash' as PaymentMethod,
+    subtotal: '', tax_amount: '', discount: '', description: '', mark_paid: true,
+  });
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
+
+  // Pago
+  const [payFor, setPayFor] = useState<Invoice | null>(null);
+  const [payForm, setPayForm] = useState({ amount: '', method: 'cash' as ReceiptMethod, reference: '', paid_at: new Date().toISOString().slice(0, 10), notes: '' });
+  const [paySaving, setPaySaving] = useState(false);
+  const [payError, setPayError] = useState('');
+
+  async function load() {
+    try {
+      const res = await fetch('/api/facturas' + (statusFilter ? `?status=${statusFilter}` : ''));
+      const j = await res.json();
+      setInvoices((j.invoices ?? []) as Invoice[]);
+    } catch { setInvoices([]); }
+    setLoading(false);
+  }
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [statusFilter]);
+  useEffect(() => {
+    (async () => {
+      try { const r = await fetch('/api/clientes'); const j = await r.json(); setClients((j.clients ?? []).map((c: any) => ({ id: c.id, name: c.name }))); } catch {}
+      try { const r = await fetch('/api/shops'); if (r.ok) { const j = await r.json(); setShops((j.shops ?? []).map((s: any) => ({ id: s.id, name: s.name }))); } } catch {}
+    })();
+  }, []);
+
+  const subtotalN = parseFloat(form.subtotal) || 0;
+  const taxN = parseFloat(form.tax_amount) || 0;
+  const discountN = parseFloat(form.discount) || 0;
+  const totalN = Math.max(0, subtotalN + taxN - discountN);
+  const isCredit = form.payment_method === 'credit';
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    setFormError('');
+    if (totalN <= 0) { setFormError(t('invoices.errTotal')); return; }
+    setSaving(true);
+    const res = await fetch('/api/facturas', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: form.client_id || null,
+        shop_id: form.shop_id || null,
+        issue_date: form.issue_date,
+        due_date: form.due_date || null,
+        payment_method: form.payment_method,
+        subtotal: subtotalN, tax_amount: taxN, discount: discountN,
+        description: form.description,
+        mark_paid: !isCredit && form.mark_paid,
+      }),
+    });
+    const j = await res.json();
+    if (!res.ok) { setFormError(j.error ?? 'Error'); setSaving(false); return; }
+    setSaving(false); setShowForm(false);
+    setForm({ client_id: '', shop_id: '', issue_date: new Date().toISOString().slice(0, 10), due_date: '', payment_method: 'cash', subtotal: '', tax_amount: '', discount: '', description: '', mark_paid: true });
+    load();
+  }
+
+  function openPay(inv: Invoice) {
+    setPayFor(inv);
+    setPayForm({ amount: String(inv.balance), method: 'cash', reference: '', paid_at: new Date().toISOString().slice(0, 10), notes: '' });
+    setPayError('');
+  }
+
+  async function handlePay(e: React.FormEvent) {
+    e.preventDefault();
+    if (!payFor) return;
+    setPayError(''); setPaySaving(true);
+    const res = await fetch(`/api/facturas/${payFor.id}/pagos`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: parseFloat(payForm.amount) || 0, method: payForm.method, reference: payForm.reference, paid_at: payForm.paid_at, notes: payForm.notes }),
+    });
+    const j = await res.json();
+    if (!res.ok) { setPayError(j.error ?? 'Error'); setPaySaving(false); return; }
+    setPaySaving(false); setPayFor(null); load();
+  }
+
+  async function handleVoid(inv: Invoice) {
+    if (!confirm(t('invoices.voidConfirm').replace('{n}', inv.document_number ?? ''))) return;
+    setBusyId(inv.id);
+    await fetch(`/api/facturas/${inv.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'void' }) });
+    setBusyId(null); load();
+  }
+
+  async function handleDelete(inv: Invoice) {
+    if (!confirm(t('invoices.deleteConfirm').replace('{n}', inv.document_number ?? ''))) return;
+    setBusyId(inv.id);
+    const res = await fetch(`/api/facturas/${inv.id}`, { method: 'DELETE' });
+    if (!res.ok) { const j = await res.json().catch(() => ({})); alert((j as any).error ?? t('invoices.deleteError')); }
+    setBusyId(null); load();
+  }
+
+  return (
+    <div>
+      {/* Modal crear */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-amber-500/20 rounded-2xl p-6 w-full max-w-2xl my-8 shadow-2xl">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="display-font text-slate-100 font-bold text-lg tracking-wide">{t('invoices.newInvoice')}</h2>
+              <button onClick={() => setShowForm(false)} className="text-slate-500 hover:text-slate-300 p-1.5 rounded-lg hover:bg-slate-700 transition">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.client')}</label>
+                <select value={form.client_id} onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))} className={inputCls}>
+                  <option value="">{t('invoices.selectClient')}</option>
+                  {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              {shops.length > 0 && (
+                <div className="md:col-span-2">
+                  <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.shop')}</label>
+                  <select value={form.shop_id} onChange={e => setForm(f => ({ ...f, shop_id: e.target.value }))} className={inputCls}>
+                    <option value="">{t('invoices.noShop')}</option>
+                    {shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+              )}
+              <div>
+                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.issueDate')}</label>
+                <input type="date" value={form.issue_date} onChange={e => setForm(f => ({ ...f, issue_date: e.target.value }))} className={inputCls} />
+              </div>
+              <div>
+                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.dueDate')}</label>
+                <input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} className={inputCls} />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.paymentMethod')}</label>
+                <select value={form.payment_method} onChange={e => setForm(f => ({ ...f, payment_method: e.target.value as PaymentMethod }))} className={inputCls}>
+                  {PAYMENT_METHODS.map(pm => <option key={pm} value={pm}>{t(`invoices.pm.${pm}`)}</option>)}
+                </select>
+                {isCredit && <p className="text-amber-400/80 text-xs mt-1">{t('invoices.creditHint')}</p>}
+              </div>
+              <div>
+                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.subtotal')} ($)</label>
+                <input type="number" min="0" step="0.01" value={form.subtotal} onChange={e => setForm(f => ({ ...f, subtotal: e.target.value }))} className={inputCls} />
+              </div>
+              <div>
+                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.tax')} ($)</label>
+                <input type="number" min="0" step="0.01" value={form.tax_amount} onChange={e => setForm(f => ({ ...f, tax_amount: e.target.value }))} className={inputCls} />
+                <p className="text-slate-600 text-xs mt-1">{t('invoices.taxHint')}</p>
+              </div>
+              <div>
+                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.discount')} ($)</label>
+                <input type="number" min="0" step="0.01" value={form.discount} onChange={e => setForm(f => ({ ...f, discount: e.target.value }))} className={inputCls} />
+              </div>
+              <div className="flex items-end">
+                <div className="w-full bg-slate-800/60 border border-white/10 rounded-lg px-4 py-2.5">
+                  <span className="text-slate-400 text-sm">{t('invoices.total')}: </span>
+                  <span className="text-amber-300 font-bold display-font">{money(totalN)}</span>
+                </div>
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.description')}</label>
+                <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder={t('invoices.descriptionPlaceholder')} className={inputCls} />
+              </div>
+              {!isCredit && (
+                <label className="md:col-span-2 flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                  <input type="checkbox" checked={form.mark_paid} onChange={e => setForm(f => ({ ...f, mark_paid: e.target.checked }))} className="accent-amber-500 w-4 h-4" />
+                  {t('invoices.markPaid')}
+                </label>
+              )}
+              {formError && <div className="md:col-span-2 bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2.5 text-red-400 text-sm">{formError}</div>}
+              <div className="md:col-span-2 flex gap-3">
+                <button type="submit" disabled={saving} className="bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-slate-950 font-bold py-2.5 px-6 rounded-lg transition display-font tracking-wide">
+                  {saving ? t('common.saving') : t('invoices.create')}
+                </button>
+                <button type="button" onClick={() => setShowForm(false)} className="bg-slate-700 hover:bg-slate-600 text-slate-300 py-2.5 px-5 rounded-lg transition text-sm">{t('common.cancel')}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal pago */}
+      {payFor && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-emerald-500/20 rounded-2xl p-6 w-full max-w-md my-8 shadow-2xl">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="display-font text-slate-100 font-bold text-lg tracking-wide">{t('invoices.recordPayment')}</h2>
+              <button onClick={() => setPayFor(null)} className="text-slate-500 hover:text-slate-300 p-1.5 rounded-lg hover:bg-slate-700 transition">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <p className="text-slate-400 text-sm mb-4">{payFor.document_number} · {t('invoices.balance')}: <span className="text-amber-300 font-semibold">{money(payFor.balance)}</span></p>
+            <form onSubmit={handlePay} className="space-y-4">
+              <div>
+                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.payment.amount')} ($)</label>
+                <input type="number" min="0.01" step="0.01" value={payForm.amount} onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))} className={inputCls} />
+              </div>
+              <div>
+                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.payment.method')}</label>
+                <select value={payForm.method} onChange={e => setPayForm(f => ({ ...f, method: e.target.value as ReceiptMethod }))} className={inputCls}>
+                  {RECEIPT_METHODS.map(m => <option key={m} value={m}>{t(`invoices.pm.${m}`)}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.payment.reference')}</label>
+                  <input value={payForm.reference} onChange={e => setPayForm(f => ({ ...f, reference: e.target.value }))} placeholder={t('invoices.payment.referenceHint')} className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.payment.date')}</label>
+                  <input type="date" value={payForm.paid_at} onChange={e => setPayForm(f => ({ ...f, paid_at: e.target.value }))} className={inputCls} />
+                </div>
+              </div>
+              {payError && <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2.5 text-red-400 text-sm">{payError}</div>}
+              <div className="flex gap-3">
+                <button type="submit" disabled={paySaving} className="bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-500/50 text-slate-950 font-bold py-2.5 px-6 rounded-lg transition display-font tracking-wide">
+                  {paySaving ? t('common.saving') : t('invoices.payment.save')}
+                </button>
+                <button type="button" onClick={() => setPayFor(null)} className="bg-slate-700 hover:bg-slate-600 text-slate-300 py-2.5 px-5 rounded-lg transition text-sm">{t('common.cancel')}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
+        <div>
+          <h1 className="display-font text-3xl font-bold text-slate-100 tracking-wide">{t('invoices.title')}</h1>
+          <p className="text-slate-400 mt-1">{invoices.length} {t('invoices.registered')}</p>
+        </div>
+        <button onClick={() => setShowForm(true)} className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 px-5 rounded-lg transition display-font tracking-wide flex items-center gap-2">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+          {t('invoices.addInvoice')}
+        </button>
+      </div>
+
+      <div className="flex gap-2 mb-5 flex-wrap">
+        <button onClick={() => setStatusFilter('')} className={`px-3 py-1.5 rounded-lg text-sm border transition ${statusFilter === '' ? 'bg-amber-500/15 border-amber-500/40 text-amber-300' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'}`}>{t('invoices.filterAll')}</button>
+        {STATUSES.map(s => (
+          <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-sm border transition ${statusFilter === s ? 'bg-amber-500/15 border-amber-500/40 text-amber-300' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'}`}>{t(`invoices.status.${s}`)}</button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="text-center py-12 text-slate-500">{t('common.loading')}</div>
+      ) : invoices.length === 0 ? (
+        <div className="bg-slate-900/60 border border-white/5 rounded-xl p-12 text-center"><p className="text-slate-500">{t('invoices.empty')}</p></div>
+      ) : (
+        <div className="space-y-3">
+          {invoices.map(inv => (
+            <div key={inv.id} className={`bg-slate-900/60 border border-white/5 rounded-xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap ${inv.status === 'void' ? 'opacity-60' : ''}`}>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="display-font font-semibold tracking-wide text-slate-200">{inv.document_number}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full border ${STATUS_STYLE[inv.status]}`}>{t(`invoices.status.${inv.status}`)}</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full border bg-slate-700/40 border-white/10 text-slate-400">{t(`invoices.pm.${inv.payment_method}`)}</span>
+                </div>
+                <div className="flex items-center gap-3 mt-1.5 flex-wrap text-xs text-slate-500">
+                  <span className="text-slate-400">{inv.client_name ?? t('invoices.noClient')}</span>
+                  <span>{t('invoices.issueDate')}: {inv.issue_date}</span>
+                  {inv.due_date && <span>{t('invoices.dueDate')}: {inv.due_date}</span>}
+                </div>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <p className="text-slate-200 font-semibold display-font">{money(inv.total)}</p>
+                {inv.balance > 0.001 && inv.status !== 'void' && <p className="text-amber-400 text-xs">{t('invoices.balance')}: {money(inv.balance)}</p>}
+              </div>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {inv.balance > 0.001 && inv.status !== 'void' && (
+                  <button onClick={() => openPay(inv)} title={t('invoices.recordPayment')} className="p-1.5 rounded text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  </button>
+                )}
+                {inv.status !== 'void' && (
+                  <button onClick={() => handleVoid(inv)} disabled={busyId === inv.id} title={t('invoices.void')} className="p-1.5 rounded text-slate-500 hover:text-orange-400 hover:bg-orange-500/10 transition">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                  </button>
+                )}
+                <button onClick={() => handleDelete(inv)} disabled={busyId === inv.id} title={t('common.delete')} className="p-1.5 rounded text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
