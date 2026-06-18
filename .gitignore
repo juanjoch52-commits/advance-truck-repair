@@ -3,3 +3,7 @@
 node_modules
 .next
 *.tsbuildinfo
+
+# Propuesta comercial (precios, datos del cliente, contacto) — el repo es público
+propuesta-*.pdf
+scripts/generate-propuesta-cliente.mjs
