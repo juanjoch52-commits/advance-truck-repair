@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireInvoicesAccess, INVOICE_COLS, PAYMENT_METHODS, round2, deriveBalanceStatus } from '@/lib/invoicesApi';
+import { requireInvoicesAccess, INVOICE_COLS, PAYMENT_METHODS, DOCUMENT_TYPES, isFiscalDocument, computeAutoTax, round2, deriveBalanceStatus } from '@/lib/invoicesApi';
 import { sanitizeDbError } from '@/lib/clientsApi';
 import { authErrorResponse, requireRole } from '@/lib/apiAuth';
 import { getSupabaseServerClient } from '@/lib/supabaseServer';
@@ -44,6 +44,16 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     const payment_method = PAYMENT_METHODS.includes(body.payment_method) ? body.payment_method : 'cash';
+    const document_type = DOCUMENT_TYPES.includes(body.document_type) ? body.document_type : 'invoice';
+    const isFiscal = isFiscalDocument(document_type);
+
+    // Datos del taller (una sola consulta): tasa para el tax automático y
+    // prefijo/correlativo para la numeración fiscal.
+    let shop: { id: string; tax_rate: number; invoice_prefix: string | null } | null = null;
+    if (body.shop_id) {
+      const { data } = await supabase.from('shops').select('id,tax_rate,invoice_prefix').eq('id', body.shop_id).maybeSingle();
+      if (data) shop = data as any;
+    }
 
     // Renglones opcionales (mano de obra / piezas / cargos). Si vienen, el
     // subtotal se calcula a partir de ellos (si no, se usa el subtotal plano).
@@ -68,35 +78,50 @@ export async function POST(request: Request) {
     const subtotal = items.length
       ? round2(items.reduce((s, it) => s + it.amount, 0))
       : round2(body.subtotal);
-    const tax_amount = round2(body.tax_amount);
+
+    // Sales tax: si hay taller (con tasa) y renglones, se calcula automáticamente
+    // sobre la base gravable (Σ renglones taxable). Sin taller/renglones, o si el
+    // usuario pide override, se usa el monto manual.
+    const taxableBase = round2(items.filter(it => it.taxable).reduce((s, it) => s + it.amount, 0));
+    const autoTax = shop && items.length && body.tax_override !== true;
+    const tax_amount = autoTax ? computeAutoTax(taxableBase, shop!.tax_rate) : round2(body.tax_amount);
+
     const discount = round2(body.discount);
     const total = round2(subtotal + tax_amount - discount);
     if (total <= 0) return NextResponse.json({ error: 'El total de la factura debe ser mayor a $0.' }, { status: 400 });
 
-    // Numeración: usa lo que envíe el usuario; si viene vacío, autogenera con el
-    // prefijo del taller (si hay) + correlativo simple basado en el conteo.
+    // Numeración: usa lo que envíe el usuario; si viene vacío:
+    //  - factura fiscal con taller → correlativo ATÓMICO del taller (RPC), que
+    //    consume e incrementa shops.next_invoice_number sin huecos por carreras;
+    //  - resto (no fiscal, o sin taller) → prefijo por tipo + conteo de respaldo.
     let document_number = String(body.document_number ?? '').trim();
+    if (!document_number && isFiscal && shop) {
+      const { data: num } = await supabase.rpc('next_shop_invoice_number', { p_shop_id: shop.id });
+      if (num) document_number = String(num);
+    }
     if (!document_number) {
       const { count } = await supabase.from('invoices').select('id', { count: 'exact', head: true });
-      let prefix = 'INV-';
-      if (body.shop_id) {
-        const { data: shop } = await supabase.from('shops').select('invoice_prefix,next_invoice_number').eq('id', body.shop_id).maybeSingle();
-        if (shop?.invoice_prefix) prefix = shop.invoice_prefix;
-      }
+      const prefix = document_type === 'estimate' ? 'EST-'
+        : document_type === 'work_order' ? 'WO-'
+        : (shop?.invoice_prefix || 'INV-');
       document_number = `${prefix}${(count ?? 0) + 1}`;
     }
 
     // Crédito (préstamo) → factura abierta, sin pago. Otros métodos → opción de
-    // marcarla pagada de una vez (mark_paid).
-    const markPaid = payment_method !== 'credit' && body.mark_paid === true;
+    // marcarla pagada de una vez (mark_paid). Documentos NO fiscales
+    // (estimate/work_order) nunca se cobran ni entran a CxC: quedan en 'draft'.
+    const markPaid = isFiscal && payment_method !== 'credit' && body.mark_paid === true;
     const amount_paid = markPaid ? total : 0;
-    const { balance, status } = deriveBalanceStatus(total, amount_paid);
+    const derived = deriveBalanceStatus(total, amount_paid);
+    const balance = derived.balance;
+    const status = isFiscal ? derived.status : 'draft';
 
     const payload = {
       shop_id: body.shop_id || null,
       client_id: body.client_id || null,
       location_id: body.location_id || null,
       document_number,
+      document_type,
       issue_date: body.issue_date || new Date().toISOString().slice(0, 10),
       due_date: body.due_date || null,
       payment_method,
@@ -127,7 +152,8 @@ export async function POST(request: Request) {
       const { error: itErr } = await supabase.from('invoice_items').insert(rows);
       if (itErr) return NextResponse.json({ error: sanitizeDbError('facturas.POST.items', itErr.message) }, { status: 500 });
 
-      for (const it of items) {
+      // Solo la factura fiscal mueve inventario; estimate/work_order no.
+      for (const it of (isFiscal ? items : [])) {
         if (it.line_type === 'part' && it.inventory_item_id && it.qty > 0) {
           // Salida de bodega: movimiento 'sale' (negativo) + baja de stock.
           await supabase.from('inventory_movements').insert({

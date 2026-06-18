@@ -144,7 +144,17 @@
       "referenceHint": "# cheque, ref...",
       "date": "Fecha",
       "save": "Registrar pago"
-    }
+    },
+    "documentType": "Tipo de documento",
+    "docType": {
+      "invoice": "Factura fiscal",
+      "estimate": "Cotización",
+      "work_order": "Orden de trabajo"
+    },
+    "nonFiscalHint": "Documento NO fiscal: no entra a Cuentas por Cobrar ni descuenta inventario.",
+    "taxAuto": "auto {rate}%",
+    "taxOverride": "Capturar impuesto manualmente",
+    "taxBackToAuto": "Volver a impuesto automático"
   },
   "receivables": {
     "title": "CUENTAS POR COBRAR",

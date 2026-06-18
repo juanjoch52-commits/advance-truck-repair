@@ -10,6 +10,10 @@ const PM_LABEL: Record<string, string> = {
   cash: 'Cash', check: 'Check', card: 'Card', deposit: 'Deposit / Transfer', credit: 'Credit (terms)',
 };
 
+// Rótulo del documento. Solo 'invoice' es factura fiscal; los demás llevan
+// aviso "NOT A TAX INVOICE" para no confundirse con un documento reportable.
+const DOC_TITLE: Record<string, string> = { invoice: 'INVOICE', estimate: 'ESTIMATE', work_order: 'WORK ORDER' };
+
 // Carga una imagen (logo) y la devuelve como dataURL escalada a una caja máxima.
 async function loadLogo(url: string, maxW: number, maxH: number): Promise<{ dataUrl: string; w: number; h: number; fmt: string } | null> {
   try {
@@ -75,13 +79,19 @@ export function InvoicePdfButton({ invoiceId, className }: { invoiceId: string; 
       if (shop?.ein) { doc.text(`EIN: ${shop.ein}`, headX, hy); hy += 10; }
       if (shop?.sales_tax_certificate) { doc.text(`Sales Tax #: ${shop.sales_tax_certificate}`, headX, hy); hy += 10; }
 
-      // ── Título INVOICE + meta (derecha) ──
+      // ── Título del documento + meta (derecha) ──
+      const docType = invoice.document_type || 'invoice';
+      const isFiscal = docType === 'invoice';
       doc.setFont('helvetica', 'bold'); doc.setFontSize(20); doc.setTextColor(INK, INK, INK);
-      doc.text('INVOICE', PAGE_W - M, y + 14, { align: 'right' });
+      doc.text(DOC_TITLE[docType] || 'INVOICE', PAGE_W - M, y + 14, { align: 'right' });
+      if (!isFiscal) {
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(SOFT, SOFT, SOFT);
+        doc.text('NOT A TAX INVOICE', PAGE_W - M, y + 22, { align: 'right' });
+      }
       doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(SOFT, SOFT, SOFT);
       const metaY = y + 30;
       const metaRows = [
-        ['Invoice #', invoice.document_number || '—'],
+        [isFiscal ? 'Invoice #' : 'Document #', invoice.document_number || '—'],
         ['Date', invoice.issue_date || '—'],
         ...(invoice.due_date ? [['Due', invoice.due_date]] : []),
         ['Payment', PM_LABEL[invoice.payment_method] || invoice.payment_method],
@@ -151,7 +161,7 @@ export function InvoicePdfButton({ invoiceId, className }: { invoiceId: string; 
       doc.setDrawColor(LINE, LINE, LINE); doc.setLineWidth(0.3); doc.line(tX, y - 4, PAGE_W - M, y - 4); y += 4;
       tot('TOTAL', Number(invoice.total), true);
       if (Number(invoice.amount_paid)) tot('Paid', Number(invoice.amount_paid));
-      if (Number(invoice.balance) > 0.001) tot('Balance Due', Number(invoice.balance), true);
+      if (isFiscal && Number(invoice.balance) > 0.001) tot('Balance Due', Number(invoice.balance), true);
 
       // ── Nota de estado / pie ──
       if (invoice.status === 'paid') {
@@ -168,7 +178,8 @@ export function InvoicePdfButton({ invoiceId, className }: { invoiceId: string; 
       doc.text(`Printed: ${stamp}`, M, FOOTER_Y);
       doc.text('Thank you for your business', PAGE_W - M, FOOTER_Y, { align: 'right' });
 
-      doc.save(`Invoice_${invoice.document_number || invoiceId}.pdf`);
+      const fileLabel = (DOC_TITLE[docType] || 'INVOICE').replace(/\s+/g, '');
+      doc.save(`${fileLabel}_${invoice.document_number || invoiceId}.pdf`);
     } finally {
       setGenerating(false);
     }

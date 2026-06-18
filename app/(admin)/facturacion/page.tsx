@@ -8,9 +8,12 @@ type PaymentMethod = 'cash' | 'check' | 'card' | 'deposit' | 'credit';
 type ReceiptMethod = 'cash' | 'check' | 'card' | 'deposit';
 type InvoiceStatus = 'draft' | 'open' | 'partial' | 'paid' | 'void';
 
+type DocumentType = 'invoice' | 'estimate' | 'work_order';
+
 interface Invoice {
   id: string;
   document_number: string | null;
+  document_type: DocumentType;
   client_id: string | null;
   client_name: string | null;
   shop_id: string | null;
@@ -28,7 +31,7 @@ interface Invoice {
 }
 
 interface ClientOpt { id: string; name: string }
-interface ShopOpt { id: string; name: string }
+interface ShopOpt { id: string; name: string; tax_rate: number }
 interface InvItem { id: string; name: string; part_number: string | null; sale_price: number; unit_cost: number; quantity_on_hand: number }
 
 type LineType = 'labor' | 'part' | 'fee';
@@ -54,6 +57,8 @@ const newLine = (type: LineType = 'part'): Line => ({
 const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'check', 'card', 'deposit', 'credit'];
 const RECEIPT_METHODS: ReceiptMethod[] = ['cash', 'check', 'card', 'deposit'];
 const STATUSES: InvoiceStatus[] = ['open', 'partial', 'paid', 'void'];
+const DOCUMENT_TYPES: DocumentType[] = ['invoice', 'estimate', 'work_order'];
+const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
 
 const inputCls =
   'w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition';
@@ -81,9 +86,10 @@ export default function FacturacionPage() {
   // Crear
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
-    client_id: '', shop_id: '', issue_date: new Date().toISOString().slice(0, 10),
+    client_id: '', shop_id: '', document_type: 'invoice' as DocumentType,
+    issue_date: new Date().toISOString().slice(0, 10),
     due_date: '', payment_method: 'cash' as PaymentMethod,
-    subtotal: '', tax_amount: '', discount: '', description: '', mark_paid: true,
+    subtotal: '', tax_amount: '', tax_override: false, discount: '', description: '', mark_paid: true,
   });
   const [lines, setLines] = useState<Line[]>([]);
   const [saving, setSaving] = useState(false);
@@ -108,7 +114,7 @@ export default function FacturacionPage() {
   useEffect(() => {
     (async () => {
       try { const r = await fetch('/api/clientes'); const j = await r.json(); setClients((j.clients ?? []).map((c: any) => ({ id: c.id, name: c.name }))); } catch {}
-      try { const r = await fetch('/api/shops'); if (r.ok) { const j = await r.json(); setShops((j.shops ?? []).map((s: any) => ({ id: s.id, name: s.name }))); } } catch {}
+      try { const r = await fetch('/api/shops'); if (r.ok) { const j = await r.json(); setShops((j.shops ?? []).map((s: any) => ({ id: s.id, name: s.name, tax_rate: Number(s.tax_rate) || 0 }))); } } catch {}
       try { const r = await fetch('/api/inventario'); if (r.ok) { const j = await r.json(); setInvItems((j.items ?? []) as InvItem[]); } } catch {}
     })();
   }, []);
@@ -128,12 +134,20 @@ export default function FacturacionPage() {
     });
   }
 
-  const linesSubtotal = Math.round(lines.reduce((s, l) => s + lineAmount(l), 0) * 100) / 100;
+  const linesSubtotal = round2(lines.reduce((s, l) => s + lineAmount(l), 0));
   const subtotalN = lines.length ? linesSubtotal : (parseFloat(form.subtotal) || 0);
-  const taxN = parseFloat(form.tax_amount) || 0;
+
+  // Sales tax automático: si hay taller (con tasa) y renglones, se calcula sobre
+  // la base gravable (Σ renglones taxable). El usuario puede pasar a manual.
+  const selectedShop = shops.find(s => s.id === form.shop_id) || null;
+  const taxableBase = round2(lines.filter(l => l.taxable).reduce((s, l) => s + lineAmount(l), 0));
+  const autoTax = !!selectedShop && lines.length > 0 && !form.tax_override;
+  const taxN = autoTax ? round2(taxableBase * selectedShop!.tax_rate / 100) : (parseFloat(form.tax_amount) || 0);
+
   const discountN = parseFloat(form.discount) || 0;
   const totalN = Math.max(0, subtotalN + taxN - discountN);
   const isCredit = form.payment_method === 'credit';
+  const isFiscal = form.document_type === 'invoice';
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -145,12 +159,13 @@ export default function FacturacionPage() {
       body: JSON.stringify({
         client_id: form.client_id || null,
         shop_id: form.shop_id || null,
+        document_type: form.document_type,
         issue_date: form.issue_date,
         due_date: form.due_date || null,
         payment_method: form.payment_method,
-        subtotal: subtotalN, tax_amount: taxN, discount: discountN,
+        subtotal: subtotalN, tax_amount: taxN, tax_override: form.tax_override, discount: discountN,
         description: form.description,
-        mark_paid: !isCredit && form.mark_paid,
+        mark_paid: isFiscal && !isCredit && form.mark_paid,
         items: lines.map(l => ({
           line_type: l.line_type,
           description: l.description,
@@ -166,7 +181,7 @@ export default function FacturacionPage() {
     const j = await res.json();
     if (!res.ok) { setFormError(j.error ?? 'Error'); setSaving(false); return; }
     setSaving(false); setShowForm(false);
-    setForm({ client_id: '', shop_id: '', issue_date: new Date().toISOString().slice(0, 10), due_date: '', payment_method: 'cash', subtotal: '', tax_amount: '', discount: '', description: '', mark_paid: true });
+    setForm({ client_id: '', shop_id: '', document_type: 'invoice', issue_date: new Date().toISOString().slice(0, 10), due_date: '', payment_method: 'cash', subtotal: '', tax_amount: '', tax_override: false, discount: '', description: '', mark_paid: true });
     setLines([]);
     load();
   }
@@ -218,6 +233,18 @@ export default function FacturacionPage() {
               </button>
             </div>
             <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.documentType')}</label>
+                <div className="flex gap-2 flex-wrap">
+                  {DOCUMENT_TYPES.map(dt => (
+                    <button key={dt} type="button" onClick={() => setForm(f => ({ ...f, document_type: dt }))}
+                      className={`px-3 py-1.5 rounded-lg text-sm border transition ${form.document_type === dt ? 'bg-amber-500/15 border-amber-500/40 text-amber-300' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'}`}>
+                      {t(`invoices.docType.${dt}`)}
+                    </button>
+                  ))}
+                </div>
+                {!isFiscal && <p className="text-amber-400/80 text-xs mt-1.5">{t('invoices.nonFiscalHint')}</p>}
+              </div>
               <div className="md:col-span-2">
                 <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.client')}</label>
                 <select value={form.client_id} onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))} className={inputCls}>
@@ -326,8 +353,24 @@ export default function FacturacionPage() {
               </div>
               <div>
                 <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.tax')} ($)</label>
-                <input type="number" min="0" step="0.01" value={form.tax_amount} onChange={e => setForm(f => ({ ...f, tax_amount: e.target.value }))} className={inputCls} />
-                <p className="text-slate-600 text-xs mt-1">{t('invoices.taxHint')}</p>
+                {autoTax ? (
+                  <>
+                    <div className={inputCls + ' bg-slate-800/60 flex items-center justify-between'}>
+                      <span>{money(taxN)}</span>
+                      <span className="text-emerald-400/80 text-xs">{t('invoices.taxAuto').replace('{rate}', String(selectedShop!.tax_rate))}</span>
+                    </div>
+                    <button type="button" onClick={() => setForm(f => ({ ...f, tax_override: true, tax_amount: String(taxN) }))} className="text-slate-500 hover:text-slate-300 text-xs mt-1 underline">
+                      {t('invoices.taxOverride')}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <input type="number" min="0" step="0.01" value={form.tax_amount} onChange={e => setForm(f => ({ ...f, tax_amount: e.target.value }))} className={inputCls} />
+                    {selectedShop && lines.length > 0
+                      ? <button type="button" onClick={() => setForm(f => ({ ...f, tax_override: false }))} className="text-emerald-500 hover:text-emerald-400 text-xs mt-1 underline">{t('invoices.taxBackToAuto')}</button>
+                      : <p className="text-slate-600 text-xs mt-1">{t('invoices.taxHint')}</p>}
+                  </>
+                )}
               </div>
               <div>
                 <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.discount')} ($)</label>
@@ -343,7 +386,7 @@ export default function FacturacionPage() {
                 <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.description')}</label>
                 <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder={t('invoices.descriptionPlaceholder')} className={inputCls} />
               </div>
-              {!isCredit && (
+              {isFiscal && !isCredit && (
                 <label className="md:col-span-2 flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
                   <input type="checkbox" checked={form.mark_paid} onChange={e => setForm(f => ({ ...f, mark_paid: e.target.checked }))} className="accent-amber-500 w-4 h-4" />
                   {t('invoices.markPaid')}
@@ -434,6 +477,9 @@ export default function FacturacionPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="display-font font-semibold tracking-wide text-slate-200">{inv.document_number}</span>
+                  {inv.document_type && inv.document_type !== 'invoice' && (
+                    <span className="text-xs px-2 py-0.5 rounded-full border bg-purple-500/10 border-purple-500/30 text-purple-300">{t(`invoices.docType.${inv.document_type}`)}</span>
+                  )}
                   <span className={`text-xs px-2 py-0.5 rounded-full border ${STATUS_STYLE[inv.status]}`}>{t(`invoices.status.${inv.status}`)}</span>
                   <span className="text-xs px-2 py-0.5 rounded-full border bg-slate-700/40 border-white/10 text-slate-400">{t(`invoices.pm.${inv.payment_method}`)}</span>
                 </div>
@@ -445,11 +491,11 @@ export default function FacturacionPage() {
               </div>
               <div className="text-right flex-shrink-0">
                 <p className="text-slate-200 font-semibold display-font">{money(inv.total)}</p>
-                {inv.balance > 0.001 && inv.status !== 'void' && <p className="text-amber-400 text-xs">{t('invoices.balance')}: {money(inv.balance)}</p>}
+                {inv.balance > 0.001 && inv.status !== 'void' && inv.status !== 'draft' && <p className="text-amber-400 text-xs">{t('invoices.balance')}: {money(inv.balance)}</p>}
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
                 <InvoicePdfButton invoiceId={inv.id} />
-                {inv.balance > 0.001 && inv.status !== 'void' && (
+                {inv.balance > 0.001 && inv.status !== 'void' && inv.status !== 'draft' && (
                   <button onClick={() => openPay(inv)} title={t('invoices.recordPayment')} className="p-1.5 rounded text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   </button>

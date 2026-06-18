@@ -144,7 +144,17 @@
       "referenceHint": "check #, ref...",
       "date": "Date",
       "save": "Record payment"
-    }
+    },
+    "documentType": "Document type",
+    "docType": {
+      "invoice": "Tax invoice",
+      "estimate": "Estimate",
+      "work_order": "Work order"
+    },
+    "nonFiscalHint": "NON-fiscal document: it does not enter Accounts Receivable or reduce inventory.",
+    "taxAuto": "auto {rate}%",
+    "taxOverride": "Enter tax manually",
+    "taxBackToAuto": "Back to automatic tax"
   },
   "receivables": {
     "title": "ACCOUNTS RECEIVABLE",
