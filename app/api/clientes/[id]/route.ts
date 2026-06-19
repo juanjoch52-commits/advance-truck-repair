@@ -15,16 +15,39 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     if (error) return NextResponse.json({ error: sanitizeDbError('clientes/[id].GET', error.message) }, { status: 500 });
     if (!client) return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
 
-    const [{ data: locations }, { data: trucks }] = await Promise.all([
+    const [{ data: locations }, { data: trucks }, { data: invoices }] = await Promise.all([
       supabase.from('client_locations')
         .select('id,client_id,name,billing_address_line,city,state,zip,contact_name,phone,is_active')
         .eq('client_id', id).order('name', { ascending: true }),
       supabase.from('trucks')
         .select('id,client_id,location_id,unit_number,plate,make,model,year,vin,notes,is_active')
         .eq('client_id', id).order('unit_number', { ascending: true }),
+      // Historial de trabajo: facturas/documentos del cliente, más reciente primero.
+      // Se excluyen los borradores (aún sin emitir); el resumen ignora los anulados.
+      supabase.from('invoices')
+        .select('id,document_number,document_type,truck_id,issue_date,status,total,amount_paid,balance')
+        .eq('client_id', id).neq('status', 'draft').order('issue_date', { ascending: false }),
     ]);
 
-    return NextResponse.json({ client, locations: locations ?? [], trucks: trucks ?? [] });
+    // Resumen: total facturado / pagado / saldo (excluye anulados).
+    const valid = (invoices ?? []).filter((i: any) => i.status !== 'void');
+    const summary = valid.reduce(
+      (s: any, i: any) => ({
+        total_billed: s.total_billed + Number(i.total || 0),
+        total_paid: s.total_paid + Number(i.amount_paid || 0),
+        balance_due: s.balance_due + Number(i.balance || 0),
+        count: s.count + 1,
+      }),
+      { total_billed: 0, total_paid: 0, balance_due: 0, count: 0 },
+    );
+
+    return NextResponse.json({
+      client,
+      locations: locations ?? [],
+      trucks: trucks ?? [],
+      invoices: invoices ?? [],
+      summary,
+    });
   } catch (err) {
     const authResp = authErrorResponse(err);
     if (authResp) return authResp;

@@ -82,6 +82,9 @@
     "client": "Cliente",
     "selectClient": "— Seleccionar cliente —",
     "noClient": "Sin cliente",
+    "truck": "Camión / Unidad",
+    "noTruck": "— Sin camión —",
+    "truckClientFirst": "Elige un cliente primero",
     "shop": "Taller",
     "noShop": "— Sin taller —",
     "issueDate": "Fecha de emisión",
@@ -188,6 +191,20 @@
     "daysPastDue": "Días vencidos",
     "notDue": "Al día",
     "collect": "Cobrar",
+    "agingTitle": "Antigüedad de saldos",
+    "kpi": {
+      "outstanding": "Total por cobrar",
+      "overdue": "Vencido",
+      "openInvoices": "facturas",
+      "dueSoon": "Por vencer",
+      "dueSoonHint": "próximos 7 días",
+      "topDebtor": "Mayor deudor"
+    },
+    "alerts": {
+      "title": "Alertas de vencidos",
+      "daysLate": "días de atraso",
+      "more": "más vencidas"
+    },
     "bucket": {
       "current": "Al día",
       "d1_30": "1–30 días",
@@ -854,6 +871,19 @@
     },
     "detail": {
       "notFound": "Cliente no encontrado."
+    },
+    "history": {
+      "title": "Historial de trabajo",
+      "empty": "Este cliente aún no tiene facturas.",
+      "totalBilled": "Total facturado",
+      "totalPaid": "Total pagado",
+      "balanceDue": "Saldo pendiente",
+      "allTrucks": "Todos los camiones",
+      "noTruck": "Sin camión",
+      "date": "Fecha",
+      "document": "Documento",
+      "truck": "Camión",
+      "statusLabel": "Estado"
     },
     "locations": {
       "title": "Distritos / Sucursales",

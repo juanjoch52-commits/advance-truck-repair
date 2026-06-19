@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 type ReceiptMethod = 'cash' | 'check' | 'card' | 'deposit';
@@ -65,6 +65,28 @@ export default function CuentasPorCobrarPage() {
     setLoading(false);
   }
   useEffect(() => { load(); }, []);
+
+  // KPIs + alertas (derivados de lo que ya devuelve el API, sin llamadas extra).
+  const kpis = useMemo(() => {
+    const overdue = summary ? Math.max(0, summary.total - summary.current) : 0;
+    const topDebtor = clients.length ? clients[0] : null; // el API ya ordena por saldo desc
+    // Por vencer (próximos 7 días): facturas aún no vencidas con due_date dentro del rango.
+    const todayMs = new Date().setHours(0, 0, 0, 0);
+    const soonMs = todayMs + 7 * 86400000;
+    let dueSoon = 0;
+    const overdueInvoices: (ARInvoice & { client_name: string })[] = [];
+    for (const c of clients) {
+      for (const inv of c.invoices) {
+        if (inv.days_past_due > 0) overdueInvoices.push({ ...inv, client_name: c.client_name });
+        else if (inv.due_date) {
+          const d = new Date(inv.due_date + 'T00:00:00').getTime();
+          if (d >= todayMs && d <= soonMs) dueSoon += Number(inv.balance);
+        }
+      }
+    }
+    overdueInvoices.sort((a, b) => b.days_past_due - a.days_past_due);
+    return { overdue, topDebtor, dueSoon, overdueInvoices };
+  }, [summary, clients]);
 
   function openPay(inv: ARInvoice) {
     setPayFor(inv);
@@ -141,11 +163,68 @@ export default function CuentasPorCobrarPage() {
         <div className="bg-slate-900/60 border border-white/5 rounded-xl p-12 text-center"><p className="text-slate-500">{t('receivables.empty')}</p></div>
       ) : (
         <>
+          {/* KPIs */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+            <div className="bg-slate-900/60 border border-amber-500/20 rounded-xl px-4 py-3.5">
+              <p className="text-slate-500 text-xs mb-1">{t('receivables.kpi.outstanding')}</p>
+              <p className="display-font text-2xl font-bold text-amber-300">{money(summary.total)}</p>
+              <p className="text-slate-600 text-xs mt-0.5">{summary.count} {t('receivables.kpi.openInvoices')}</p>
+            </div>
+            <div className={`bg-slate-900/60 border rounded-xl px-4 py-3.5 ${kpis.overdue > 0.001 ? 'border-red-500/30' : 'border-white/5'}`}>
+              <p className="text-slate-500 text-xs mb-1">{t('receivables.kpi.overdue')}</p>
+              <p className={`display-font text-2xl font-bold ${kpis.overdue > 0.001 ? 'text-red-400' : 'text-slate-400'}`}>{money(kpis.overdue)}</p>
+              <p className="text-slate-600 text-xs mt-0.5">{kpis.overdueInvoices.length} {t('receivables.kpi.openInvoices')}</p>
+            </div>
+            <div className="bg-slate-900/60 border border-white/5 rounded-xl px-4 py-3.5">
+              <p className="text-slate-500 text-xs mb-1">{t('receivables.kpi.dueSoon')}</p>
+              <p className="display-font text-2xl font-bold text-sky-300">{money(kpis.dueSoon)}</p>
+              <p className="text-slate-600 text-xs mt-0.5">{t('receivables.kpi.dueSoonHint')}</p>
+            </div>
+            <div className="bg-slate-900/60 border border-white/5 rounded-xl px-4 py-3.5 min-w-0">
+              <p className="text-slate-500 text-xs mb-1">{t('receivables.kpi.topDebtor')}</p>
+              {kpis.topDebtor ? (
+                <>
+                  <p className="display-font text-lg font-bold text-slate-200 truncate">{kpis.topDebtor.client_name}</p>
+                  <p className="text-amber-300 text-xs mt-0.5">{money(kpis.topDebtor.total)}</p>
+                </>
+              ) : <p className="text-slate-500">—</p>}
+            </div>
+          </div>
+
+          {/* Alertas de vencidos */}
+          {kpis.overdueInvoices.length > 0 && (
+            <div className="bg-red-500/[0.04] border border-red-500/20 rounded-xl p-5 mb-6">
+              <h2 className="display-font text-red-300 font-semibold tracking-wider text-sm uppercase mb-3 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                {t('receivables.alerts.title')} <span className="text-slate-500 normal-case font-normal">({kpis.overdueInvoices.length})</span>
+              </h2>
+              <div className="space-y-1.5">
+                {kpis.overdueInvoices.slice(0, 8).map(inv => (
+                  <div key={inv.id} className="flex items-center justify-between gap-3 flex-wrap text-sm bg-slate-900/40 rounded-lg px-3 py-2">
+                    <div className="min-w-0">
+                      <span className="text-slate-300">{inv.document_number}</span>
+                      <span className="text-slate-500 mx-2">·</span>
+                      <span className="text-slate-400">{inv.client_name}</span>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <span className={`text-xs ${BUCKET_STYLE[inv.bucket]}`}>{inv.days_past_due} {t('receivables.alerts.daysLate')}</span>
+                      <span className="text-amber-300 font-semibold">{money(inv.balance)}</span>
+                      <button onClick={() => openPay(inv)} className="text-emerald-400 hover:text-emerald-300 text-xs font-medium hover:underline">{t('receivables.collect')}</button>
+                    </div>
+                  </div>
+                ))}
+                {kpis.overdueInvoices.length > 8 && (
+                  <p className="text-slate-600 text-xs pt-1">+{kpis.overdueInvoices.length - 8} {t('receivables.alerts.more')}</p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Resumen + antigüedad */}
           <div className="bg-slate-900/60 border border-white/5 rounded-xl p-5 mb-6">
             <div className="flex items-baseline justify-between flex-wrap gap-2 mb-4">
-              <span className="text-slate-400 text-sm">{t('receivables.totalOutstanding')}</span>
-              <span className="display-font text-3xl font-bold text-amber-300">{money(summary.total)}</span>
+              <span className="text-slate-400 text-sm">{t('receivables.agingTitle')}</span>
+              <span className="display-font text-2xl font-bold text-amber-300">{money(summary.total)}</span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               {BUCKETS.map(b => (

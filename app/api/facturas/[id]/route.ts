@@ -13,7 +13,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     if (error) return NextResponse.json({ error: sanitizeDbError('facturas/[id].GET', error.message) }, { status: 500 });
     if (!invoice) return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
 
-    const [{ data: payments }, { data: items }, clientRes, shopRes] = await Promise.all([
+    const [{ data: payments }, { data: items }, clientRes, shopRes, truckRes] = await Promise.all([
       supabase.from('invoice_payments').select('id,amount,method,reference,paid_at,notes,created_at').eq('invoice_id', id).order('paid_at', { ascending: false }),
       supabase.from('invoice_items').select('id,line_type,description,qty,unit_price,amount,cost,part_source,taxable,mechanic_id,commission_pct,done,sort_order').eq('invoice_id', id).order('sort_order', { ascending: true }),
       invoice.client_id
@@ -21,6 +21,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         : Promise.resolve({ data: null }),
       invoice.shop_id
         ? supabase.from('shops').select('id,name,legal_name,ein,sales_tax_certificate,billing_address_line,city,state,zip,phone,email,logo_url').eq('id', invoice.shop_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+      invoice.truck_id
+        ? supabase.from('trucks').select('id,unit_number,plate,make,model,year,vin').eq('id', invoice.truck_id).maybeSingle()
         : Promise.resolve({ data: null }),
     ]);
 
@@ -30,6 +33,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       items: items ?? [],
       client: (clientRes as any).data ?? null,
       shop: (shopRes as any).data ?? null,
+      truck: (truckRes as any).data ?? null,
     });
   } catch (err) {
     const authResp = authErrorResponse(err);

@@ -26,7 +26,18 @@ export async function GET(request: Request) {
       const { data: clients } = await supabase.from('clients').select('id,name').in('id', ids);
       nameById = Object.fromEntries((clients ?? []).map((c: any) => [c.id, c.name]));
     }
-    const withNames = (invoices ?? []).map((i: any) => ({ ...i, client_name: i.client_id ? (nameById[i.client_id] ?? null) : null }));
+    // Etiqueta de camión (# unidad o placa) para mostrarla en la lista.
+    const truckIds = Array.from(new Set((invoices ?? []).map((i: any) => i.truck_id).filter(Boolean)));
+    let truckById: Record<string, string> = {};
+    if (truckIds.length) {
+      const { data: trucks } = await supabase.from('trucks').select('id,unit_number,plate').in('id', truckIds);
+      truckById = Object.fromEntries((trucks ?? []).map((t: any) => [t.id, t.unit_number || t.plate || '—']));
+    }
+    const withNames = (invoices ?? []).map((i: any) => ({
+      ...i,
+      client_name: i.client_id ? (nameById[i.client_id] ?? null) : null,
+      truck_label: i.truck_id ? (truckById[i.truck_id] ?? null) : null,
+    }));
 
     return NextResponse.json({ invoices: withNames });
   } catch (err) {
@@ -132,6 +143,7 @@ export async function POST(request: Request) {
       shop_id: body.shop_id || null,
       client_id: body.client_id || null,
       location_id: body.location_id || null,
+      truck_id: body.truck_id || null,
       document_number,
       document_type,
       issue_date: body.issue_date || new Date().toISOString().slice(0, 10),

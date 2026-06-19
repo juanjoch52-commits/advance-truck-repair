@@ -1,8 +1,9 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { use, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { InvoicePdfButton } from '@/components/InvoicePdfButton';
 
 interface Client {
   id: string;
@@ -31,6 +32,21 @@ interface Truck {
   unit_number: string | null; plate: string | null; make: string | null; model: string | null;
   year: number | null; vin: string | null; notes: string | null; is_active: boolean;
 }
+interface HistInvoice {
+  id: string; document_number: string | null; document_type: string;
+  truck_id: string | null; issue_date: string; status: string;
+  total: number; amount_paid: number; balance: number;
+}
+interface HistSummary { total_billed: number; total_paid: number; balance_due: number; count: number }
+
+const money = (n: any) => `$${(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const STATUS_STYLE: Record<string, string> = {
+  draft: 'bg-slate-700/40 border-white/10 text-slate-400',
+  open: 'bg-amber-500/10 border-amber-500/30 text-amber-300',
+  partial: 'bg-sky-500/10 border-sky-500/30 text-sky-300',
+  paid: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300',
+  void: 'bg-red-500/10 border-red-500/30 text-red-300',
+};
 
 const inputCls =
   'w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition text-sm';
@@ -58,6 +74,9 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const [client, setClient] = useState<Client | null>(null);
   const [locations, setLocations] = useState<Location[]>([]);
   const [trucks, setTrucks] = useState<Truck[]>([]);
+  const [history, setHistory] = useState<HistInvoice[]>([]);
+  const [summary, setSummary] = useState<HistSummary | null>(null);
+  const [truckFilter, setTruckFilter] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
@@ -78,6 +97,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     setClient(j.client ?? null);
     setLocations((j.locations ?? []) as Location[]);
     setTrucks((j.trucks ?? []) as Truck[]);
+    setHistory((j.invoices ?? []) as HistInvoice[]);
+    setSummary((j.summary ?? null) as HistSummary | null);
     setLoading(false);
   }
   useEffect(() => { load(); }, [clientId]);
@@ -150,6 +171,15 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     if (!locId) return t('clients.trucks.noLocation');
     return locations.find(l => l.id === locId)?.name ?? t('clients.trucks.noLocation');
   }
+  function truckName(truckId: string | null) {
+    if (!truckId) return t('clients.history.noTruck');
+    const tr = trucks.find(x => x.id === truckId);
+    return tr ? (tr.unit_number || tr.plate || '—') : '—';
+  }
+  const filteredHistory = useMemo(
+    () => truckFilter ? history.filter(h => h.truck_id === truckFilter) : history,
+    [history, truckFilter],
+  );
 
   if (loading) return <div className="text-center py-12 text-slate-500">{t('common.loading')}</div>;
   if (notFound || !client) {
@@ -267,6 +297,77 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </section>
+
+      {/* ─── Historial de trabajo ─── */}
+      <section className="mt-8">
+        <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+          <h2 className="display-font text-emerald-400 font-semibold tracking-wider text-sm uppercase">
+            {t('clients.history.title')} <span className="text-slate-500 normal-case">({history.length})</span>
+          </h2>
+          {trucks.length > 0 && history.length > 0 && (
+            <select value={truckFilter} onChange={e => setTruckFilter(e.target.value)}
+              className="bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-slate-200 text-sm focus:outline-none focus:border-amber-400/50">
+              <option value="">{t('clients.history.allTrucks')}</option>
+              {trucks.map(tr => <option key={tr.id} value={tr.id}>{tr.unit_number || tr.plate || '—'}</option>)}
+            </select>
+          )}
+        </div>
+
+        {summary && summary.count > 0 && (
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <div className="bg-slate-900/60 border border-white/5 rounded-xl px-4 py-3">
+              <p className="text-slate-500 text-xs mb-1">{t('clients.history.totalBilled')}</p>
+              <p className="display-font font-bold text-slate-200">{money(summary.total_billed)}</p>
+            </div>
+            <div className="bg-slate-900/60 border border-white/5 rounded-xl px-4 py-3">
+              <p className="text-slate-500 text-xs mb-1">{t('clients.history.totalPaid')}</p>
+              <p className="display-font font-bold text-emerald-300">{money(summary.total_paid)}</p>
+            </div>
+            <div className="bg-slate-900/60 border border-white/5 rounded-xl px-4 py-3">
+              <p className="text-slate-500 text-xs mb-1">{t('clients.history.balanceDue')}</p>
+              <p className={`display-font font-bold ${summary.balance_due > 0.001 ? 'text-amber-300' : 'text-slate-400'}`}>{money(summary.balance_due)}</p>
+            </div>
+          </div>
+        )}
+
+        {history.length === 0 ? (
+          <div className="bg-slate-900/40 border border-white/5 rounded-xl p-6 text-center text-slate-500 text-sm">{t('clients.history.empty')}</div>
+        ) : (
+          <div className="bg-slate-900/60 border border-white/5 rounded-xl overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-slate-500 text-xs">
+                  <th className="text-left font-medium px-4 py-2.5">{t('clients.history.date')}</th>
+                  <th className="text-left font-medium px-3 py-2.5">{t('clients.history.document')}</th>
+                  <th className="text-left font-medium px-3 py-2.5">{t('clients.history.truck')}</th>
+                  <th className="text-right font-medium px-3 py-2.5">{t('invoices.total')}</th>
+                  <th className="text-right font-medium px-3 py-2.5">{t('invoices.balance')}</th>
+                  <th className="text-left font-medium px-3 py-2.5">{t('clients.history.statusLabel')}</th>
+                  <th className="px-3 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredHistory.map(h => (
+                  <tr key={h.id} className={`border-t border-white/5 ${h.status === 'void' ? 'opacity-50' : ''}`}>
+                    <td className="px-4 py-2.5 text-slate-400">{h.issue_date}</td>
+                    <td className="px-3 py-2.5 text-slate-300">
+                      {h.document_number || '—'}
+                      {h.document_type !== 'invoice' && <span className="ml-1.5 text-xs text-purple-300">{t(`invoices.docType.${h.document_type}`)}</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-sky-300/80">{truckName(h.truck_id)}</td>
+                    <td className="px-3 py-2.5 text-right text-slate-300">{money(h.total)}</td>
+                    <td className={`px-3 py-2.5 text-right ${h.balance > 0.001 ? 'text-amber-300 font-semibold' : 'text-slate-500'}`}>{money(h.balance)}</td>
+                    <td className="px-3 py-2.5">
+                      <span className={`text-xs px-2 py-0.5 rounded-full border ${STATUS_STYLE[h.status] ?? STATUS_STYLE.open}`}>{t(`invoices.status.${h.status}`)}</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right"><InvoicePdfButton invoiceId={h.id} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </section>

@@ -82,6 +82,9 @@
     "client": "Client",
     "selectClient": "— Select client —",
     "noClient": "No client",
+    "truck": "Truck / Unit",
+    "noTruck": "— No truck —",
+    "truckClientFirst": "Pick a client first",
     "shop": "Shop",
     "noShop": "— No shop —",
     "issueDate": "Issue date",
@@ -188,6 +191,20 @@
     "daysPastDue": "Days past due",
     "notDue": "Not due",
     "collect": "Collect",
+    "agingTitle": "Balance aging",
+    "kpi": {
+      "outstanding": "Total outstanding",
+      "overdue": "Overdue",
+      "openInvoices": "invoices",
+      "dueSoon": "Due soon",
+      "dueSoonHint": "next 7 days",
+      "topDebtor": "Top debtor"
+    },
+    "alerts": {
+      "title": "Overdue alerts",
+      "daysLate": "days late",
+      "more": "more overdue"
+    },
     "bucket": {
       "current": "Current",
       "d1_30": "1–30 days",
@@ -854,6 +871,19 @@
     },
     "detail": {
       "notFound": "Client not found."
+    },
+    "history": {
+      "title": "Work history",
+      "empty": "This client has no invoices yet.",
+      "totalBilled": "Total billed",
+      "totalPaid": "Total paid",
+      "balanceDue": "Balance due",
+      "allTrucks": "All trucks",
+      "noTruck": "No truck",
+      "date": "Date",
+      "document": "Document",
+      "truck": "Truck",
+      "statusLabel": "Status"
     },
     "locations": {
       "title": "Districts / Branches",

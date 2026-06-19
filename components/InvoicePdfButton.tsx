@@ -48,7 +48,7 @@ export function InvoicePdfButton({ invoiceId, className, mode = 'download' }: { 
     try {
       const res = await fetch(`/api/facturas/${invoiceId}`);
       if (!res.ok) { alert('No se pudo cargar la factura.'); return; }
-      const { invoice, items, client, shop } = await res.json();
+      const { invoice, items, client, shop, truck } = await res.json();
 
       // ── Página / paleta ahorradora de tinta (solo grises) ──
       const PAGE_W = 612, PAGE_H = 792, M = 40;
@@ -116,6 +116,18 @@ export function InvoicePdfButton({ invoiceId, className, mode = 'download' }: { 
       doc.setFontSize(8); doc.setTextColor(SOFT, SOFT, SOFT);
       let by = y + 24;
       for (const l of addr(client)) { doc.text(l, M, by); by += 10; }
+      // Camión / unidad de la factura (historial por unidad).
+      if (truck) {
+        const unit = truck.unit_number || truck.plate;
+        const desc = [truck.year, truck.make, truck.model].filter(Boolean).join(' ');
+        const truckLine = [
+          unit ? `Unit: ${unit}` : null,
+          truck.plate && truck.unit_number ? `Plate: ${truck.plate}` : null,
+          desc || null,
+          truck.vin ? `VIN: ${truck.vin}` : null,
+        ].filter(Boolean).join('  ·  ');
+        if (truckLine) { doc.text(truckLine, M, by); by += 10; }
+      }
       y = by + 8;
 
       // ── Renglones ──

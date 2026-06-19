@@ -16,6 +16,8 @@ interface Invoice {
   document_type: DocumentType;
   client_id: string | null;
   client_name: string | null;
+  truck_id: string | null;
+  truck_label: string | null;
   shop_id: string | null;
   issue_date: string;
   due_date: string | null;
@@ -31,6 +33,7 @@ interface Invoice {
 }
 
 interface ClientOpt { id: string; name: string }
+interface TruckOpt { id: string; unit_number: string | null; plate: string | null }
 interface ShopOpt { id: string; name: string; tax_rate: number }
 interface InvItem { id: string; name: string; part_number: string | null; sale_price: number; unit_cost: number; quantity_on_hand: number }
 
@@ -81,6 +84,8 @@ export default function FacturacionPage() {
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [clients, setClients] = useState<ClientOpt[]>([]);
+  const [trucks, setTrucks] = useState<TruckOpt[]>([]);
+  const [trucksLoading, setTrucksLoading] = useState(false);
   const [shops, setShops] = useState<ShopOpt[]>([]);
   const [mechanics, setMechanics] = useState<MechanicOpt[]>([]);
   const [invItems, setInvItems] = useState<InvItem[]>([]);
@@ -91,7 +96,7 @@ export default function FacturacionPage() {
   // Crear
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
-    client_id: '', shop_id: '', document_type: 'invoice' as DocumentType,
+    client_id: '', truck_id: '', shop_id: '', document_type: 'invoice' as DocumentType,
     issue_date: new Date().toISOString().slice(0, 10),
     due_date: '', payment_method: 'cash' as PaymentMethod,
     subtotal: '', tax_amount: '', tax_override: false, discount: '', description: '', mark_paid: true,
@@ -124,6 +129,21 @@ export default function FacturacionPage() {
       try { const r = await fetch('/api/inventario'); if (r.ok) { const j = await r.json(); setInvItems((j.items ?? []) as InvItem[]); } } catch {}
     })();
   }, []);
+
+  // Al elegir cliente, cargar sus camiones (el camión de la factura es opcional y
+  // se filtra por cliente). Se resetea el camión seleccionado al cambiar de cliente.
+  async function onClientChange(clientId: string) {
+    setForm(f => ({ ...f, client_id: clientId, truck_id: '' }));
+    setTrucks([]);
+    if (!clientId) return;
+    setTrucksLoading(true);
+    try {
+      const r = await fetch(`/api/clientes/${clientId}`);
+      if (r.ok) { const j = await r.json(); setTrucks((j.trucks ?? []).map((tr: any) => ({ id: tr.id, unit_number: tr.unit_number, plate: tr.plate }))); }
+    } catch {}
+    setTrucksLoading(false);
+  }
+  const truckLabel = (tr: TruckOpt) => tr.unit_number || tr.plate || '—';
 
   // ─── Renglones (mano de obra / piezas) ───
   const lineAmount = (l: Line) => (parseFloat(l.qty) || 0) * (parseFloat(l.unit_price) || 0);
@@ -164,6 +184,7 @@ export default function FacturacionPage() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         client_id: form.client_id || null,
+        truck_id: form.truck_id || null,
         shop_id: form.shop_id || null,
         document_type: form.document_type,
         draft: asDraft && isFiscal,
@@ -190,7 +211,8 @@ export default function FacturacionPage() {
     const j = await res.json();
     if (!res.ok) { setFormError(j.error ?? 'Error'); setSaving(false); return; }
     setSaving(false); setShowForm(false);
-    setForm({ client_id: '', shop_id: '', document_type: 'invoice', issue_date: new Date().toISOString().slice(0, 10), due_date: '', payment_method: 'cash', subtotal: '', tax_amount: '', tax_override: false, discount: '', description: '', mark_paid: true });
+    setForm({ client_id: '', truck_id: '', shop_id: '', document_type: 'invoice', issue_date: new Date().toISOString().slice(0, 10), due_date: '', payment_method: 'cash', subtotal: '', tax_amount: '', tax_override: false, discount: '', description: '', mark_paid: true });
+    setTrucks([]);
     setLines([]);
     load();
   }
@@ -301,11 +323,18 @@ export default function FacturacionPage() {
                 </div>
                 {!isFiscal && <p className="text-amber-400/80 text-xs mt-1.5">{t('invoices.nonFiscalHint')}</p>}
               </div>
-              <div className="md:col-span-2">
+              <div>
                 <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.client')}</label>
-                <select value={form.client_id} onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))} className={inputCls}>
+                <select value={form.client_id} onChange={e => onClientChange(e.target.value)} className={inputCls}>
                   <option value="">{t('invoices.selectClient')}</option>
                   {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.truck')}</label>
+                <select value={form.truck_id} onChange={e => setForm(f => ({ ...f, truck_id: e.target.value }))} disabled={!form.client_id || trucksLoading} className={inputCls + ' disabled:opacity-50'}>
+                  <option value="">{!form.client_id ? t('invoices.truckClientFirst') : trucksLoading ? t('common.loading') : t('invoices.noTruck')}</option>
+                  {trucks.map(tr => <option key={tr.id} value={tr.id}>{truckLabel(tr)}</option>)}
                 </select>
               </div>
               {shops.length > 0 && (
@@ -568,6 +597,7 @@ export default function FacturacionPage() {
                 </div>
                 <div className="flex items-center gap-3 mt-1.5 flex-wrap text-xs text-slate-500">
                   <span className="text-slate-400">{inv.client_name ?? t('invoices.noClient')}</span>
+                  {inv.truck_label && <span className="text-sky-300/80">🚛 {inv.truck_label}</span>}
                   <span>{t('invoices.issueDate')}: {inv.issue_date}</span>
                   {inv.due_date && <span>{t('invoices.dueDate')}: {inv.due_date}</span>}
                 </div>
