@@ -3,7 +3,7 @@ import { requireClientsAccess, sanitizeDbError } from '@/lib/clientsApi';
 import { authErrorResponse } from '@/lib/apiAuth';
 
 const CLIENT_COLS =
-  'id,name,client_type,contact_name,phone,email,billing_address_line,city,state,zip,tax_id,default_payment_method,payment_terms_days,notes,is_active,created_at,updated_at';
+  'id,name,client_type,contact_name,phone,email,billing_address_line,city,state,zip,tax_id,default_payment_method,payment_terms_days,tax_exempt,tax_exempt_certificate,notes,is_active,created_at,updated_at';
 
 // GET /api/clientes           → lista de clientes
 // GET /api/clientes?tree=1    → clientes con sus distritos y camiones anidados
@@ -66,6 +66,8 @@ export async function POST(request: Request) {
       default_payment_method: ['cash', 'check', 'card', 'transfer', 'credit'].includes(body.default_payment_method)
         ? body.default_payment_method : 'cash',
       payment_terms_days: Number.isFinite(Number(body.payment_terms_days)) ? Math.max(0, parseInt(body.payment_terms_days, 10) || 0) : 0,
+      tax_exempt: body.tax_exempt === true,
+      tax_exempt_certificate: body.tax_exempt === true ? (String(body.tax_exempt_certificate ?? '').trim() || null) : null,
       notes: String(body.notes ?? '').trim() || null,
       is_active: body.is_active === false ? false : true,
     };

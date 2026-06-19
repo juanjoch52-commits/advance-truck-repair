@@ -169,6 +169,7 @@ export function InvoicePdfButton({ invoiceId, className, mode = 'download' }: { 
       };
       tot('Subtotal', Number(invoice.subtotal));
       if (Number(invoice.tax_amount)) tot('Sales Tax', Number(invoice.tax_amount));
+      else if (invoice.tax_exempt) tot('Sales Tax (Exempt)', 0);
       if (Number(invoice.discount)) tot('Discount', -Number(invoice.discount));
       doc.setDrawColor(LINE, LINE, LINE); doc.setLineWidth(0.3); doc.line(tX, y - 4, PAGE_W - M, y - 4); y += 4;
       tot('TOTAL', Number(invoice.total), true);
@@ -176,9 +177,19 @@ export function InvoicePdfButton({ invoiceId, className, mode = 'download' }: { 
       if (isFiscal && Number(invoice.balance) > 0.001) tot('Balance Due', Number(invoice.balance), true);
 
       // ── Nota de estado / pie ──
+      let noteY = ((doc as any).lastAutoTable?.finalY ?? M) + 30;
       if (invoice.status === 'paid') {
         doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(SOFT, SOFT, SOFT);
-        doc.text('PAID', M, ((doc as any).lastAutoTable?.finalY ?? M) + 30);
+        doc.text('PAID', M, noteY);
+        noteY += 16;
+      }
+      // Venta exenta: registrar el número de certificado de exención en la factura.
+      if (invoice.tax_exempt) {
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(INK, INK, INK);
+        const certTxt = invoice.tax_exempt_certificate
+          ? `TAX-EXEMPT SALE — Exemption Certificate #: ${invoice.tax_exempt_certificate}`
+          : 'TAX-EXEMPT SALE';
+        doc.text(certTxt, M, noteY, { maxWidth: PAGE_W - M * 2 });
       }
       if (invoice.notes) {
         doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(SOFT, SOFT, SOFT);

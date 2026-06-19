@@ -21,6 +21,8 @@ interface Client {
   tax_id: string | null;
   default_payment_method: PaymentMethod;
   payment_terms_days: number;
+  tax_exempt: boolean;
+  tax_exempt_certificate: string | null;
   notes: string | null;
   is_active: boolean;
   locations?: { id: string }[];
@@ -40,6 +42,8 @@ export interface ClientFormState {
   taxId: string;
   paymentMethod: PaymentMethod;
   paymentTermsDays: string;
+  taxExempt: boolean;
+  taxExemptCertificate: string;
   notes: string;
 }
 
@@ -56,6 +60,8 @@ const BLANK_FORM: ClientFormState = {
   taxId: '',
   paymentMethod: 'cash',
   paymentTermsDays: '0',
+  taxExempt: false,
+  taxExemptCertificate: '',
   notes: '',
 };
 
@@ -160,6 +166,22 @@ function ClientFormBody({
         <p className="text-slate-600 text-xs mt-1">{t('clients.paymentTermsHint')}</p>
       </div>
 
+      {/* Exención de sales tax (certificado) */}
+      <div className="md:col-span-2 bg-slate-800/40 border border-white/5 rounded-xl p-3">
+        <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+          <input type="checkbox" checked={form.taxExempt} onChange={e => onChange({ taxExempt: e.target.checked })} className="accent-amber-500 w-4 h-4" />
+          {t('clients.taxExempt')}
+        </label>
+        {form.taxExempt && (
+          <div className="mt-3">
+            <label className="block text-slate-400 text-sm mb-1.5">{t('clients.taxExemptCert')}</label>
+            <input value={form.taxExemptCertificate} onChange={e => onChange({ taxExemptCertificate: e.target.value })}
+              placeholder={t('clients.taxExemptCertPlaceholder')} className={inputCls} />
+            <p className="text-amber-400/80 text-xs mt-1.5">{t('clients.taxExemptHint')}</p>
+          </div>
+        )}
+      </div>
+
       <div className="md:col-span-2">
         <label className="block text-slate-400 text-sm mb-1.5">{t('clients.notes')}</label>
         <input value={form.notes} onChange={e => onChange({ notes: e.target.value })} className={inputCls} />
@@ -230,6 +252,8 @@ export default function ClientesPage() {
       taxId: c.tax_id ?? '',
       paymentMethod: c.default_payment_method,
       paymentTermsDays: String(c.payment_terms_days ?? 0),
+      taxExempt: !!c.tax_exempt,
+      taxExemptCertificate: c.tax_exempt_certificate ?? '',
       notes: c.notes ?? '',
     };
   }
@@ -248,6 +272,8 @@ export default function ClientesPage() {
       tax_id: f.taxId.trim() || null,
       default_payment_method: f.paymentMethod,
       payment_terms_days: parseInt(f.paymentTermsDays, 10) || 0,
+      tax_exempt: f.taxExempt,
+      tax_exempt_certificate: f.taxExempt ? (f.taxExemptCertificate.trim() || null) : null,
       notes: f.notes.trim() || null,
     };
   }
@@ -377,6 +403,9 @@ export default function ClientesPage() {
                   <span className="text-xs px-2 py-0.5 rounded-full border bg-slate-700/40 border-white/10 text-slate-400">
                     {t(`clients.pm.${c.default_payment_method}`)} · {termsLabel(c)}
                   </span>
+                  {c.tax_exempt && (
+                    <span className="text-xs px-2 py-0.5 rounded-full border bg-emerald-500/10 border-emerald-500/30 text-emerald-300">{t('clients.taxExemptBadge')}</span>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 mt-1.5 flex-wrap text-xs text-slate-500">
                   {c.contact_name && <span>{c.contact_name}</span>}

@@ -19,6 +19,8 @@ interface Client {
   tax_id: string | null;
   default_payment_method: string;
   payment_terms_days: number;
+  tax_exempt: boolean;
+  tax_exempt_certificate: string | null;
   notes: string | null;
   is_active: boolean;
 }
@@ -208,6 +210,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             {t(`clients.type.${client.client_type}`)}
           </span>
           {!client.is_active && <span className="text-xs px-1.5 py-0.5 rounded-full bg-orange-500/15 border border-orange-500/30 text-orange-400">{t('clients.suspended')}</span>}
+          {client.tax_exempt && <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">{t('clients.taxExemptBadge')}</span>}
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2 text-sm">
           {client.contact_name && <Field label={t('clients.contactName')} value={client.contact_name} />}
@@ -215,6 +218,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           {client.email && <Field label={t('common.email')} value={client.email} />}
           {client.tax_id && <Field label={t('clients.taxId')} value={client.tax_id} />}
           <Field label={t('clients.paymentMethod')} value={`${t(`clients.pm.${client.default_payment_method}`)} · ${termsLabel}`} />
+          {client.tax_exempt && <Field label={t('clients.taxExemptCert')} value={client.tax_exempt_certificate || '—'} />}
           {(client.billing_address_line || client.city) && (
             <Field label={t('clients.billingAddress')} value={[client.billing_address_line, client.city, client.state, client.zip].filter(Boolean).join(', ')} />
           )}

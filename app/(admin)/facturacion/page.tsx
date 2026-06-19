@@ -32,7 +32,7 @@ interface Invoice {
   description: string | null;
 }
 
-interface ClientOpt { id: string; name: string }
+interface ClientOpt { id: string; name: string; tax_exempt: boolean; tax_exempt_certificate: string | null }
 interface TruckOpt { id: string; unit_number: string | null; plate: string | null }
 interface ShopOpt { id: string; name: string; tax_rate: number }
 interface InvItem { id: string; name: string; part_number: string | null; sale_price: number; unit_cost: number; quantity_on_hand: number }
@@ -123,7 +123,7 @@ export default function FacturacionPage() {
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [statusFilter]);
   useEffect(() => {
     (async () => {
-      try { const r = await fetch('/api/clientes'); const j = await r.json(); setClients((j.clients ?? []).map((c: any) => ({ id: c.id, name: c.name }))); } catch {}
+      try { const r = await fetch('/api/clientes'); const j = await r.json(); setClients((j.clients ?? []).map((c: any) => ({ id: c.id, name: c.name, tax_exempt: !!c.tax_exempt, tax_exempt_certificate: c.tax_exempt_certificate ?? null }))); } catch {}
       try { const r = await fetch('/api/shops'); if (r.ok) { const j = await r.json(); setShops((j.shops ?? []).map((s: any) => ({ id: s.id, name: s.name, tax_rate: Number(s.tax_rate) || 0 }))); } } catch {}
       try { const r = await fetch('/api/empleados'); if (r.ok) { const j = await r.json(); setMechanics((j.employees ?? []).filter((e: any) => (e.role ?? '').toLowerCase() === 'mechanic').map((e: any) => ({ id: e.id, full_name: e.full_name }))); } } catch {}
       try { const r = await fetch('/api/inventario'); if (r.ok) { const j = await r.json(); setInvItems((j.items ?? []) as InvItem[]); } } catch {}
@@ -166,9 +166,12 @@ export default function FacturacionPage() {
   // Sales tax automático: si hay taller (con tasa) y renglones, se calcula sobre
   // la base gravable (Σ renglones taxable). El usuario puede pasar a manual.
   const selectedShop = shops.find(s => s.id === form.shop_id) || null;
+  const selectedClient = clients.find(c => c.id === form.client_id) || null;
+  const clientExempt = !!selectedClient?.tax_exempt;
   const taxableBase = round2(lines.filter(l => l.taxable).reduce((s, l) => s + lineAmount(l), 0));
-  const autoTax = !!selectedShop && lines.length > 0 && !form.tax_override;
-  const taxN = autoTax ? round2(taxableBase * selectedShop!.tax_rate / 100) : (parseFloat(form.tax_amount) || 0);
+  const autoTax = !!selectedShop && lines.length > 0 && !form.tax_override && !clientExempt;
+  // Cliente exento → tax 0 (el servidor lo fuerza igual según el certificado del cliente).
+  const taxN = clientExempt ? 0 : (autoTax ? round2(taxableBase * selectedShop!.tax_rate / 100) : (parseFloat(form.tax_amount) || 0));
 
   const discountN = parseFloat(form.discount) || 0;
   const totalN = Math.max(0, subtotalN + taxN - discountN);
@@ -327,8 +330,9 @@ export default function FacturacionPage() {
                 <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.client')}</label>
                 <select value={form.client_id} onChange={e => onClientChange(e.target.value)} className={inputCls}>
                   <option value="">{t('invoices.selectClient')}</option>
-                  {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.tax_exempt ? ' ★' : ''}</option>)}
                 </select>
+                {clientExempt && <p className="text-emerald-400/80 text-xs mt-1">{t('invoices.clientExemptHint')}{selectedClient?.tax_exempt_certificate ? ` (#${selectedClient.tax_exempt_certificate})` : ''}</p>}
               </div>
               <div>
                 <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.truck')}</label>
@@ -453,7 +457,12 @@ export default function FacturacionPage() {
               </div>
               <div>
                 <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.tax')} ($)</label>
-                {autoTax ? (
+                {clientExempt ? (
+                  <div className={inputCls + ' bg-slate-800/60 flex items-center justify-between'}>
+                    <span>{money(0)}</span>
+                    <span className="text-emerald-400/80 text-xs">{t('invoices.taxExempt')}{selectedClient?.tax_exempt_certificate ? ` · #${selectedClient.tax_exempt_certificate}` : ''}</span>
+                  </div>
+                ) : autoTax ? (
                   <>
                     <div className={inputCls + ' bg-slate-800/60 flex items-center justify-between'}>
                       <span>{money(taxN)}</span>

@@ -3,7 +3,7 @@ import { requireClientsAccess, sanitizeDbError } from '@/lib/clientsApi';
 import { authErrorResponse } from '@/lib/apiAuth';
 
 const CLIENT_COLS =
-  'id,name,client_type,contact_name,phone,email,billing_address_line,city,state,zip,tax_id,default_payment_method,payment_terms_days,notes,is_active,created_at,updated_at';
+  'id,name,client_type,contact_name,phone,email,billing_address_line,city,state,zip,tax_id,default_payment_method,payment_terms_days,tax_exempt,tax_exempt_certificate,notes,is_active,created_at,updated_at';
 
 // GET /api/clientes/[id] → cliente con sus distritos y camiones
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -82,6 +82,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         ? body.default_payment_method : 'cash';
     if (body.payment_terms_days !== undefined)
       payload.payment_terms_days = Math.max(0, parseInt(body.payment_terms_days, 10) || 0);
+    if (body.tax_exempt !== undefined) {
+      payload.tax_exempt = Boolean(body.tax_exempt);
+      // Si deja de estar exento, se limpia el certificado.
+      if (!body.tax_exempt) payload.tax_exempt_certificate = null;
+    }
+    if (body.tax_exempt_certificate !== undefined)
+      payload.tax_exempt_certificate = String(body.tax_exempt_certificate).trim() || null;
     if (body.notes !== undefined) payload.notes = String(body.notes).trim() || null;
     if (body.is_active !== undefined) payload.is_active = Boolean(body.is_active);
 

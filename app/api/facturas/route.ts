@@ -69,6 +69,16 @@ export async function POST(request: Request) {
       if (data) shop = data as any;
     }
 
+    // Exención de sales tax: si el CLIENTE tiene certificado de exención, sus
+    // facturas no llevan tax y se "fotografía" el número de certificado en la
+    // factura (requisito fiscal para la venta exenta).
+    let clientExempt = false;
+    let clientExemptCert: string | null = null;
+    if (body.client_id) {
+      const { data: cli } = await supabase.from('clients').select('tax_exempt,tax_exempt_certificate').eq('id', body.client_id).maybeSingle();
+      if (cli?.tax_exempt) { clientExempt = true; clientExemptCert = (cli as any).tax_exempt_certificate ?? null; }
+    }
+
     // Renglones opcionales (mano de obra / piezas / cargos). Si vienen, el
     // subtotal se calcula a partir de ellos (si no, se usa el subtotal plano).
     const rawItems: any[] = Array.isArray(body.items) ? body.items : [];
@@ -102,8 +112,9 @@ export async function POST(request: Request) {
     // sobre la base gravable (Σ renglones taxable). Sin taller/renglones, o si el
     // usuario pide override, se usa el monto manual.
     const taxableBase = round2(items.filter(it => it.taxable).reduce((s, it) => s + it.amount, 0));
-    const autoTax = shop && items.length && body.tax_override !== true;
-    const tax_amount = autoTax ? computeAutoTax(taxableBase, shop!.tax_rate) : round2(body.tax_amount);
+    const autoTax = shop && items.length && body.tax_override !== true && !clientExempt;
+    // Cliente exento → tax 0 (gana sobre auto y manual).
+    const tax_amount = clientExempt ? 0 : (autoTax ? computeAutoTax(taxableBase, shop!.tax_rate) : round2(body.tax_amount));
 
     const discount = round2(body.discount);
     const total = round2(subtotal + tax_amount - discount);
@@ -151,6 +162,8 @@ export async function POST(request: Request) {
       payment_method,
       status,
       subtotal, tax_amount, discount, total,
+      tax_exempt: clientExempt,
+      tax_exempt_certificate: clientExempt ? clientExemptCert : null,
       amount_paid, balance,
       description: String(body.description ?? '').trim() || null,
       notes: String(body.notes ?? '').trim() || null,
