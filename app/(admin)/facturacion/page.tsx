@@ -19,6 +19,7 @@ interface Invoice {
   client_name: string | null;
   truck_id: string | null;
   truck_label: string | null;
+  order_number: string | null;
   shop_id: string | null;
   issue_date: string;
   due_date: string | null;
@@ -35,6 +36,7 @@ interface Invoice {
 
 interface ClientOpt { id: string; name: string; tax_exempt: boolean; tax_exempt_certificate: string | null }
 interface TruckOpt { id: string; unit_number: string | null; plate: string | null }
+interface WorkOrderOpt { id: string; external_order_number: string | null; company: string | null; truck_number: string | null; work_date: string | null; client_id: string | null; truck_id: string | null }
 interface ShopOpt { id: string; name: string; tax_rate: number }
 interface InvItem { id: string; name: string; part_number: string | null; sale_price: number; unit_cost: number; quantity_on_hand: number }
 
@@ -89,6 +91,8 @@ export default function FacturacionPage() {
   const [clients, setClients] = useState<ClientOpt[]>([]);
   const [trucks, setTrucks] = useState<TruckOpt[]>([]);
   const [trucksLoading, setTrucksLoading] = useState(false);
+  const [workOrders, setWorkOrders] = useState<WorkOrderOpt[]>([]);
+  const [orderSearch, setOrderSearch] = useState('');
   const [shops, setShops] = useState<ShopOpt[]>([]);
   const [mechanics, setMechanics] = useState<MechanicOpt[]>([]);
   const [invItems, setInvItems] = useState<InvItem[]>([]);
@@ -99,7 +103,7 @@ export default function FacturacionPage() {
   // Crear
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
-    client_id: '', truck_id: '', shop_id: '', document_type: 'invoice' as DocumentType,
+    client_id: '', truck_id: '', work_report_id: '', order_number: '', shop_id: '', document_type: 'invoice' as DocumentType,
     issue_date: new Date().toISOString().slice(0, 10),
     due_date: '', payment_method: 'cash' as PaymentMethod,
     subtotal: '', tax_amount: '', tax_override: false, discount: '', description: '', mark_paid: true,
@@ -136,6 +140,7 @@ export default function FacturacionPage() {
       try { const r = await fetch('/api/shops'); if (r.ok) { const j = await r.json(); setShops((j.shops ?? []).map((s: any) => ({ id: s.id, name: s.name, tax_rate: Number(s.tax_rate) || 0 }))); } } catch {}
       try { const r = await fetch('/api/empleados'); if (r.ok) { const j = await r.json(); setMechanics((j.employees ?? []).filter((e: any) => (e.role ?? '').toLowerCase() === 'mechanic').map((e: any) => ({ id: e.id, full_name: e.full_name }))); } } catch {}
       try { const r = await fetch('/api/inventario'); if (r.ok) { const j = await r.json(); setInvItems((j.items ?? []) as InvItem[]); } } catch {}
+      try { const r = await fetch('/api/facturas/ordenes'); if (r.ok) { const j = await r.json(); setWorkOrders((j.orders ?? []) as WorkOrderOpt[]); } } catch {}
     })();
   }, []);
 
@@ -153,6 +158,20 @@ export default function FacturacionPage() {
     setTrucksLoading(false);
   }
   const truckLabel = (tr: TruckOpt) => tr.unit_number || tr.plate || '—';
+
+  const orderLabel = (o: WorkOrderOpt) =>
+    [o.external_order_number ? `#${o.external_order_number}` : t('invoices.orderNoNumber'), o.company, o.truck_number, o.work_date].filter(Boolean).join(' · ');
+
+  // Al elegir una orden de trabajo: la factura hereda su número de orden y, si la
+  // orden trae cliente/camión, se autollenan (el usuario los puede cambiar).
+  async function onWorkOrderChange(orderId: string) {
+    const o = workOrders.find(w => w.id === orderId) || null;
+    setForm(f => ({ ...f, work_report_id: orderId, order_number: o?.external_order_number ?? '' }));
+    if (o?.client_id) {
+      await onClientChange(o.client_id);
+      if (o.truck_id) setForm(f => ({ ...f, truck_id: o.truck_id as string }));
+    }
+  }
 
   // ─── Renglones (mano de obra / piezas) ───
   const lineAmount = (l: Line) => (parseFloat(l.qty) || 0) * (parseFloat(l.unit_price) || 0);
@@ -197,6 +216,7 @@ export default function FacturacionPage() {
       body: JSON.stringify({
         client_id: form.client_id || null,
         truck_id: form.truck_id || null,
+        work_report_id: form.work_report_id || null,
         shop_id: form.shop_id || null,
         document_type: form.document_type,
         draft: asDraft && isFiscal,
@@ -223,8 +243,9 @@ export default function FacturacionPage() {
     const j = await res.json();
     if (!res.ok) { setFormError(j.error ?? 'Error'); setSaving(false); return; }
     setSaving(false); setShowForm(false);
-    setForm({ client_id: '', truck_id: '', shop_id: '', document_type: 'invoice', issue_date: new Date().toISOString().slice(0, 10), due_date: '', payment_method: 'cash', subtotal: '', tax_amount: '', tax_override: false, discount: '', description: '', mark_paid: true });
+    setForm({ client_id: '', truck_id: '', work_report_id: '', order_number: '', shop_id: '', document_type: 'invoice', issue_date: new Date().toISOString().slice(0, 10), due_date: '', payment_method: 'cash', subtotal: '', tax_amount: '', tax_override: false, discount: '', description: '', mark_paid: true });
     setTrucks([]);
+    setOrderSearch('');
     setLines([]);
     load();
   }
@@ -355,6 +376,23 @@ export default function FacturacionPage() {
                   ))}
                 </div>
                 {!isFiscal && <p className="text-amber-400/80 text-xs mt-1.5">{t('invoices.nonFiscalHint')}</p>}
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.workOrder')}</label>
+                {workOrders.length > 8 && (
+                  <input value={orderSearch} onChange={e => setOrderSearch(e.target.value)} placeholder={t('invoices.searchOrder')} className={inputCls + ' mb-2'} />
+                )}
+                <select value={form.work_report_id} onChange={e => onWorkOrderChange(e.target.value)} className={inputCls}>
+                  <option value="">{t('invoices.noWorkOrder')}</option>
+                  {workOrders
+                    .filter(o => {
+                      const q = orderSearch.trim().toLowerCase();
+                      if (!q) return true;
+                      return [o.external_order_number, o.company, o.truck_number].some(v => (v ?? '').toLowerCase().includes(q));
+                    })
+                    .map(o => <option key={o.id} value={o.id}>{orderLabel(o)}</option>)}
+                </select>
+                {form.order_number && <p className="text-sky-300/80 text-xs mt-1">{t('invoices.orderNumberLabel')}: {form.order_number}</p>}
               </div>
               <div>
                 <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.client')}</label>
@@ -665,6 +703,7 @@ export default function FacturacionPage() {
                 <div className="flex items-center gap-3 mt-1.5 flex-wrap text-xs text-slate-500">
                   <span className="text-slate-400">{inv.client_name ?? t('invoices.noClient')}</span>
                   {inv.truck_label && <span className="text-sky-300/80">🚛 {inv.truck_label}</span>}
+                  {inv.order_number && <span className="text-purple-300/80">{t('invoices.orderNumberLabel')} {inv.order_number}</span>}
                   <span>{t('invoices.issueDate')}: {inv.issue_date}</span>
                   {inv.due_date && <span>{t('invoices.dueDate')}: {inv.due_date}</span>}
                 </div>

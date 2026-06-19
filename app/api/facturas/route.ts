@@ -69,6 +69,17 @@ export async function POST(request: Request) {
       if (data) shop = data as any;
     }
 
+    // Enlace a orden de trabajo: la factura hereda el número de orden
+    // (external_order_number) de la orden seleccionada. Se "fotografía" en
+    // order_number para conservarlo aunque la orden cambie o se borre.
+    let work_report_id: string | null = body.work_report_id || null;
+    let order_number: string | null = String(body.order_number ?? '').trim() || null;
+    if (work_report_id) {
+      const { data: wr } = await supabase.from('work_reports').select('id,external_order_number').eq('id', work_report_id).maybeSingle();
+      if (wr) order_number = (wr as any).external_order_number ?? order_number;
+      else work_report_id = null; // orden inexistente → no romper el FK
+    }
+
     // Exención de sales tax: si el CLIENTE tiene certificado de exención, sus
     // facturas no llevan tax y se "fotografía" el número de certificado en la
     // factura (requisito fiscal para la venta exenta).
@@ -155,6 +166,8 @@ export async function POST(request: Request) {
       client_id: body.client_id || null,
       location_id: body.location_id || null,
       truck_id: body.truck_id || null,
+      work_report_id,
+      order_number,
       document_number,
       document_type,
       issue_date: body.issue_date || new Date().toISOString().slice(0, 10),

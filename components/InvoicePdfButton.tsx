@@ -92,6 +92,7 @@ export function InvoicePdfButton({ invoiceId, className, mode = 'download' }: { 
       const metaY = y + 30;
       const metaRows = [
         [isFiscal ? 'Invoice #' : 'Document #', invoice.document_number || '—'],
+        ...(invoice.order_number ? [['Work Order #', String(invoice.order_number)]] : []),
         ['Date', invoice.issue_date || '—'],
         ...(invoice.due_date ? [['Due', invoice.due_date]] : []),
         ['Payment', PM_LABEL[invoice.payment_method] || invoice.payment_method],
