@@ -18,7 +18,8 @@
     "expenses": "Parts Expenses",
     "settings": "Billing Settings",
     "attendance": "Attendance",
-    "shopReport": "Shop report"
+    "shopReport": "Shop report",
+    "salesReport": "Sales Report"
   },
   "settings": {
     "title": "BILLING SETTINGS",
@@ -992,5 +993,18 @@
     "business": "Business / Shop",
     "printed": "Printed",
     "absorbsCostsNote": "Includes parts cost from both shops (charged to the parent)."
+  },
+  "salesReport": {
+    "title": "SALES REPORT",
+    "subtitle": "Sales by shop — daily, weekly, monthly and yearly",
+    "day": "Daily",
+    "week": "Weekly",
+    "month": "Monthly",
+    "year": "Yearly",
+    "prev": "Previous",
+    "next": "Next",
+    "today": "Today",
+    "sales": "Sales",
+    "bothShops": "Total (both shops)"
   }
 }

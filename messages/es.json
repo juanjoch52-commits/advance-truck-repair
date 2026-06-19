@@ -18,7 +18,8 @@
     "expenses": "Gastos de Piezas",
     "settings": "Datos de Facturación",
     "attendance": "Asistencia",
-    "shopReport": "Reporte por taller"
+    "shopReport": "Reporte por taller",
+    "salesReport": "Informe de Ventas"
   },
   "settings": {
     "title": "DATOS DE FACTURACIÓN",
@@ -992,5 +993,18 @@
     "business": "Negocio / Taller",
     "printed": "Impreso",
     "absorbsCostsNote": "Incluye el costo de las piezas de ambos talleres (cargado al papá)."
+  },
+  "salesReport": {
+    "title": "INFORME DE VENTAS",
+    "subtitle": "Ventas por taller — diario, semanal, mensual y anual",
+    "day": "Diario",
+    "week": "Semanal",
+    "month": "Mensual",
+    "year": "Anual",
+    "prev": "Anterior",
+    "next": "Siguiente",
+    "today": "Hoy",
+    "sales": "Ventas",
+    "bothShops": "Total (ambos talleres)"
   }
 }

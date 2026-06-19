@@ -159,6 +159,16 @@ const NAV_ITEMS = [
     ),
   },
   {
+    labelKey: 'nav.salesReport',
+    href: '/informe-ventas',
+    icon: (
+      <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M3 3v18h18M7 14l3-3 4 4 5-6" />
+      </svg>
+    ),
+  },
+  {
     labelKey: 'nav.users',
     href: '/admin',
     icon: (
@@ -182,7 +192,7 @@ const NAV_ITEMS = [
 ];
 
 // Items only visible to owner / super-admin / super-user
-const PRIVILEGED_ONLY_HREFS = new Set<string>(['/nomina-admin', '/deducciones', '/configuracion', '/reporte-talleres']);
+const PRIVILEGED_ONLY_HREFS = new Set<string>(['/nomina-admin', '/deducciones', '/configuracion', '/reporte-talleres', '/informe-ventas']);
 
 export default function AdminSidebar() {
   const pathname = usePathname();
