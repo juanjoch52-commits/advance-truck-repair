@@ -929,10 +929,11 @@
     "total": "TOTAL (todos los talleres)",
     "empty": "No hay facturas en este periodo.",
     "emptyHint": "Aparecerá cuando emitas facturas con taller en este rango de fechas.",
-    "cpaNote": "Nota: no incluye el costo de mano de obra repartido entre talleres (esquema intercompany, pendiente de validación del CPA).",
+    "cpaNote": "El costo de TODAS las piezas se carga al taller papá (01); cada taller conserva el ingreso de sus facturas y los negocios se ajustan entre ellos (préstamo). No incluye el reparto de mano de obra. El tratamiento fiscal lo valida el CPA.",
     "partsCost": "Costo piezas",
     "exportPdf": "Exportar PDF",
     "business": "Negocio / Taller",
-    "printed": "Impreso"
+    "printed": "Impreso",
+    "absorbsCostsNote": "Incluye el costo de las piezas de ambos talleres (cargado al papá)."
   }
 }

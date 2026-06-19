@@ -13,7 +13,6 @@ interface ShopRow {
   facturado: number;
   sales_tax: number;
   costo_piezas: number;
-  ganancia_piezas: number;
   cobrado: number;
   por_cobrar: number;
   num_facturas: number;
@@ -68,13 +67,13 @@ export default function ReporteTalleresPage() {
     doc.text(t('shopReport.title'), M, 56);
     doc.text(`${t('shopReport.period')}: ${fmtDate(from)} — ${fmtDate(to)}`, W - M, 56, { align: 'right' });
 
-    const head = [[t('shopReport.business'), t('shopReport.invoiced'), t('shopReport.salesTax'), t('shopReport.partsCost'), t('shopReport.partsProfit'), t('shopReport.collected'), t('shopReport.receivable'), '#']];
+    const head = [[t('shopReport.business'), t('shopReport.invoiced'), t('shopReport.salesTax'), t('shopReport.partsCost'), t('shopReport.collected'), t('shopReport.receivable'), '#']];
     const body = shops.map(s => [
       (s.business_code ? s.business_code + ' · ' : '') + s.name,
-      money(s.facturado), money(s.sales_tax), money(s.costo_piezas), money(s.ganancia_piezas), money(s.cobrado), money(s.por_cobrar), String(s.num_facturas),
+      money(s.facturado), money(s.sales_tax), money(s.costo_piezas), money(s.cobrado), money(s.por_cobrar), String(s.num_facturas),
     ]);
     if (totals && shops.length > 1) {
-      body.push([t('shopReport.total'), money(totals.facturado), money(totals.sales_tax), money(totals.costo_piezas), money(totals.ganancia_piezas), money(totals.cobrado), money(totals.por_cobrar), String(totals.num_facturas)]);
+      body.push([t('shopReport.total'), money(totals.facturado), money(totals.sales_tax), money(totals.costo_piezas), money(totals.cobrado), money(totals.por_cobrar), String(totals.num_facturas)]);
     }
     const totalRowIdx = totals && shops.length > 1 ? body.length - 1 : -1;
     autoTable(doc, {
@@ -82,10 +81,15 @@ export default function ReporteTalleresPage() {
       head, body,
       styles: { fontSize: 9, textColor: [INK, INK, INK], cellPadding: 5, lineColor: [LINE, LINE, LINE], lineWidth: 0.3 },
       headStyles: { fillColor: [240, 240, 240], textColor: [INK, INK, INK], fontStyle: 'bold' as const, fontSize: 9 },
-      columnStyles: { 0: { halign: 'left' }, 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' }, 7: { halign: 'center' } },
+      columnStyles: { 0: { halign: 'left' }, 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'center' } },
       didParseCell: (h: any) => { if (h.section === 'body' && h.row.index === totalRowIdx) h.cell.styles.fontStyle = 'bold'; },
     });
     let y = ((doc as any).lastAutoTable?.finalY ?? 200) + 18;
+    if (totals) {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(INK, INK, INK);
+      doc.text(`${t('shopReport.partsProfit')} (${t('shopReport.total').toLowerCase()}): ${money(totals.ganancia_piezas)}`, M, y);
+      y += 16;
+    }
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(SOFT, SOFT, SOFT);
     doc.text(t('shopReport.cpaNote'), M, y, { maxWidth: W - M * 2 });
     const now = new Date();
@@ -165,14 +169,16 @@ export default function ReporteTalleresPage() {
                 </div>
                 <span className="text-slate-500 text-xs">{s.num_facturas} {t('shopReport.invoices')}</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 <Metric label={t('shopReport.invoiced')} value={money(s.facturado)} accent="text-amber-300" />
                 <Metric label={t('shopReport.salesTax')} value={money(s.sales_tax)} accent="text-sky-300" />
                 <Metric label={t('shopReport.partsCost')} value={money(s.costo_piezas)} accent="text-red-300" />
-                <Metric label={t('shopReport.partsProfit')} value={money(s.ganancia_piezas)} accent="text-emerald-300" />
                 <Metric label={t('shopReport.collected')} value={money(s.cobrado)} accent="text-emerald-300" />
                 <Metric label={t('shopReport.receivable')} value={money(s.por_cobrar)} accent="text-orange-300" />
               </div>
+              {s.costo_piezas > 0 && (
+                <p className="text-slate-600 text-xs mt-2">{t('shopReport.absorbsCostsNote')}</p>
+              )}
             </div>
           ))}
 
