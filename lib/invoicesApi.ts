@@ -6,6 +6,11 @@ export const PAYMENT_METHODS = ['cash', 'check', 'card', 'deposit', 'credit'] as
 // de venta a crédito, no una forma de cobro).
 export const RECEIPT_METHODS = ['cash', 'check', 'card', 'deposit'] as const;
 
+// Tipo/naturaleza del pago contra una factura abierta (independiente del método):
+// depósito, adelanto o cancelación (liquidación del saldo).
+export const PAYMENT_TYPES = ['deposit', 'advance', 'settlement'] as const;
+export type PaymentType = (typeof PAYMENT_TYPES)[number];
+
 // Tipo de documento. Solo la FACTURA FISCAL ('invoice') es reportable: consume el
 // correlativo fiscal del taller, entra a CxC y descuenta inventario. estimate y
 // work_order son documentos NO fiscales (cotización / orden de trabajo).

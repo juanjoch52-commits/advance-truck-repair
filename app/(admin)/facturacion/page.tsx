@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { InvoicePdfButton } from '@/components/InvoicePdfButton';
+import { PaymentReceiptButton } from '@/components/PaymentReceiptButton';
 
 type PaymentMethod = 'cash' | 'check' | 'card' | 'deposit' | 'credit';
 type ReceiptMethod = 'cash' | 'check' | 'card' | 'deposit';
@@ -61,8 +62,10 @@ const newLine = (type: LineType = 'part'): Line => ({
   mechanic_id: '', commission_pct: '50',
 });
 
+type PaymentKind = 'deposit' | 'advance' | 'settlement';
 const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'check', 'card', 'deposit', 'credit'];
 const RECEIPT_METHODS: ReceiptMethod[] = ['cash', 'check', 'card', 'deposit'];
+const PAYMENT_TYPES: PaymentKind[] = ['deposit', 'advance', 'settlement'];
 const STATUSES: InvoiceStatus[] = ['draft', 'open', 'partial', 'paid', 'void'];
 const DOCUMENT_TYPES: DocumentType[] = ['invoice', 'estimate', 'work_order'];
 const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
@@ -107,9 +110,15 @@ export default function FacturacionPage() {
 
   // Pago
   const [payFor, setPayFor] = useState<Invoice | null>(null);
-  const [payForm, setPayForm] = useState({ amount: '', method: 'cash' as ReceiptMethod, reference: '', paid_at: new Date().toISOString().slice(0, 10), notes: '' });
+  const [payForm, setPayForm] = useState({ amount: '', payment_type: 'deposit' as PaymentKind, method: 'cash' as ReceiptMethod, reference: '', paid_at: new Date().toISOString().slice(0, 10), notes: '' });
   const [paySaving, setPaySaving] = useState(false);
   const [payError, setPayError] = useState('');
+  // Comprobante recién generado (paso posterior al pago, para imprimir al cliente).
+  const [paidReceipt, setPaidReceipt] = useState<{ invoiceId: string; payment: any } | null>(null);
+
+  // Comprobantes guardados por factura (reimpresión posterior).
+  const [paymentsByInvoice, setPaymentsByInvoice] = useState<Record<string, any[]>>({});
+  const [expandedPayments, setExpandedPayments] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -222,7 +231,8 @@ export default function FacturacionPage() {
 
   function openPay(inv: Invoice) {
     setPayFor(inv);
-    setPayForm({ amount: String(inv.balance), method: 'cash', reference: '', paid_at: new Date().toISOString().slice(0, 10), notes: '' });
+    setPaidReceipt(null);
+    setPayForm({ amount: String(inv.balance), payment_type: 'deposit', method: 'cash', reference: '', paid_at: new Date().toISOString().slice(0, 10), notes: '' });
     setPayError('');
   }
 
@@ -232,11 +242,31 @@ export default function FacturacionPage() {
     setPayError(''); setPaySaving(true);
     const res = await fetch(`/api/facturas/${payFor.id}/pagos`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amount: parseFloat(payForm.amount) || 0, method: payForm.method, reference: payForm.reference, paid_at: payForm.paid_at, notes: payForm.notes }),
+      body: JSON.stringify({ amount: parseFloat(payForm.amount) || 0, payment_type: payForm.payment_type, method: payForm.method, reference: payForm.reference, paid_at: payForm.paid_at, notes: payForm.notes }),
     });
     const j = await res.json();
     if (!res.ok) { setPayError(j.error ?? 'Error'); setPaySaving(false); return; }
-    setPaySaving(false); setPayFor(null); load();
+    setPaySaving(false);
+    // Paso de comprobante: dejar el modal abierto mostrando el recibo para imprimir.
+    if (j.payment) setPaidReceipt({ invoiceId: payFor.id, payment: j.payment });
+    else setPayFor(null);
+    // Refrescar el panel de comprobantes de esa factura si estaba abierto.
+    setPaymentsByInvoice(prev => ({ ...prev, [payFor.id]: undefined as any }));
+    load();
+  }
+
+  function closePay() { setPayFor(null); setPaidReceipt(null); setPayError(''); }
+
+  async function loadPayments(invId: string) {
+    try {
+      const r = await fetch(`/api/facturas/${invId}`);
+      if (r.ok) { const j = await r.json(); setPaymentsByInvoice(prev => ({ ...prev, [invId]: j.payments ?? [] })); }
+    } catch {}
+  }
+  function togglePayments(invId: string) {
+    if (expandedPayments === invId) { setExpandedPayments(null); return; }
+    setExpandedPayments(invId);
+    if (!paymentsByInvoice[invId]) loadPayments(invId);
   }
 
   async function handleVoid(inv: Invoice) {
@@ -524,13 +554,40 @@ export default function FacturacionPage() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-slate-900 border border-emerald-500/20 rounded-2xl p-6 w-full max-w-md my-8 shadow-2xl">
             <div className="flex items-center justify-between mb-1">
-              <h2 className="display-font text-slate-100 font-bold text-lg tracking-wide">{t('invoices.recordPayment')}</h2>
-              <button onClick={() => setPayFor(null)} className="text-slate-500 hover:text-slate-300 p-1.5 rounded-lg hover:bg-slate-700 transition">
+              <h2 className="display-font text-slate-100 font-bold text-lg tracking-wide">{paidReceipt ? t('invoices.payment.recorded') : t('invoices.recordPayment')}</h2>
+              <button onClick={closePay} className="text-slate-500 hover:text-slate-300 p-1.5 rounded-lg hover:bg-slate-700 transition">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
             <p className="text-slate-400 text-sm mb-4">{payFor.document_number} · {t('invoices.balance')}: <span className="text-amber-300 font-semibold">{money(payFor.balance)}</span></p>
+
+            {paidReceipt ? (
+              /* Paso de comprobante: imprimir/descargar el recibo para el cliente. */
+              <div className="space-y-4">
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 text-center">
+                  <p className="text-emerald-300 display-font text-2xl font-bold">{money(paidReceipt.payment.amount)}</p>
+                  <p className="text-slate-400 text-sm mt-1">{t(`invoices.paymentType.${paidReceipt.payment.payment_type}`)} · {t('invoices.payment.receiptNo')} {paidReceipt.payment.receipt_number}</p>
+                  {paidReceipt.payment.created_by_name && <p className="text-slate-600 text-xs mt-1">{t('invoices.payment.recordedBy')}: {paidReceipt.payment.created_by_name}</p>}
+                </div>
+                <div className="flex gap-3 flex-wrap">
+                  <PaymentReceiptButton invoiceId={paidReceipt.invoiceId} paymentId={paidReceipt.payment.id} mode="print" label={t('invoices.payment.printReceipt')} className="inline-flex items-center gap-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold py-2.5 px-5 rounded-lg transition text-sm" />
+                  <PaymentReceiptButton invoiceId={paidReceipt.invoiceId} paymentId={paidReceipt.payment.id} mode="download" label={t('invoices.payment.downloadReceipt')} className="inline-flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 py-2.5 px-5 rounded-lg transition text-sm" />
+                  <button type="button" onClick={closePay} className="bg-slate-800 hover:bg-slate-700 text-slate-300 py-2.5 px-5 rounded-lg transition text-sm ml-auto">{t('common.done')}</button>
+                </div>
+              </div>
+            ) : (
             <form onSubmit={handlePay} className="space-y-4">
+              <div>
+                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.payment.type')}</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {PAYMENT_TYPES.map(pt => (
+                    <button key={pt} type="button" onClick={() => setPayForm(f => ({ ...f, payment_type: pt }))}
+                      className={`px-2 py-2 rounded-lg text-xs border transition ${payForm.payment_type === pt ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'}`}>
+                      {t(`invoices.paymentType.${pt}`)}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div>
                 <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.payment.amount')} ($)</label>
                 <input type="number" min="0.01" step="0.01" value={payForm.amount} onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))} className={inputCls} />
@@ -556,9 +613,10 @@ export default function FacturacionPage() {
                 <button type="submit" disabled={paySaving} className="bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-500/50 text-slate-950 font-bold py-2.5 px-6 rounded-lg transition display-font tracking-wide">
                   {paySaving ? t('common.saving') : t('invoices.payment.save')}
                 </button>
-                <button type="button" onClick={() => setPayFor(null)} className="bg-slate-700 hover:bg-slate-600 text-slate-300 py-2.5 px-5 rounded-lg transition text-sm">{t('common.cancel')}</button>
+                <button type="button" onClick={closePay} className="bg-slate-700 hover:bg-slate-600 text-slate-300 py-2.5 px-5 rounded-lg transition text-sm">{t('common.cancel')}</button>
               </div>
             </form>
+            )}
           </div>
         </div>
       )}
@@ -628,6 +686,11 @@ export default function FacturacionPage() {
                 )}
                 <InvoicePdfButton invoiceId={inv.id} />
                 <InvoicePdfButton invoiceId={inv.id} mode="print" />
+                {Number(inv.amount_paid) > 0.001 && inv.status !== 'void' && (
+                  <button onClick={() => togglePayments(inv.id)} title={t('invoices.payment.receipts')} className={`p-1.5 rounded transition ${expandedPayments === inv.id ? 'text-sky-400 bg-sky-500/10' : 'text-slate-500 hover:text-sky-400 hover:bg-sky-500/10'}`}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                  </button>
+                )}
                 {inv.balance > 0.001 && inv.status !== 'void' && inv.status !== 'draft' && (
                   <button onClick={() => openPay(inv)} title={t('invoices.recordPayment')} className="p-1.5 rounded text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -660,6 +723,36 @@ export default function FacturacionPage() {
                           <span className="text-slate-600 text-xs">{money(it.amount)}</span>
                           {it.mechanic_id && <span className="text-emerald-400/70 text-xs">→ {t('invoices.commissionBadge').replace('{a}', money(Number(it.amount) * Number(it.commission_pct ?? 50) / 100))}</span>}
                         </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {expandedPayments === inv.id && (
+                <div className="border-t border-white/5 px-5 py-3">
+                  <p className="text-slate-400 text-xs mb-2">{t('invoices.payment.receipts')}</p>
+                  {!paymentsByInvoice[inv.id] ? (
+                    <p className="text-slate-600 text-xs">{t('common.loading')}</p>
+                  ) : paymentsByInvoice[inv.id].length === 0 ? (
+                    <p className="text-slate-600 text-xs">{t('invoices.payment.noPayments')}</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {paymentsByInvoice[inv.id].map((p: any) => (
+                        <div key={p.id} className="flex items-center justify-between gap-3 flex-wrap text-sm bg-slate-900/50 rounded-lg px-3 py-2">
+                          <div className="min-w-0">
+                            <span className="text-emerald-300 font-semibold">{money(p.amount)}</span>
+                            <span className="text-slate-500 mx-2">·</span>
+                            <span className="text-slate-400">{t(`invoices.paymentType.${p.payment_type ?? 'deposit'}`)}</span>
+                            <span className="text-slate-600 text-xs ml-2">{p.paid_at}</span>
+                            {p.created_by_name && <span className="text-slate-600 text-xs ml-2">· {p.created_by_name}</span>}
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <span className="text-slate-600 text-xs mr-1">{p.receipt_number}</span>
+                            <PaymentReceiptButton invoiceId={inv.id} paymentId={p.id} mode="print" />
+                            <PaymentReceiptButton invoiceId={inv.id} paymentId={p.id} mode="download" />
+                          </div>
+                        </div>
                       ))}
                     </div>
                   )}

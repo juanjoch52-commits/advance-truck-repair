@@ -155,7 +155,21 @@
       "reference": "Reference",
       "referenceHint": "check #, ref...",
       "date": "Date",
-      "save": "Record payment"
+      "save": "Record payment",
+      "type": "Payment type",
+      "recorded": "Payment recorded",
+      "receiptNo": "Receipt #",
+      "recordedBy": "Recorded by",
+      "printReceipt": "Print receipt",
+      "downloadReceipt": "Download",
+      "receipts": "Payment receipts",
+      "noPayments": "No payments recorded."
+    },
+    "paymentType": {
+      "deposit": "Deposit",
+      "advance": "Advance",
+      "settlement": "Settlement",
+      "payment": "Payment"
     },
     "documentType": "Document type",
     "docType": {
@@ -575,6 +589,7 @@
     "loading": "Loading...",
     "save": "Save",
     "saving": "Saving...",
+    "done": "Done",
     "cancel": "Cancel",
     "delete": "Delete",
     "deleting": "Deleting...",

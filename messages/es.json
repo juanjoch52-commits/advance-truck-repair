@@ -155,7 +155,21 @@
       "reference": "Referencia",
       "referenceHint": "# cheque, ref...",
       "date": "Fecha",
-      "save": "Registrar pago"
+      "save": "Registrar pago",
+      "type": "Tipo de pago",
+      "recorded": "Pago registrado",
+      "receiptNo": "Comprobante",
+      "recordedBy": "Registrado por",
+      "printReceipt": "Imprimir comprobante",
+      "downloadReceipt": "Descargar",
+      "receipts": "Comprobantes de pago",
+      "noPayments": "Sin pagos registrados."
+    },
+    "paymentType": {
+      "deposit": "Depósito",
+      "advance": "Adelanto",
+      "settlement": "Cancelación",
+      "payment": "Pago"
     },
     "documentType": "Tipo de documento",
     "docType": {
@@ -575,6 +589,7 @@
     "loading": "Cargando...",
     "save": "Guardar",
     "saving": "Guardando...",
+    "done": "Listo",
     "cancel": "Cancelar",
     "delete": "Eliminar",
     "deleting": "Eliminando...",

@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { PaymentReceiptButton } from '@/components/PaymentReceiptButton';
 
 type ReceiptMethod = 'cash' | 'check' | 'card' | 'deposit';
+type PaymentKind = 'deposit' | 'advance' | 'settlement';
 type Bucket = 'current' | 'd1_30' | 'd31_60' | 'd61_90' | 'd90_plus';
 
 interface ARInvoice {
@@ -30,6 +32,7 @@ interface ARClient {
 interface ARSummary { total: number; count: number; current: number; d1_30: number; d31_60: number; d61_90: number; d90_plus: number }
 
 const RECEIPT_METHODS: ReceiptMethod[] = ['cash', 'check', 'card', 'deposit'];
+const PAYMENT_TYPES: PaymentKind[] = ['deposit', 'advance', 'settlement'];
 const BUCKETS: Bucket[] = ['current', 'd1_30', 'd31_60', 'd61_90', 'd90_plus'];
 const money = (n: any) => `$${(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const inputCls = 'w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 transition';
@@ -50,9 +53,10 @@ export default function CuentasPorCobrarPage() {
   const [open, setOpen] = useState<Record<string, boolean>>({});
 
   const [payFor, setPayFor] = useState<ARInvoice | null>(null);
-  const [payForm, setPayForm] = useState({ amount: '', method: 'cash' as ReceiptMethod, reference: '', paid_at: new Date().toISOString().slice(0, 10) });
+  const [payForm, setPayForm] = useState({ amount: '', payment_type: 'deposit' as PaymentKind, method: 'cash' as ReceiptMethod, reference: '', paid_at: new Date().toISOString().slice(0, 10) });
   const [paySaving, setPaySaving] = useState(false);
   const [payError, setPayError] = useState('');
+  const [paidReceipt, setPaidReceipt] = useState<{ invoiceId: string; payment: any } | null>(null);
 
   async function load() {
     setLoading(true);
@@ -90,20 +94,25 @@ export default function CuentasPorCobrarPage() {
 
   function openPay(inv: ARInvoice) {
     setPayFor(inv);
-    setPayForm({ amount: String(inv.balance), method: 'cash', reference: '', paid_at: new Date().toISOString().slice(0, 10) });
+    setPaidReceipt(null);
+    setPayForm({ amount: String(inv.balance), payment_type: 'deposit', method: 'cash', reference: '', paid_at: new Date().toISOString().slice(0, 10) });
     setPayError('');
   }
+  function closePay() { setPayFor(null); setPaidReceipt(null); setPayError(''); }
   async function handlePay(e: React.FormEvent) {
     e.preventDefault();
     if (!payFor) return;
     setPayError(''); setPaySaving(true);
     const res = await fetch(`/api/facturas/${payFor.id}/pagos`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amount: parseFloat(payForm.amount) || 0, method: payForm.method, reference: payForm.reference, paid_at: payForm.paid_at }),
+      body: JSON.stringify({ amount: parseFloat(payForm.amount) || 0, payment_type: payForm.payment_type, method: payForm.method, reference: payForm.reference, paid_at: payForm.paid_at }),
     });
     const j = await res.json();
     if (!res.ok) { setPayError(j.error ?? 'Error'); setPaySaving(false); return; }
-    setPaySaving(false); setPayFor(null); load();
+    setPaySaving(false);
+    if (j.payment) setPaidReceipt({ invoiceId: payFor.id, payment: j.payment });
+    else setPayFor(null);
+    load();
   }
 
   return (
@@ -113,13 +122,38 @@ export default function CuentasPorCobrarPage() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-slate-900 border border-emerald-500/20 rounded-2xl p-6 w-full max-w-md my-8 shadow-2xl">
             <div className="flex items-center justify-between mb-1">
-              <h2 className="display-font text-slate-100 font-bold text-lg tracking-wide">{t('invoices.recordPayment')}</h2>
-              <button onClick={() => setPayFor(null)} className="text-slate-500 hover:text-slate-300 p-1.5 rounded-lg hover:bg-slate-700 transition">
+              <h2 className="display-font text-slate-100 font-bold text-lg tracking-wide">{paidReceipt ? t('invoices.payment.recorded') : t('invoices.recordPayment')}</h2>
+              <button onClick={closePay} className="text-slate-500 hover:text-slate-300 p-1.5 rounded-lg hover:bg-slate-700 transition">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
             <p className="text-slate-400 text-sm mb-4">{payFor.document_number} · {t('invoices.balance')}: <span className="text-amber-300 font-semibold">{money(payFor.balance)}</span></p>
+            {paidReceipt ? (
+              <div className="space-y-4">
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 text-center">
+                  <p className="text-emerald-300 display-font text-2xl font-bold">{money(paidReceipt.payment.amount)}</p>
+                  <p className="text-slate-400 text-sm mt-1">{t(`invoices.paymentType.${paidReceipt.payment.payment_type}`)} · {t('invoices.payment.receiptNo')} {paidReceipt.payment.receipt_number}</p>
+                  {paidReceipt.payment.created_by_name && <p className="text-slate-600 text-xs mt-1">{t('invoices.payment.recordedBy')}: {paidReceipt.payment.created_by_name}</p>}
+                </div>
+                <div className="flex gap-3 flex-wrap">
+                  <PaymentReceiptButton invoiceId={paidReceipt.invoiceId} paymentId={paidReceipt.payment.id} mode="print" label={t('invoices.payment.printReceipt')} className="inline-flex items-center gap-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold py-2.5 px-5 rounded-lg transition text-sm" />
+                  <PaymentReceiptButton invoiceId={paidReceipt.invoiceId} paymentId={paidReceipt.payment.id} mode="download" label={t('invoices.payment.downloadReceipt')} className="inline-flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 py-2.5 px-5 rounded-lg transition text-sm" />
+                  <button type="button" onClick={closePay} className="bg-slate-800 hover:bg-slate-700 text-slate-300 py-2.5 px-5 rounded-lg transition text-sm ml-auto">{t('common.done')}</button>
+                </div>
+              </div>
+            ) : (
             <form onSubmit={handlePay} className="space-y-4">
+              <div>
+                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.payment.type')}</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {PAYMENT_TYPES.map(pt => (
+                    <button key={pt} type="button" onClick={() => setPayForm(f => ({ ...f, payment_type: pt }))}
+                      className={`px-2 py-2 rounded-lg text-xs border transition ${payForm.payment_type === pt ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'}`}>
+                      {t(`invoices.paymentType.${pt}`)}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div>
                 <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.payment.amount')} ($)</label>
                 <input type="number" min="0.01" step="0.01" value={payForm.amount} onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))} className={inputCls} />
@@ -145,9 +179,10 @@ export default function CuentasPorCobrarPage() {
                 <button type="submit" disabled={paySaving} className="bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-500/50 text-slate-950 font-bold py-2.5 px-6 rounded-lg transition display-font tracking-wide">
                   {paySaving ? t('common.saving') : t('invoices.payment.save')}
                 </button>
-                <button type="button" onClick={() => setPayFor(null)} className="bg-slate-700 hover:bg-slate-600 text-slate-300 py-2.5 px-5 rounded-lg transition text-sm">{t('common.cancel')}</button>
+                <button type="button" onClick={closePay} className="bg-slate-700 hover:bg-slate-600 text-slate-300 py-2.5 px-5 rounded-lg transition text-sm">{t('common.cancel')}</button>
               </div>
             </form>
+            )}
           </div>
         </div>
       )}
