@@ -40,7 +40,7 @@ async function loadLogo(url: string, maxW: number, maxH: number): Promise<{ data
   }
 }
 
-export function InvoicePdfButton({ invoiceId, className }: { invoiceId: string; className?: string }) {
+export function InvoicePdfButton({ invoiceId, className, mode = 'download' }: { invoiceId: string; className?: string; mode?: 'download' | 'print' }) {
   const [generating, setGenerating] = useState(false);
 
   async function handleGenerate() {
@@ -179,7 +179,15 @@ export function InvoicePdfButton({ invoiceId, className }: { invoiceId: string; 
       doc.text('Thank you for your business', PAGE_W - M, FOOTER_Y, { align: 'right' });
 
       const fileLabel = (DOC_TITLE[docType] || 'INVOICE').replace(/\s+/g, '');
-      doc.save(`${fileLabel}_${invoice.document_number || invoiceId}.pdf`);
+      if (mode === 'print') {
+        // Abre el PDF en una pestaña y lanza el diálogo de impresión (sin descargar).
+        doc.autoPrint();
+        const url = doc.output('bloburl');
+        const w = window.open(url, '_blank');
+        if (!w) { doc.save(`${fileLabel}_${invoice.document_number || invoiceId}.pdf`); } // si el navegador bloquea el popup, cae a descarga
+      } else {
+        doc.save(`${fileLabel}_${invoice.document_number || invoiceId}.pdf`);
+      }
     } finally {
       setGenerating(false);
     }
@@ -187,10 +195,16 @@ export function InvoicePdfButton({ invoiceId, className }: { invoiceId: string; 
 
   return (
     <button type="button" onClick={() => void handleGenerate()} disabled={generating}
-      title="PDF" className={className ?? 'p-1.5 rounded text-slate-500 hover:text-sky-400 hover:bg-sky-500/10 transition disabled:opacity-50'}>
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
-      </svg>
+      title={mode === 'print' ? 'Imprimir' : 'PDF'} className={className ?? 'p-1.5 rounded text-slate-500 hover:text-sky-400 hover:bg-sky-500/10 transition disabled:opacity-50'}>
+      {mode === 'print' ? (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+        </svg>
+      ) : (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
+        </svg>
+      )}
     </button>
   );
 }

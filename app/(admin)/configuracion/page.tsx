@@ -18,6 +18,7 @@ interface Shop {
   email: string | null;
   tax_rate: number;
   invoice_prefix: string | null;
+  business_code: string | null;
   next_invoice_number: number;
   logo_url: string | null;
   notes: string | null;
@@ -38,6 +39,7 @@ interface ShopFormState {
   email: string;
   taxRate: string;
   invoicePrefix: string;
+  businessCode: string;
   nextInvoiceNumber: string;
   notes: string;
 }
@@ -45,7 +47,7 @@ interface ShopFormState {
 const BLANK_FORM: ShopFormState = {
   name: '', legalName: '', ein: '', salesTaxCert: '', county: 'Orange',
   billingAddress: '', city: '', state: 'FL', zip: '', phone: '', email: '',
-  taxRate: '6.5', invoicePrefix: '', nextInvoiceNumber: '1', notes: '',
+  taxRate: '6.5', invoicePrefix: '', businessCode: '', nextInvoiceNumber: '1', notes: '',
 };
 
 const inputCls =
@@ -151,6 +153,12 @@ function ShopFormBody({
         <p className="text-slate-600 text-xs mt-1">{t('settings.invoicePrefixHint')}</p>
       </div>
       <div>
+        <label className="block text-slate-400 text-sm mb-1.5">{t('settings.businessCode')}</label>
+        <input value={form.businessCode} onChange={e => onChange({ businessCode: e.target.value })}
+          placeholder="01" className={inputCls} />
+        <p className="text-slate-600 text-xs mt-1">{t('settings.businessCodeHint')}</p>
+      </div>
+      <div>
         <label className="block text-slate-400 text-sm mb-1.5">{t('settings.nextInvoiceNumber')}</label>
         <input type="number" min="1" step="1" value={form.nextInvoiceNumber}
           onChange={e => onChange({ nextInvoiceNumber: e.target.value })} className={inputCls} />
@@ -242,6 +250,7 @@ export default function ConfiguracionPage() {
       email: s.email ?? '',
       taxRate: String(s.tax_rate ?? 0),
       invoicePrefix: s.invoice_prefix ?? '',
+      businessCode: s.business_code ?? '',
       nextInvoiceNumber: String(s.next_invoice_number ?? 1),
       notes: s.notes ?? '',
     };
@@ -262,6 +271,7 @@ export default function ConfiguracionPage() {
       email: f.email.trim() || null,
       tax_rate: parseFloat(f.taxRate) || 0,
       invoice_prefix: f.invoicePrefix.trim() || null,
+      business_code: f.businessCode.trim() || null,
       next_invoice_number: parseInt(f.nextInvoiceNumber, 10) || 1,
       notes: f.notes.trim() || null,
     };

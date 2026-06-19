@@ -35,12 +35,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'pending_tasks', pending: pendingLabor.length }, { status: 409 });
     }
 
-    // Número fiscal: correlativo atómico del taller, o respaldo global.
+    // Fecha de emisión (la del número y la de la comisión).
+    const emitDate = (typeof body.completed_date === 'string' && body.completed_date) || new Date().toISOString().slice(0, 10);
+
+    // Número fiscal: correlativo atómico del taller (con la fecha de emisión), o respaldo global.
     let document_number = String(invoice.document_number ?? '').trim();
     if (!document_number) {
       let prefix = 'INV-';
       if (invoice.shop_id) {
-        const { data: num } = await supabase.rpc('next_shop_invoice_number', { p_shop_id: invoice.shop_id });
+        const { data: num } = await supabase.rpc('next_shop_invoice_number', { p_shop_id: invoice.shop_id, p_date: emitDate });
         if (num) document_number = String(num);
         const { data: shop } = await supabase.from('shops').select('invoice_prefix').eq('id', invoice.shop_id).maybeSingle();
         if (shop?.invoice_prefix) prefix = shop.invoice_prefix;
@@ -59,8 +62,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const markPaid = invoice.payment_method !== 'credit' && body.mark_paid === true;
     const amount_paid = markPaid ? total : 0;
     const { balance, status } = deriveBalanceStatus(total, amount_paid);
-
-    const emitDate = (typeof body.completed_date === 'string' && body.completed_date) || new Date().toISOString().slice(0, 10);
 
     const { data: updated, error: upErr } = await supabase.from('invoices').update({
       document_number,

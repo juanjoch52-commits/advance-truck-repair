@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireShopsAccess, SHOP_COLS } from '@/lib/shopsApi';
+import { requireShopsAccess, SHOP_COLS, normalizeBusinessCode } from '@/lib/shopsApi';
 import { sanitizeDbError } from '@/lib/clientsApi';
 import { authErrorResponse } from '@/lib/apiAuth';
 
@@ -29,6 +29,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (body.tax_rate !== undefined)
       payload.tax_rate = Number.isFinite(Number(body.tax_rate)) ? Math.min(100, Math.max(0, Number(body.tax_rate))) : 0;
     if (body.invoice_prefix !== undefined) payload.invoice_prefix = String(body.invoice_prefix).trim() || null;
+    if (body.business_code !== undefined) payload.business_code = normalizeBusinessCode(body.business_code);
     if (body.next_invoice_number !== undefined)
       payload.next_invoice_number = Math.max(1, parseInt(body.next_invoice_number, 10) || 1);
     if (body.notes !== undefined) payload.notes = String(body.notes).trim() || null;

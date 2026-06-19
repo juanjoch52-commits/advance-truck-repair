@@ -3,7 +3,15 @@ import { requireRole } from '@/lib/apiAuth';
 
 // Columnas expuestas de shops (datos de facturación por taller).
 export const SHOP_COLS =
-  'id,name,legal_name,ein,sales_tax_certificate,county,billing_address_line,city,state,zip,phone,email,tax_rate,invoice_prefix,next_invoice_number,logo_url,notes,is_active,sort_order,created_at,updated_at';
+  'id,name,legal_name,ein,sales_tax_certificate,county,billing_address_line,city,state,zip,phone,email,tax_rate,invoice_prefix,business_code,next_invoice_number,logo_url,notes,is_active,sort_order,created_at,updated_at';
+
+// Normaliza el código de negocio (papá=01, hijo=02): si es numérico lo rellena a
+// 2 dígitos. Vacío → null (entonces el taller usa el esquema de numeración viejo).
+export function normalizeBusinessCode(v: unknown): string | null {
+  const s = String(v ?? '').trim();
+  if (!s) return null;
+  return /^\d+$/.test(s) ? s.padStart(2, '0') : s;
+}
 
 // Datos fiscales/facturación: solo owner / super_user (más restringido que el
 // CRM de clientes, que permite admin). Tabla con RLS deny-all → service_role.
@@ -29,6 +37,7 @@ export function buildShopPayload(body: any) {
     email: String(body.email ?? '').trim() || null,
     tax_rate: Number.isFinite(Number(body.tax_rate)) ? Math.min(100, Math.max(0, Number(body.tax_rate))) : 0,
     invoice_prefix: String(body.invoice_prefix ?? '').trim() || null,
+    business_code: normalizeBusinessCode(body.business_code),
     next_invoice_number: Number.isFinite(Number(body.next_invoice_number))
       ? Math.max(1, parseInt(body.next_invoice_number, 10) || 1) : 1,
     notes: String(body.notes ?? '').trim() || null,

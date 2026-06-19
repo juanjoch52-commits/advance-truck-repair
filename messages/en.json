@@ -66,7 +66,9 @@
     "reactivate": "Reactivate",
     "suspended": "Suspended",
     "deleteConfirm": "Delete shop \"{name}\"?",
-    "deleteError": "Could not delete the shop."
+    "deleteError": "Could not delete the shop.",
+    "businessCode": "Business code",
+    "businessCodeHint": "Identifies the business in the number (parent 01, child 02). If set, invoices use the date format: YYYYMMDD-N-CC."
   },
   "invoices": {
     "title": "INVOICING",

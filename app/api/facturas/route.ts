@@ -102,9 +102,10 @@ export async function POST(request: Request) {
     //  - factura fiscal con taller → correlativo ATÓMICO del taller (RPC), que
     //    consume e incrementa shops.next_invoice_number sin huecos por carreras;
     //  - resto (no fiscal, o sin taller) → prefijo por tipo + conteo de respaldo.
+    const issueDate = body.issue_date || new Date().toISOString().slice(0, 10);
     let document_number = String(body.document_number ?? '').trim();
     if (!document_number && !isDraft && isFiscal && shop) {
-      const { data: num } = await supabase.rpc('next_shop_invoice_number', { p_shop_id: shop.id });
+      const { data: num } = await supabase.rpc('next_shop_invoice_number', { p_shop_id: shop.id, p_date: issueDate });
       if (num) document_number = String(num);
     }
     if (!document_number && !isDraft) {

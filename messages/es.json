@@ -66,7 +66,9 @@
     "reactivate": "Reactivar",
     "suspended": "Suspendido",
     "deleteConfirm": "¿Eliminar el taller \"{name}\"?",
-    "deleteError": "No se pudo eliminar el taller."
+    "deleteError": "No se pudo eliminar el taller.",
+    "businessCode": "Código de negocio",
+    "businessCodeHint": "Identifica el negocio en el número (papá 01, hijo 02). Si lo llenas, la factura usa el formato por fecha: AAAAMMDD-N-CC."
   },
   "invoices": {
     "title": "FACTURACIÓN",
