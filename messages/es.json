@@ -17,7 +17,8 @@
     "inventory": "Inventario / Bodega",
     "expenses": "Gastos de Piezas",
     "settings": "Datos de Facturación",
-    "attendance": "Asistencia"
+    "attendance": "Asistencia",
+    "shopReport": "Reporte por taller"
   },
   "settings": {
     "title": "DATOS DE FACTURACIÓN",
@@ -909,5 +910,25 @@
       "fri": "Vie",
       "sat": "Sáb"
     }
+  },
+  "shopReport": {
+    "title": "REPORTE POR TALLER",
+    "subtitle": "Ingresos, sales tax y ganancia por negocio",
+    "thisMonth": "Este mes",
+    "thisQuarter": "Este trimestre",
+    "thisYear": "Este año",
+    "from": "Desde",
+    "to": "Hasta",
+    "period": "Periodo",
+    "invoiced": "Facturado",
+    "salesTax": "Sales tax cobrado",
+    "collected": "Cobrado",
+    "receivable": "Por cobrar",
+    "partsProfit": "Ganancia piezas",
+    "invoices": "facturas",
+    "total": "TOTAL (todos los talleres)",
+    "empty": "No hay facturas en este periodo.",
+    "emptyHint": "Aparecerá cuando emitas facturas con taller en este rango de fechas.",
+    "cpaNote": "Nota: no incluye el costo de mano de obra repartido entre talleres (esquema intercompany, pendiente de validación del CPA)."
   }
 }

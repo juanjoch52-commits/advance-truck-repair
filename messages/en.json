@@ -17,7 +17,8 @@
     "inventory": "Inventory / Warehouse",
     "expenses": "Parts Expenses",
     "settings": "Billing Settings",
-    "attendance": "Attendance"
+    "attendance": "Attendance",
+    "shopReport": "Shop report"
   },
   "settings": {
     "title": "BILLING SETTINGS",
@@ -909,5 +910,25 @@
       "fri": "Fri",
       "sat": "Sat"
     }
+  },
+  "shopReport": {
+    "title": "SHOP REPORT",
+    "subtitle": "Income, sales tax and profit by business",
+    "thisMonth": "This month",
+    "thisQuarter": "This quarter",
+    "thisYear": "This year",
+    "from": "From",
+    "to": "To",
+    "period": "Period",
+    "invoiced": "Invoiced",
+    "salesTax": "Sales tax collected",
+    "collected": "Collected",
+    "receivable": "Receivable",
+    "partsProfit": "Parts profit",
+    "invoices": "invoices",
+    "total": "TOTAL (all shops)",
+    "empty": "No invoices in this period.",
+    "emptyHint": "It will appear once you issue invoices with a shop in this date range.",
+    "cpaNote": "Note: does not include labor cost split between shops (intercompany scheme, pending CPA validation)."
   }
 }
