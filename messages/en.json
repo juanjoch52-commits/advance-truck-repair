@@ -929,6 +929,10 @@
     "total": "TOTAL (all shops)",
     "empty": "No invoices in this period.",
     "emptyHint": "It will appear once you issue invoices with a shop in this date range.",
-    "cpaNote": "Note: does not include labor cost split between shops (intercompany scheme, pending CPA validation)."
+    "cpaNote": "Note: does not include labor cost split between shops (intercompany scheme, pending CPA validation).",
+    "partsCost": "Parts cost",
+    "exportPdf": "Export PDF",
+    "business": "Business / Shop",
+    "printed": "Printed"
   }
 }

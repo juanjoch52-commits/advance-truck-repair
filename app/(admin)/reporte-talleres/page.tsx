@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { fmtDate } from '@/lib/fmt';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface ShopRow {
   id: string | null;
@@ -10,12 +12,13 @@ interface ShopRow {
   business_code: string | null;
   facturado: number;
   sales_tax: number;
+  costo_piezas: number;
+  ganancia_piezas: number;
   cobrado: number;
   por_cobrar: number;
-  ganancia_piezas: number;
   num_facturas: number;
 }
-interface Totals { facturado: number; sales_tax: number; cobrado: number; por_cobrar: number; ganancia_piezas: number; num_facturas: number }
+interface Totals { facturado: number; sales_tax: number; costo_piezas: number; ganancia_piezas: number; cobrado: number; por_cobrar: number; num_facturas: number }
 
 function firstOfMonth() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10); }
 function firstOfQuarter() { const d = new Date(); const q = Math.floor(d.getMonth() / 3) * 3; return new Date(d.getFullYear(), q, 1).toISOString().slice(0, 10); }
@@ -54,6 +57,42 @@ export default function ReporteTalleresPage() {
 
   useEffect(() => { if (allowed) load(); }, [allowed, load]);
 
+  function generatePdf() {
+    const INK = 30, SOFT = 110, LINE = 175;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
+    const W = doc.internal.pageSize.getWidth();
+    const M = 40;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(INK, INK, INK);
+    doc.text('ADVANCE TRUCK REPAIR', M, 40);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(SOFT, SOFT, SOFT);
+    doc.text(t('shopReport.title'), M, 56);
+    doc.text(`${t('shopReport.period')}: ${fmtDate(from)} — ${fmtDate(to)}`, W - M, 56, { align: 'right' });
+
+    const head = [[t('shopReport.business'), t('shopReport.invoiced'), t('shopReport.salesTax'), t('shopReport.partsCost'), t('shopReport.partsProfit'), t('shopReport.collected'), t('shopReport.receivable'), '#']];
+    const body = shops.map(s => [
+      (s.business_code ? s.business_code + ' · ' : '') + s.name,
+      money(s.facturado), money(s.sales_tax), money(s.costo_piezas), money(s.ganancia_piezas), money(s.cobrado), money(s.por_cobrar), String(s.num_facturas),
+    ]);
+    if (totals && shops.length > 1) {
+      body.push([t('shopReport.total'), money(totals.facturado), money(totals.sales_tax), money(totals.costo_piezas), money(totals.ganancia_piezas), money(totals.cobrado), money(totals.por_cobrar), String(totals.num_facturas)]);
+    }
+    const totalRowIdx = totals && shops.length > 1 ? body.length - 1 : -1;
+    autoTable(doc, {
+      startY: 70,
+      head, body,
+      styles: { fontSize: 9, textColor: [INK, INK, INK], cellPadding: 5, lineColor: [LINE, LINE, LINE], lineWidth: 0.3 },
+      headStyles: { fillColor: [240, 240, 240], textColor: [INK, INK, INK], fontStyle: 'bold' as const, fontSize: 9 },
+      columnStyles: { 0: { halign: 'left' }, 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' }, 7: { halign: 'center' } },
+      didParseCell: (h: any) => { if (h.section === 'body' && h.row.index === totalRowIdx) h.cell.styles.fontStyle = 'bold'; },
+    });
+    let y = ((doc as any).lastAutoTable?.finalY ?? 200) + 18;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(SOFT, SOFT, SOFT);
+    doc.text(t('shopReport.cpaNote'), M, y, { maxWidth: W - M * 2 });
+    const now = new Date();
+    doc.text(`${t('shopReport.printed')}: ${now.toLocaleDateString('en-US')} ${now.toLocaleTimeString('en-US')}`, M, doc.internal.pageSize.getHeight() - 24);
+    doc.save(`reporte_talleres_${from}_${to}.pdf`);
+  }
+
   function preset(which: 'month' | 'quarter' | 'year') {
     if (which === 'month') setFrom(firstOfMonth());
     if (which === 'quarter') setFrom(firstOfQuarter());
@@ -75,9 +114,16 @@ export default function ReporteTalleresPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="display-font text-3xl font-bold text-slate-100 tracking-wide">{t('shopReport.title')}</h1>
-        <p className="text-slate-400 mt-1">{t('shopReport.subtitle')}</p>
+      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="display-font text-3xl font-bold text-slate-100 tracking-wide">{t('shopReport.title')}</h1>
+          <p className="text-slate-400 mt-1">{t('shopReport.subtitle')}</p>
+        </div>
+        <button onClick={generatePdf} disabled={shops.length === 0}
+          className="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 text-slate-200 text-sm px-4 py-2.5 rounded-lg transition flex items-center gap-2">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+          {t('shopReport.exportPdf')}
+        </button>
       </div>
 
       {/* Periodo */}
@@ -119,12 +165,13 @@ export default function ReporteTalleresPage() {
                 </div>
                 <span className="text-slate-500 text-xs">{s.num_facturas} {t('shopReport.invoices')}</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                 <Metric label={t('shopReport.invoiced')} value={money(s.facturado)} accent="text-amber-300" />
                 <Metric label={t('shopReport.salesTax')} value={money(s.sales_tax)} accent="text-sky-300" />
+                <Metric label={t('shopReport.partsCost')} value={money(s.costo_piezas)} accent="text-red-300" />
+                <Metric label={t('shopReport.partsProfit')} value={money(s.ganancia_piezas)} accent="text-emerald-300" />
                 <Metric label={t('shopReport.collected')} value={money(s.cobrado)} accent="text-emerald-300" />
                 <Metric label={t('shopReport.receivable')} value={money(s.por_cobrar)} accent="text-orange-300" />
-                <Metric label={t('shopReport.partsProfit')} value={money(s.ganancia_piezas)} accent="text-emerald-300" />
               </div>
             </div>
           ))}
@@ -132,12 +179,13 @@ export default function ReporteTalleresPage() {
           {totals && shops.length > 1 && (
             <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-5">
               <p className="display-font text-amber-300 font-semibold tracking-wide mb-4">{t('shopReport.total')}</p>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                 <Metric label={t('shopReport.invoiced')} value={money(totals.facturado)} accent="text-amber-300" />
                 <Metric label={t('shopReport.salesTax')} value={money(totals.sales_tax)} accent="text-sky-300" />
+                <Metric label={t('shopReport.partsCost')} value={money(totals.costo_piezas)} accent="text-red-300" />
+                <Metric label={t('shopReport.partsProfit')} value={money(totals.ganancia_piezas)} accent="text-emerald-300" />
                 <Metric label={t('shopReport.collected')} value={money(totals.cobrado)} accent="text-emerald-300" />
                 <Metric label={t('shopReport.receivable')} value={money(totals.por_cobrar)} accent="text-orange-300" />
-                <Metric label={t('shopReport.partsProfit')} value={money(totals.ganancia_piezas)} accent="text-emerald-300" />
               </div>
             </div>
           )}

@@ -34,20 +34,22 @@ export async function GET(request: Request) {
     const invList = invoices ?? [];
     const invIds = invList.map((i: any) => i.id);
 
-    // Ganancia en piezas (cobrado − costo) por factura.
+    // Piezas por factura: costo (gasto atribuible al taller) y ganancia (cobrado − costo).
     const profitByInvoice: Record<string, number> = {};
+    const costByInvoice: Record<string, number> = {};
     if (invIds.length) {
       const { data: items } = await supabase
         .from('invoice_items').select('invoice_id,line_type,amount,cost,qty').in('invoice_id', invIds);
       for (const it of items ?? []) {
         if (it.line_type !== 'part') continue;
-        const profit = round2(Number(it.amount) - Number(it.cost) * Number(it.qty));
-        profitByInvoice[it.invoice_id] = round2((profitByInvoice[it.invoice_id] ?? 0) + profit);
+        const cost = round2(Number(it.cost) * Number(it.qty));
+        profitByInvoice[it.invoice_id] = round2((profitByInvoice[it.invoice_id] ?? 0) + (Number(it.amount) - cost));
+        costByInvoice[it.invoice_id] = round2((costByInvoice[it.invoice_id] ?? 0) + cost);
       }
     }
 
     // Agregar por taller.
-    type Row = { id: string | null; name: string; business_code: string | null; facturado: number; sales_tax: number; cobrado: number; por_cobrar: number; ganancia_piezas: number; num_facturas: number };
+    type Row = { id: string | null; name: string; business_code: string | null; facturado: number; sales_tax: number; costo_piezas: number; ganancia_piezas: number; cobrado: number; por_cobrar: number; num_facturas: number };
     const byShop = new Map<string, Row>();
     const shopMeta = new Map<string, any>((shops ?? []).map((s: any) => [s.id, s]));
     const ensure = (shopId: string | null): Row => {
@@ -57,7 +59,7 @@ export async function GET(request: Request) {
         byShop.set(key, {
           id: shopId, name: meta?.legal_name || meta?.name || (shopId ? 'Taller' : 'Sin taller'),
           business_code: meta?.business_code ?? null,
-          facturado: 0, sales_tax: 0, cobrado: 0, por_cobrar: 0, ganancia_piezas: 0, num_facturas: 0,
+          facturado: 0, sales_tax: 0, costo_piezas: 0, ganancia_piezas: 0, cobrado: 0, por_cobrar: 0, num_facturas: 0,
         });
       }
       return byShop.get(key)!;
@@ -67,9 +69,10 @@ export async function GET(request: Request) {
       const r = ensure(inv.shop_id);
       r.facturado = round2(r.facturado + Number(inv.total));
       r.sales_tax = round2(r.sales_tax + Number(inv.tax_amount));
+      r.costo_piezas = round2(r.costo_piezas + (costByInvoice[inv.id] ?? 0));
+      r.ganancia_piezas = round2(r.ganancia_piezas + (profitByInvoice[inv.id] ?? 0));
       r.cobrado = round2(r.cobrado + Number(inv.amount_paid));
       r.por_cobrar = round2(r.por_cobrar + Number(inv.balance));
-      r.ganancia_piezas = round2(r.ganancia_piezas + (profitByInvoice[inv.id] ?? 0));
       r.num_facturas += 1;
     }
 
@@ -77,11 +80,12 @@ export async function GET(request: Request) {
     const totals = rows.reduce((t, r) => ({
       facturado: round2(t.facturado + r.facturado),
       sales_tax: round2(t.sales_tax + r.sales_tax),
+      costo_piezas: round2(t.costo_piezas + r.costo_piezas),
+      ganancia_piezas: round2(t.ganancia_piezas + r.ganancia_piezas),
       cobrado: round2(t.cobrado + r.cobrado),
       por_cobrar: round2(t.por_cobrar + r.por_cobrar),
-      ganancia_piezas: round2(t.ganancia_piezas + r.ganancia_piezas),
       num_facturas: t.num_facturas + r.num_facturas,
-    }), { facturado: 0, sales_tax: 0, cobrado: 0, por_cobrar: 0, ganancia_piezas: 0, num_facturas: 0 });
+    }), { facturado: 0, sales_tax: 0, costo_piezas: 0, ganancia_piezas: 0, cobrado: 0, por_cobrar: 0, num_facturas: 0 });
 
     return NextResponse.json({ from, to, shops: rows, totals });
   } catch (err) {
