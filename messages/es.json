@@ -1006,5 +1006,8 @@
     "today": "Hoy",
     "sales": "Ventas",
     "bothShops": "Total (ambos talleres)"
+  },
+  "tour": {
+    "explainFields": "¿Qué es cada campo?"
   }
 }

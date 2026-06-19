@@ -84,8 +84,14 @@ function ClientFormBody({
 }) {
   return (
     <form onSubmit={onSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="md:col-span-2 flex justify-end -mb-2">
+        <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('atr:start-tour', { detail: { key: 'cliente-form' } }))} className="text-amber-400/80 hover:text-amber-300 text-xs flex items-center gap-1">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          {t('tour.explainFields')}
+        </button>
+      </div>
       {/* Tipo de cliente */}
-      <div className="md:col-span-2">
+      <div className="md:col-span-2" data-tour="clif-type">
         <label className="block text-slate-400 text-sm mb-2">{t('clients.type.label')}</label>
         <div className="grid grid-cols-2 gap-3">
           {(['corporate', 'individual'] as ClientType[]).map(ct => (
@@ -107,7 +113,7 @@ function ClientFormBody({
         </div>
       </div>
 
-      <div className="md:col-span-2">
+      <div className="md:col-span-2" data-tour="clif-name">
         <label className="block text-slate-400 text-sm mb-1.5">{t('clients.name')} *</label>
         <input required value={form.name} onChange={e => onChange({ name: e.target.value })}
           placeholder={t('clients.namePlaceholder')} className={inputCls} />
@@ -152,7 +158,7 @@ function ClientFormBody({
       </div>
 
       {/* Pago */}
-      <div>
+      <div data-tour="clif-pay">
         <label className="block text-slate-400 text-sm mb-1.5">{t('clients.paymentMethod')}</label>
         <select value={form.paymentMethod} onChange={e => onChange({ paymentMethod: e.target.value as PaymentMethod })} className={inputCls}>
           {PAYMENT_METHODS.map(pm => <option key={pm} value={pm}>{t(`clients.pm.${pm}`)}</option>)}
@@ -167,7 +173,7 @@ function ClientFormBody({
       </div>
 
       {/* Exención de sales tax (certificado) */}
-      <div className="md:col-span-2 bg-slate-800/40 border border-white/5 rounded-xl p-3">
+      <div className="md:col-span-2 bg-slate-800/40 border border-white/5 rounded-xl p-3" data-tour="clif-exempt">
         <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
           <input type="checkbox" checked={form.taxExempt} onChange={e => onChange({ taxExempt: e.target.checked })} className="accent-amber-500 w-4 h-4" />
           {t('clients.taxExempt')}
@@ -357,7 +363,7 @@ export default function ClientesPage() {
           <h1 className="display-font text-3xl font-bold text-slate-100 tracking-wide">{t('clients.title')}</h1>
           <p className="text-slate-400 mt-1">{clients.length} {t('clients.registered')}</p>
         </div>
-        <button onClick={() => { setShowForm(!showForm); setAddForm(BLANK_FORM); setAddError(''); }}
+        <button data-tour="cli-add" onClick={() => { setShowForm(!showForm); setAddForm(BLANK_FORM); setAddError(''); }}
           className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 px-5 rounded-lg transition display-font tracking-wide flex items-center gap-2">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
           {t('clients.addClient')}
@@ -374,7 +380,7 @@ export default function ClientesPage() {
 
       {clients.length > 0 && (
         <div className="mb-5">
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('clients.searchPlaceholder')}
+          <input data-tour="cli-search" value={search} onChange={e => setSearch(e.target.value)} placeholder={t('clients.searchPlaceholder')}
             className="w-full max-w-md bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition" />
         </div>
       )}
@@ -387,8 +393,8 @@ export default function ClientesPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map(c => (
-            <div key={c.id} className={`bg-slate-900/60 border border-white/5 rounded-xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap ${!c.is_active ? 'opacity-60' : ''}`}>
+          {filtered.map((c, ci) => (
+            <div key={c.id} {...(ci === 0 ? { 'data-tour': 'cli-row' } : {})} className={`bg-slate-900/60 border border-white/5 rounded-xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap ${!c.is_active ? 'opacity-60' : ''}`}>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Link href={`/clientes/${c.id}`} className={`display-font font-semibold tracking-wide hover:text-amber-300 transition ${c.is_active ? 'text-slate-200' : 'text-slate-500 line-through'}`}>
@@ -415,7 +421,7 @@ export default function ClientesPage() {
                   <span className="text-slate-600">{(c.trucks?.length ?? 0)} {t('clients.trucksCount')}</span>
                 </div>
               </div>
-              <div className="flex items-center gap-1 flex-shrink-0">
+              <div data-tour="cli-actions" className="flex items-center gap-1 flex-shrink-0">
                 <Link href={`/clientes/${c.id}`} title={t('clients.viewDetail')}
                   className="p-1.5 rounded text-slate-500 hover:text-sky-400 hover:bg-sky-500/10 transition">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>

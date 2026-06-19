@@ -284,6 +284,7 @@ export default function AdminSidebar() {
             <Link
               key={item.href}
               href={item.href}
+              data-tour={`nav-${item.href.replace(/^\//, '')}`}
               className={`flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-all duration-150 group ${
                 isActive
                   ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20'

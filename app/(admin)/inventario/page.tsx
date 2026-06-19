@@ -216,7 +216,7 @@ export default function InventarioPage() {
           <h1 className="display-font text-3xl font-bold text-slate-100 tracking-wide">{t('inventory.title')}</h1>
           <p className="text-slate-400 mt-1">{items.length} {t('inventory.registered')}{lowCount > 0 && <span className="text-orange-400"> · {lowCount} {t('inventory.lowStock')}</span>}</p>
         </div>
-        <button onClick={openNew} className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 px-5 rounded-lg transition display-font tracking-wide flex items-center gap-2">
+        <button data-tour="inv-add" onClick={openNew} className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 px-5 rounded-lg transition display-font tracking-wide flex items-center gap-2">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
           {t('inventory.addItem')}
         </button>
@@ -235,8 +235,8 @@ export default function InventarioPage() {
         <div className="bg-slate-900/60 border border-white/5 rounded-xl p-12 text-center"><p className="text-slate-500">{t('inventory.empty')}</p></div>
       ) : (
         <div className="space-y-3">
-          {filtered.map(it => (
-            <div key={it.id} className={`bg-slate-900/60 border rounded-xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap ${isLow(it) ? 'border-orange-500/30' : 'border-white/5'} ${!it.is_active ? 'opacity-60' : ''}`}>
+          {filtered.map((it, ii) => (
+            <div key={it.id} {...(ii === 0 ? { 'data-tour': 'inv-row' } : {})} className={`bg-slate-900/60 border rounded-xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap ${isLow(it) ? 'border-orange-500/30' : 'border-white/5'} ${!it.is_active ? 'opacity-60' : ''}`}>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="display-font font-semibold tracking-wide text-slate-200">{it.name}</span>

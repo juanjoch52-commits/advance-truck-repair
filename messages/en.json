@@ -1006,5 +1006,8 @@
     "today": "Today",
     "sales": "Sales",
     "bothShops": "Total (both shops)"
+  },
+  "tour": {
+    "explainFields": "What is each field?"
   }
 }

@@ -227,7 +227,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       </div>
 
       {/* ─── Distritos ─── */}
-      <section className="mb-8">
+      <section className="mb-8" data-tour="clid-locations">
         <div className="flex items-center justify-between mb-3">
           <h2 className="display-font text-amber-400 font-semibold tracking-wider text-sm uppercase">{t('clients.locations.title')} <span className="text-slate-500 normal-case">({locations.length})</span></h2>
           <button onClick={() => { setLocModal({ mode: 'add', data: {} }); setLocError(''); }}
@@ -265,7 +265,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       </section>
 
       {/* ─── Camiones ─── */}
-      <section>
+      <section data-tour="clid-trucks">
         <div className="flex items-center justify-between mb-3">
           <h2 className="display-font text-sky-400 font-semibold tracking-wider text-sm uppercase">{t('clients.trucks.title')} <span className="text-slate-500 normal-case">({trucks.length})</span></h2>
           <button onClick={() => { setTruckModal({ mode: 'add', data: {} }); setTruckError(''); }}
@@ -306,7 +306,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       </section>
 
       {/* ─── Historial de trabajo ─── */}
-      <section className="mt-8">
+      <section className="mt-8" data-tour="clid-history">
         <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
           <h2 className="display-font text-emerald-400 font-semibold tracking-wider text-sm uppercase">
             {t('clients.history.title')} <span className="text-slate-500 normal-case">({history.length})</span>

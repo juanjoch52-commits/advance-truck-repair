@@ -360,12 +360,17 @@ export default function FacturacionPage() {
           <div className="bg-slate-900 border border-amber-500/20 rounded-2xl p-6 w-full max-w-2xl my-8 shadow-2xl">
             <div className="flex items-center justify-between mb-5">
               <h2 className="display-font text-slate-100 font-bold text-lg tracking-wide">{t('invoices.newInvoice')}</h2>
-              <button onClick={() => setShowForm(false)} className="text-slate-500 hover:text-slate-300 p-1.5 rounded-lg hover:bg-slate-700 transition">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('atr:start-tour', { detail: { key: 'factura-form' } }))} title={t('tour.explainFields')} className="text-amber-400/80 hover:text-amber-300 p-1.5 rounded-lg hover:bg-slate-700 transition">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </button>
+                <button onClick={() => setShowForm(false)} className="text-slate-500 hover:text-slate-300 p-1.5 rounded-lg hover:bg-slate-700 transition">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
             </div>
             <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
+              <div className="md:col-span-2" data-tour="facf-doctype">
                 <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.documentType')}</label>
                 <div className="flex gap-2 flex-wrap">
                   {DOCUMENT_TYPES.map(dt => (
@@ -377,7 +382,7 @@ export default function FacturacionPage() {
                 </div>
                 {!isFiscal && <p className="text-amber-400/80 text-xs mt-1.5">{t('invoices.nonFiscalHint')}</p>}
               </div>
-              <div className="md:col-span-2">
+              <div className="md:col-span-2" data-tour="facf-order">
                 <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.workOrder')}</label>
                 {workOrders.length > 8 && (
                   <input value={orderSearch} onChange={e => setOrderSearch(e.target.value)} placeholder={t('invoices.searchOrder')} className={inputCls + ' mb-2'} />
@@ -394,7 +399,7 @@ export default function FacturacionPage() {
                 </select>
                 {form.order_number && <p className="text-sky-300/80 text-xs mt-1">{t('invoices.orderNumberLabel')}: {form.order_number}</p>}
               </div>
-              <div>
+              <div data-tour="facf-client">
                 <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.client')}</label>
                 <select value={form.client_id} onChange={e => onClientChange(e.target.value)} className={inputCls}>
                   <option value="">{t('invoices.selectClient')}</option>
@@ -410,7 +415,7 @@ export default function FacturacionPage() {
                 </select>
               </div>
               {shops.length > 0 && (
-                <div className="md:col-span-2">
+                <div className="md:col-span-2" data-tour="facf-shop">
                   <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.shop')}</label>
                   <select value={form.shop_id} onChange={e => setForm(f => ({ ...f, shop_id: e.target.value }))} className={inputCls}>
                     <option value="">{t('invoices.noShop')}</option>
@@ -426,7 +431,7 @@ export default function FacturacionPage() {
                 <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.dueDate')}</label>
                 <input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} className={inputCls} />
               </div>
-              <div className="md:col-span-2">
+              <div className="md:col-span-2" data-tour="facf-payment">
                 <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.paymentMethod')}</label>
                 <select value={form.payment_method} onChange={e => setForm(f => ({ ...f, payment_method: e.target.value as PaymentMethod }))} className={inputCls}>
                   {PAYMENT_METHODS.map(pm => <option key={pm} value={pm}>{t(`invoices.pm.${pm}`)}</option>)}
@@ -434,7 +439,7 @@ export default function FacturacionPage() {
                 {isCredit && <p className="text-amber-400/80 text-xs mt-1">{t('invoices.creditHint')}</p>}
               </div>
               {/* Renglones (mano de obra / piezas) */}
-              <div className="md:col-span-2 bg-slate-800/40 border border-white/5 rounded-xl p-3">
+              <div className="md:col-span-2 bg-slate-800/40 border border-white/5 rounded-xl p-3" data-tour="facf-lines">
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-slate-400 text-sm">{t('invoices.lines.title')}</label>
                   <div className="flex gap-2">
@@ -523,7 +528,7 @@ export default function FacturacionPage() {
                   <input type="number" min="0" step="0.01" value={form.subtotal} onChange={e => setForm(f => ({ ...f, subtotal: e.target.value }))} className={inputCls} />
                 )}
               </div>
-              <div>
+              <div data-tour="facf-tax">
                 <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.tax')} ($)</label>
                 {clientExempt ? (
                   <div className={inputCls + ' bg-slate-800/60 flex items-center justify-between'}>
@@ -564,13 +569,13 @@ export default function FacturacionPage() {
                 <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder={t('invoices.descriptionPlaceholder')} className={inputCls} />
               </div>
               {isFiscal && !isCredit && (
-                <label className="md:col-span-2 flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                <label className="md:col-span-2 flex items-center gap-2 text-sm text-slate-300 cursor-pointer" data-tour="facf-markpaid">
                   <input type="checkbox" checked={form.mark_paid} onChange={e => setForm(f => ({ ...f, mark_paid: e.target.checked }))} className="accent-amber-500 w-4 h-4" />
                   {t('invoices.markPaid')}
                 </label>
               )}
               {formError && <div className="md:col-span-2 bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2.5 text-red-400 text-sm">{formError}</div>}
-              <div className="md:col-span-2 flex gap-3 flex-wrap">
+              <div className="md:col-span-2 flex gap-3 flex-wrap" data-tour="facf-submit">
                 <button type="submit" disabled={saving} className="bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-slate-950 font-bold py-2.5 px-6 rounded-lg transition display-font tracking-wide">
                   {saving ? t('common.saving') : t('invoices.create')}
                 </button>
@@ -664,13 +669,13 @@ export default function FacturacionPage() {
           <h1 className="display-font text-3xl font-bold text-slate-100 tracking-wide">{t('invoices.title')}</h1>
           <p className="text-slate-400 mt-1">{invoices.length} {t('invoices.registered')}</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 px-5 rounded-lg transition display-font tracking-wide flex items-center gap-2">
+        <button data-tour="fac-add" onClick={() => setShowForm(true)} className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 px-5 rounded-lg transition display-font tracking-wide flex items-center gap-2">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
           {t('invoices.addInvoice')}
         </button>
       </div>
 
-      <div className="flex gap-2 mb-5 flex-wrap">
+      <div data-tour="fac-filters" className="flex gap-2 mb-5 flex-wrap">
         <button onClick={() => setStatusFilter('')} className={`px-3 py-1.5 rounded-lg text-sm border transition ${statusFilter === '' ? 'bg-amber-500/15 border-amber-500/40 text-amber-300' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'}`}>{t('invoices.filterAll')}</button>
         {STATUSES.map(s => (
           <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-sm border transition ${statusFilter === s ? 'bg-amber-500/15 border-amber-500/40 text-amber-300' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'}`}>{t(`invoices.status.${s}`)}</button>
@@ -712,7 +717,7 @@ export default function FacturacionPage() {
                 <p className="text-slate-200 font-semibold display-font">{money(inv.total)}</p>
                 {inv.balance > 0.001 && inv.status !== 'void' && inv.status !== 'draft' && <p className="text-amber-400 text-xs">{t('invoices.balance')}: {money(inv.balance)}</p>}
               </div>
-              <div className="flex items-center gap-1 flex-shrink-0">
+              <div data-tour="fac-actions" className="flex items-center gap-1 flex-shrink-0">
                 {isPending && (
                   <>
                     <button onClick={() => toggleDraft(inv.id)} className="text-xs px-2.5 py-1.5 rounded border border-white/10 text-slate-300 hover:bg-slate-700 transition">

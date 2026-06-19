@@ -54,7 +54,7 @@ export default function GastosPage() {
         <p className="text-slate-400 mt-1">{t('expenses.subtitle')}</p>
       </div>
 
-      <div className="flex items-end gap-3 mb-6 flex-wrap">
+      <div className="flex items-end gap-3 mb-6 flex-wrap" data-tour="gas-period">
         <div>
           <label className="block text-slate-500 text-xs mb-1">{t('common.from')}</label>
           <input type="date" value={from} onChange={e => setFrom(e.target.value)} className={inputCls} />

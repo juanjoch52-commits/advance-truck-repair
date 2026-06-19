@@ -123,7 +123,7 @@ export default function ReporteTalleresPage() {
           <h1 className="display-font text-3xl font-bold text-slate-100 tracking-wide">{t('shopReport.title')}</h1>
           <p className="text-slate-400 mt-1">{t('shopReport.subtitle')}</p>
         </div>
-        <button onClick={generatePdf} disabled={shops.length === 0}
+        <button data-tour="rep-pdf" onClick={generatePdf} disabled={shops.length === 0}
           className="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 text-slate-200 text-sm px-4 py-2.5 rounded-lg transition flex items-center gap-2">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
           {t('shopReport.exportPdf')}
@@ -131,7 +131,7 @@ export default function ReporteTalleresPage() {
       </div>
 
       {/* Periodo */}
-      <div className="flex items-end gap-3 mb-6 flex-wrap">
+      <div data-tour="rep-presets" className="flex items-end gap-3 mb-6 flex-wrap">
         <div className="flex gap-2">
           <button onClick={() => preset('month')} className={presetBtn}>{t('shopReport.thisMonth')}</button>
           <button onClick={() => preset('quarter')} className={presetBtn}>{t('shopReport.thisQuarter')}</button>

@@ -199,7 +199,7 @@ export default function CuentasPorCobrarPage() {
       ) : (
         <>
           {/* KPIs */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+          <div data-tour="ar-kpis" className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
             <div className="bg-slate-900/60 border border-amber-500/20 rounded-xl px-4 py-3.5">
               <p className="text-slate-500 text-xs mb-1">{t('receivables.kpi.outstanding')}</p>
               <p className="display-font text-2xl font-bold text-amber-300">{money(summary.total)}</p>
@@ -228,7 +228,7 @@ export default function CuentasPorCobrarPage() {
 
           {/* Alertas de vencidos */}
           {kpis.overdueInvoices.length > 0 && (
-            <div className="bg-red-500/[0.04] border border-red-500/20 rounded-xl p-5 mb-6">
+            <div data-tour="ar-alerts" className="bg-red-500/[0.04] border border-red-500/20 rounded-xl p-5 mb-6">
               <h2 className="display-font text-red-300 font-semibold tracking-wider text-sm uppercase mb-3 flex items-center gap-2">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                 {t('receivables.alerts.title')} <span className="text-slate-500 normal-case font-normal">({kpis.overdueInvoices.length})</span>
@@ -256,7 +256,7 @@ export default function CuentasPorCobrarPage() {
           )}
 
           {/* Resumen + antigüedad */}
-          <div className="bg-slate-900/60 border border-white/5 rounded-xl p-5 mb-6">
+          <div data-tour="ar-aging" className="bg-slate-900/60 border border-white/5 rounded-xl p-5 mb-6">
             <div className="flex items-baseline justify-between flex-wrap gap-2 mb-4">
               <span className="text-slate-400 text-sm">{t('receivables.agingTitle')}</span>
               <span className="display-font text-2xl font-bold text-amber-300">{money(summary.total)}</span>

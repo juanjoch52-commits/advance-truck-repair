@@ -144,7 +144,7 @@ export default function InformeVentasPage() {
           <h1 className="display-font text-3xl font-bold text-slate-100 tracking-wide">{t('salesReport.title')}</h1>
           <p className="text-slate-400 mt-1">{t('salesReport.subtitle')}</p>
         </div>
-        <button onClick={generatePdf} disabled={shops.length === 0}
+        <button data-tour="sr-pdf" onClick={generatePdf} disabled={shops.length === 0}
           className="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 text-slate-200 text-sm px-4 py-2.5 rounded-lg transition flex items-center gap-2">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
           {t('shopReport.exportPdf')}
@@ -152,7 +152,7 @@ export default function InformeVentasPage() {
       </div>
 
       {/* Selector de periodo */}
-      <div className="flex gap-2 mb-4 flex-wrap">
+      <div data-tour="sr-period" className="flex gap-2 mb-4 flex-wrap">
         {periods.map(p => (
           <button key={p} onClick={() => { setPeriod(p); setCursor(todayISO()); }}
             className={`px-4 py-1.5 rounded-lg text-sm border transition ${period === p ? 'bg-amber-500/15 border-amber-500/40 text-amber-300' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'}`}>
@@ -162,7 +162,7 @@ export default function InformeVentasPage() {
       </div>
 
       {/* Navegación del periodo */}
-      <div className="flex items-center gap-3 mb-6 flex-wrap">
+      <div data-tour="sr-nav" className="flex items-center gap-3 mb-6 flex-wrap">
         <button onClick={() => setCursor(c => shift(period, c, -1))} className="px-3 py-1.5 rounded-lg text-sm border bg-slate-800 border-white/10 text-slate-300 hover:text-white transition">‹ {t('salesReport.prev')}</button>
         <span className="display-font text-slate-100 font-semibold tracking-wide capitalize min-w-[12rem] text-center">{periodLabel()}</span>
         <button onClick={() => setCursor(c => shift(period, c, 1))} className="px-3 py-1.5 rounded-lg text-sm border bg-slate-800 border-white/10 text-slate-300 hover:text-white transition">{t('salesReport.next')} ›</button>

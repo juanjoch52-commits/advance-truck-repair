@@ -68,6 +68,12 @@ function ShopFormBody({
 }) {
   return (
     <form onSubmit={onSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="md:col-span-2 flex justify-end -mb-2">
+        <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('atr:start-tour', { detail: { key: 'configuracion-form' } }))} className="text-amber-400/80 hover:text-amber-300 text-xs flex items-center gap-1">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          {t('tour.explainFields')}
+        </button>
+      </div>
       {/* Identidad */}
       <p className={sectionCls}>{t('settings.section.identity')}</p>
       <div className="md:col-span-2">
@@ -76,7 +82,7 @@ function ShopFormBody({
           placeholder={t('settings.namePlaceholder')} className={inputCls} />
         <p className="text-slate-600 text-xs mt-1">{t('settings.nameHint')}</p>
       </div>
-      <div className="md:col-span-2">
+      <div className="md:col-span-2" data-tour="cfg-legal">
         <label className="block text-slate-400 text-sm mb-1.5">{t('settings.legalName')}</label>
         <input value={form.legalName} onChange={e => onChange({ legalName: e.target.value })}
           placeholder={t('settings.legalNamePlaceholder')} className={inputCls} />
@@ -84,13 +90,13 @@ function ShopFormBody({
 
       {/* Datos fiscales */}
       <p className={sectionCls}>{t('settings.section.fiscal')}</p>
-      <div>
+      <div data-tour="cfg-ein">
         <label className="block text-slate-400 text-sm mb-1.5">{t('settings.ein')}</label>
         <input value={form.ein} onChange={e => onChange({ ein: e.target.value })}
           placeholder="12-3456789" className={inputCls} />
         <p className="text-slate-600 text-xs mt-1">{t('settings.einHint')}</p>
       </div>
-      <div>
+      <div data-tour="cfg-cert">
         <label className="block text-slate-400 text-sm mb-1.5">{t('settings.salesTaxCert')}</label>
         <input value={form.salesTaxCert} onChange={e => onChange({ salesTaxCert: e.target.value })}
           placeholder={t('settings.optional')} className={inputCls} />
@@ -102,7 +108,7 @@ function ShopFormBody({
           placeholder="Ej: Miami-Dade, Broward" className={inputCls} />
         <p className="text-slate-600 text-xs mt-1">{t('settings.countyHint')}</p>
       </div>
-      <div>
+      <div data-tour="cfg-rate">
         <label className="block text-slate-400 text-sm mb-1.5">{t('settings.taxRate')}</label>
         <div className="relative">
           <input type="number" min="0" max="100" step="0.001" value={form.taxRate}
@@ -146,13 +152,13 @@ function ShopFormBody({
 
       {/* Facturación */}
       <p className={sectionCls}>{t('settings.section.invoicing')}</p>
-      <div>
+      <div data-tour="cfg-prefix">
         <label className="block text-slate-400 text-sm mb-1.5">{t('settings.invoicePrefix')}</label>
         <input value={form.invoicePrefix} onChange={e => onChange({ invoicePrefix: e.target.value })}
           placeholder="ATR-" className={inputCls} />
         <p className="text-slate-600 text-xs mt-1">{t('settings.invoicePrefixHint')}</p>
       </div>
-      <div>
+      <div data-tour="cfg-code">
         <label className="block text-slate-400 text-sm mb-1.5">{t('settings.businessCode')}</label>
         <input value={form.businessCode} onChange={e => onChange({ businessCode: e.target.value })}
           placeholder="01" className={inputCls} />
@@ -338,7 +344,7 @@ export default function ConfiguracionPage() {
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <div className="mb-5 flex items-center gap-4">
+            <div className="mb-5 flex items-center gap-4" data-tour="cfg-logo">
               <div className="w-20 h-20 rounded-lg bg-slate-800 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
                 {editing.logo_url
                   ? <img src={editing.logo_url} alt="logo" className="object-contain w-full h-full" />
@@ -364,7 +370,7 @@ export default function ConfiguracionPage() {
           <h1 className="display-font text-3xl font-bold text-slate-100 tracking-wide">{t('settings.title')}</h1>
           <p className="text-slate-400 mt-1">{t('settings.subtitle')}</p>
         </div>
-        <button onClick={() => { setShowForm(!showForm); setAddForm(BLANK_FORM); setAddError(''); }}
+        <button data-tour="cfg-add" onClick={() => { setShowForm(!showForm); setAddForm(BLANK_FORM); setAddError(''); }}
           className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 px-5 rounded-lg transition display-font tracking-wide flex items-center gap-2">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
           {t('settings.addShop')}

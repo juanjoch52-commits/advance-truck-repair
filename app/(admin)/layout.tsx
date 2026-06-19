@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import AdminSidebar from '@/components/AdminSidebar';
+import TourLauncher from '@/components/TourLauncher';
 import { getServerSession } from '@/lib/authSession';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -20,6 +21,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           {children}
         </div>
       </main>
+      <TourLauncher />
     </div>
   );
 }
