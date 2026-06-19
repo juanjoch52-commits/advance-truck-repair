@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireInvoicesAccess, INVOICE_COLS, PAYMENT_METHODS, DOCUMENT_TYPES, isFiscalDocument, computeAutoTax, applyWarehouseDeduction, round2, deriveBalanceStatus } from '@/lib/invoicesApi';
+import { requireInvoicesAccess, INVOICE_COLS, PAYMENT_METHODS, DOCUMENT_TYPES, isFiscalDocument, computeAutoTax, applyWarehouseDeduction, round2, deriveBalanceStatus, nextReceiptNumber } from '@/lib/invoicesApi';
 import { sanitizeDbError } from '@/lib/clientsApi';
 import { authErrorResponse, requireRole } from '@/lib/apiAuth';
 import { getSupabaseServerClient } from '@/lib/supabaseServer';
@@ -186,13 +186,16 @@ export async function POST(request: Request) {
     const { data: invoice, error } = await supabase.from('invoices').insert(payload).select(INVOICE_COLS).single();
     if (error) return NextResponse.json({ error: sanitizeDbError('facturas.POST', error.message) }, { status: 500 });
 
-    // Si se marcó pagada, registrar el pago correspondiente.
+    // Si se marcó pagada, registrar el pago correspondiente con su comprobante
+    // (folio + tipo 'settlement' = liquida el total + quién lo registró).
     if (markPaid) {
+      const receipt_number = await nextReceiptNumber(supabase, invoice.id, invoice.document_number);
       await supabase.from('invoice_payments').insert({
-        invoice_id: invoice.id, amount: total, method: payment_method,
+        invoice_id: invoice.id, amount: total, method: payment_method, payment_type: 'settlement', receipt_number,
         reference: String(body.payment_reference ?? '').trim() || null,
         paid_at: payload.issue_date,
         created_by: (session as any)?.id ?? null,
+        created_by_name: (session as any)?.full_name ?? null,
       });
     }
 

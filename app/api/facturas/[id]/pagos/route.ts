@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { INVOICE_COLS, RECEIPT_METHODS, PAYMENT_TYPES, round2, deriveBalanceStatus } from '@/lib/invoicesApi';
+import { INVOICE_COLS, RECEIPT_METHODS, PAYMENT_TYPES, round2, deriveBalanceStatus, nextReceiptNumber } from '@/lib/invoicesApi';
 import { sanitizeDbError } from '@/lib/clientsApi';
 import { authErrorResponse, requireRole } from '@/lib/apiAuth';
 import { getSupabaseServerClient } from '@/lib/supabaseServer';
@@ -28,9 +28,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     // Folio del comprobante: <número de factura>-R<n> (n = pagos previos + 1).
-    const { count: prevCount } = await supabase.from('invoice_payments').select('id', { count: 'exact', head: true }).eq('invoice_id', id);
-    const seq = (prevCount ?? 0) + 1;
-    const receipt_number = `${invoice.document_number || `INV-${String(id).slice(0, 8)}`}-R${seq}`;
+    const receipt_number = await nextReceiptNumber(supabase, id, invoice.document_number);
 
     const { data: payment, error: payErr } = await supabase.from('invoice_payments').insert({
       invoice_id: id, amount, method, payment_type, receipt_number,

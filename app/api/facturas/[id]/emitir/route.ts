@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
-import { requireInvoicesAccess, INVOICE_COLS, deriveBalanceStatus, applyWarehouseDeduction, weekRangeMonSun, round2 } from '@/lib/invoicesApi';
+import { INVOICE_COLS, deriveBalanceStatus, applyWarehouseDeduction, weekRangeMonSun, round2, nextReceiptNumber } from '@/lib/invoicesApi';
 import { computePayout } from '@/lib/money';
 import { sanitizeDbError } from '@/lib/clientsApi';
-import { authErrorResponse } from '@/lib/apiAuth';
+import { authErrorResponse, requireRole } from '@/lib/apiAuth';
+import { getSupabaseServerClient } from '@/lib/supabaseServer';
 
 // POST /api/facturas/[id]/emitir → emite un BORRADOR de factura:
 //   1. valida que esté en 'draft' y sin comisiones generadas;
@@ -14,7 +15,8 @@ import { authErrorResponse } from '@/lib/apiAuth';
 //   6. fija estado/saldo según el pago y marca emitted_at + commissions_generated.
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const supabase = await requireInvoicesAccess();
+    const session = await requireRole('owner', 'admin', 'super_user');
+    const supabase = getSupabaseServerClient();
     const { id } = await params;
     const body = await request.json().catch(() => ({}));
 
@@ -74,11 +76,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (upErr) return NextResponse.json({ error: sanitizeDbError('facturas/emitir.update', upErr.message) }, { status: 500 });
 
     if (markPaid) {
+      const receipt_number = await nextReceiptNumber(supabase, id, document_number);
       await supabase.from('invoice_payments').insert({
-        invoice_id: id, amount: total, method: invoice.payment_method,
+        invoice_id: id, amount: total, method: invoice.payment_method, payment_type: 'settlement', receipt_number,
         reference: String(body.payment_reference ?? '').trim() || null,
         paid_at: invoice.issue_date,
-        created_by: (invoice.created_by as any) ?? null,
+        created_by: (session as any)?.id ?? null,
+        created_by_name: (session as any)?.full_name ?? null,
       });
     }
 

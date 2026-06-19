@@ -77,6 +77,14 @@ export async function applyWarehouseDeduction(supabase: any, items: any[], invoi
   }
 }
 
+// Folio del comprobante de pago: <número de factura>-R<n> (n = pagos previos + 1).
+// Si la factura aún no tiene número (respaldo), usa un prefijo con el id.
+export async function nextReceiptNumber(supabase: any, invoiceId: string, documentNumber: string | null): Promise<string> {
+  const { count } = await supabase.from('invoice_payments').select('id', { count: 'exact', head: true }).eq('invoice_id', invoiceId);
+  const seq = (count ?? 0) + 1;
+  return `${documentNumber || `INV-${String(invoiceId).slice(0, 8)}`}-R${seq}`;
+}
+
 // Calcula saldo y estado a partir del total, lo pagado y el método.
 export function deriveBalanceStatus(total: number, amountPaid: number): { balance: number; status: string } {
   const balance = round2(total - amountPaid);
