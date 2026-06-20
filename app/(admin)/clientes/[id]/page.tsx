@@ -4,6 +4,7 @@ import { use, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { InvoicePdfButton } from '@/components/InvoicePdfButton';
+import { ClientStatementButton } from '@/components/ClientStatementButton';
 
 interface Client {
   id: string;
@@ -71,7 +72,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
 
 export default function ClienteDetallePage({ params }: { params: Promise<{ id: string }> }) {
   const { id: clientId } = use(params);
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
 
   const [client, setClient] = useState<Client | null>(null);
   const [locations, setLocations] = useState<Location[]>([]);
@@ -311,13 +312,18 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           <h2 className="display-font text-emerald-400 font-semibold tracking-wider text-sm uppercase">
             {t('clients.history.title')} <span className="text-slate-500 normal-case">({history.length})</span>
           </h2>
-          {trucks.length > 0 && history.length > 0 && (
-            <select value={truckFilter} onChange={e => setTruckFilter(e.target.value)}
-              className="bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-slate-200 text-sm focus:outline-none focus:border-amber-400/50">
-              <option value="">{t('clients.history.allTrucks')}</option>
-              {trucks.map(tr => <option key={tr.id} value={tr.id}>{tr.unit_number || tr.plate || '—'}</option>)}
-            </select>
-          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            {trucks.length > 0 && history.length > 0 && (
+              <select value={truckFilter} onChange={e => setTruckFilter(e.target.value)}
+                className="bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-slate-200 text-sm focus:outline-none focus:border-amber-400/50">
+                <option value="">{t('clients.history.allTrucks')}</option>
+                {trucks.map(tr => <option key={tr.id} value={tr.id}>{tr.unit_number || tr.plate || '—'}</option>)}
+              </select>
+            )}
+            {history.length > 0 && (
+              <ClientStatementButton client={client} invoices={history} summary={summary} truckLabel={truckName} lang={lang} />
+            )}
+          </div>
         </div>
 
         {summary && summary.count > 0 && (
