@@ -169,7 +169,10 @@
       "printReceipt": "Print receipt",
       "downloadReceipt": "Download",
       "receipts": "Payment receipts",
-      "noPayments": "No payments recorded."
+      "noPayments": "No payments recorded.",
+      "void": "Void payment",
+      "voided": "VOIDED",
+      "voidPrompt": "Void receipt {n}. Enter the reason (optional):"
     },
     "paymentType": {
       "deposit": "Deposit",

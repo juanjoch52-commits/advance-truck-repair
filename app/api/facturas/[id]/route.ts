@@ -14,7 +14,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     if (!invoice) return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
 
     const [{ data: payments }, { data: items }, clientRes, shopRes, truckRes] = await Promise.all([
-      supabase.from('invoice_payments').select('id,amount,method,payment_type,receipt_number,reference,paid_at,notes,created_by_name,created_at').eq('invoice_id', id).order('paid_at', { ascending: false }),
+      supabase.from('invoice_payments').select('id,amount,method,payment_type,receipt_number,reference,paid_at,notes,created_by_name,voided,voided_by_name,void_reason,created_at').eq('invoice_id', id).order('paid_at', { ascending: false }),
       supabase.from('invoice_items').select('id,line_type,description,qty,unit_price,amount,cost,part_source,taxable,mechanic_id,commission_pct,done,sort_order').eq('invoice_id', id).order('sort_order', { ascending: true }),
       invoice.client_id
         ? supabase.from('clients').select('id,name,billing_address_line,city,state,zip,phone,email').eq('id', invoice.client_id).maybeSingle()

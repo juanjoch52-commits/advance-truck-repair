@@ -169,7 +169,10 @@
       "printReceipt": "Imprimir comprobante",
       "downloadReceipt": "Descargar",
       "receipts": "Comprobantes de pago",
-      "noPayments": "Sin pagos registrados."
+      "noPayments": "Sin pagos registrados.",
+      "void": "Anular pago",
+      "voided": "ANULADO",
+      "voidPrompt": "Anular el comprobante {n}. Escribe el motivo (opcional):"
     },
     "paymentType": {
       "deposit": "Depósito",

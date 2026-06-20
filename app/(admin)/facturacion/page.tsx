@@ -290,6 +290,17 @@ export default function FacturacionPage() {
     if (!paymentsByInvoice[invId]) loadPayments(invId);
   }
 
+  async function voidPayment(invId: string, p: any) {
+    const reason = prompt(t('invoices.payment.voidPrompt').replace('{n}', p.receipt_number || ''));
+    if (reason === null) return; // cancelado
+    const res = await fetch(`/api/facturas/${invId}/pagos/${p.id}`, {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }),
+    });
+    if (!res.ok) { const j = await res.json().catch(() => ({})); alert((j as any).error ?? 'Error'); return; }
+    loadPayments(invId);
+    load();
+  }
+
   async function handleVoid(inv: Invoice) {
     if (!confirm(t('invoices.voidConfirm').replace('{n}', inv.document_number ?? ''))) return;
     setBusyId(inv.id);
@@ -783,18 +794,24 @@ export default function FacturacionPage() {
                   ) : (
                     <div className="space-y-1.5">
                       {paymentsByInvoice[inv.id].map((p: any) => (
-                        <div key={p.id} className="flex items-center justify-between gap-3 flex-wrap text-sm bg-slate-900/50 rounded-lg px-3 py-2">
+                        <div key={p.id} className={`flex items-center justify-between gap-3 flex-wrap text-sm rounded-lg px-3 py-2 ${p.voided ? 'bg-red-500/[0.04]' : 'bg-slate-900/50'}`}>
                           <div className="min-w-0">
-                            <span className="text-emerald-300 font-semibold">{money(p.amount)}</span>
+                            <span className={`font-semibold ${p.voided ? 'text-slate-500 line-through' : 'text-emerald-300'}`}>{money(p.amount)}</span>
                             <span className="text-slate-500 mx-2">·</span>
                             <span className="text-slate-400">{t(`invoices.paymentType.${p.payment_type ?? 'deposit'}`)}</span>
                             <span className="text-slate-600 text-xs ml-2">{p.paid_at}</span>
                             {p.created_by_name && <span className="text-slate-600 text-xs ml-2">· {p.created_by_name}</span>}
+                            {p.voided && <span className="text-xs px-1.5 py-0.5 ml-2 rounded-full border bg-red-500/10 border-red-500/30 text-red-300">{t('invoices.payment.voided')}{p.void_reason ? `: ${p.void_reason}` : ''}</span>}
                           </div>
                           <div className="flex items-center gap-1 flex-shrink-0">
                             <span className="text-slate-600 text-xs mr-1">{p.receipt_number}</span>
-                            <PaymentReceiptButton invoiceId={inv.id} paymentId={p.id} mode="print" />
-                            <PaymentReceiptButton invoiceId={inv.id} paymentId={p.id} mode="download" />
+                            {!p.voided && <>
+                              <PaymentReceiptButton invoiceId={inv.id} paymentId={p.id} mode="print" />
+                              <PaymentReceiptButton invoiceId={inv.id} paymentId={p.id} mode="download" />
+                              <button onClick={() => voidPayment(inv.id, p)} title={t('invoices.payment.void')} className="p-1.5 rounded text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                              </button>
+                            </>}
                           </div>
                         </div>
                       ))}
