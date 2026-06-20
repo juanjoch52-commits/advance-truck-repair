@@ -49,6 +49,8 @@ export default function AsistenciaPage() {
   const [privileged, setPrivileged] = useState<boolean | null>(null);
   const [busyCell, setBusyCell] = useState<string | null>(null);
   const [editDaysFor, setEditDaysFor] = useState<string | null>(null);
+  // Nombre de quien está registrando, para la auditoría (quién marcó/modificó la falta).
+  const [meName, setMeName] = useState<string>('');
 
   const days = weekDates(weekStart); // 7 fechas Dom..Sáb de la semana
 
@@ -57,7 +59,7 @@ export default function AsistenciaPage() {
       let role = '';
       try {
         const res = await fetch('/api/auth/me');
-        if (res.ok) { const j = await res.json(); role = (j?.user?.role ?? '').toLowerCase(); }
+        if (res.ok) { const j = await res.json(); role = (j?.user?.role ?? '').toLowerCase(); setMeName(j?.user?.full_name ?? ''); }
       } catch {}
       const priv = role === 'super_user' || role === 'super_admin' || role === 'owner';
       setPrivileged(priv);
@@ -117,7 +119,7 @@ export default function AsistenciaPage() {
       await (supabase as any).from('attendance').delete().eq('id', existing.id);
     } else {
       await (supabase as any).from('attendance').upsert(
-        { employee_id: emp.id, work_date: iso, status: 'absent', absence_reason: '' },
+        { employee_id: emp.id, work_date: iso, status: 'absent', absence_reason: '', created_by_name: meName, updated_by_name: meName },
         { onConflict: 'employee_id,work_date' }
       );
     }
@@ -126,7 +128,7 @@ export default function AsistenciaPage() {
   }
 
   async function saveReason(rowId: string, reason: string) {
-    await (supabase as any).from('attendance').update({ absence_reason: reason }).eq('id', rowId);
+    await (supabase as any).from('attendance').update({ absence_reason: reason, updated_by_name: meName }).eq('id', rowId);
     setAttendance(prev => prev.map(a => a.id === rowId ? { ...a, absence_reason: reason } : a));
   }
 

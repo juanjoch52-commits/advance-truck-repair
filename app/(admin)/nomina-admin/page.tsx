@@ -34,6 +34,16 @@ interface DeductionItem {
   amount: number;
 }
 
+interface AbsenceRow {
+  employee_id: string;
+  work_date: string;
+  absence_reason: string | null;
+  created_by_name: string | null;
+  updated_by_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 function getWeekRange(offsetWeeks = 0) {
   const now = new Date();
   const day = now.getDay(); // 0=Dom, 6=Sáb
@@ -59,6 +69,7 @@ export default function NominaAdminPage() {
   const [admins, setAdmins] = useState<AdminEmployee[]>([]);
   const [entries, setEntries] = useState<AdminEntry[]>([]);
   const [absencesByEmp, setAbsencesByEmp] = useState<Record<string, number>>({});
+  const [absenceDetailByEmp, setAbsenceDetailByEmp] = useState<Record<string, AbsenceRow[]>>({});
   const [deductionsByEmp, setDeductionsByEmp] = useState<Record<string, DeductionItem[]>>({});
   const [loading, setLoading] = useState(true);
   const [allowed, setAllowed] = useState<boolean | null>(null);
@@ -111,15 +122,24 @@ export default function NominaAdminPage() {
     setAdmins(adminList);
 
     // Faltas de la semana (status='absent') por empleado → prorratea el sueldo fijo.
+    // Trae también la auditoría (quién marcó/modificó y cuándo) para que el dueño
+    // sepa de dónde salen las faltas que descuentan el sueldo.
     const { data: attData } = await (supabase as any)
       .from('attendance')
-      .select('employee_id, status')
+      .select('employee_id, work_date, absence_reason, created_by_name, updated_by_name, created_at, updated_at, status')
       .eq('status', 'absent')
       .gte('work_date', weekStart)
-      .lte('work_date', weekEnd);
+      .lte('work_date', weekEnd)
+      .order('work_date');
     const absMap: Record<string, number> = {};
-    for (const a of attData ?? []) absMap[a.employee_id] = (absMap[a.employee_id] ?? 0) + 1;
+    const detMap: Record<string, AbsenceRow[]> = {};
+    for (const a of attData ?? []) {
+      absMap[a.employee_id] = (absMap[a.employee_id] ?? 0) + 1;
+      if (!detMap[a.employee_id]) detMap[a.employee_id] = [];
+      detMap[a.employee_id].push(a as AbsenceRow);
+    }
     setAbsencesByEmp(absMap);
+    setAbsenceDetailByEmp(detMap);
 
     const { data: entryData } = await (supabase as any)
       .from('earned_entries')
@@ -277,6 +297,11 @@ export default function NominaAdminPage() {
   }
 
   const formatFecha = (d: string) => fmtDate(d);
+  const fmtDateTime = (iso: string | null) => {
+    if (!iso) return '';
+    try { return new Date(iso).toLocaleString(locale, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+    catch { return ''; }
+  };
 
   const [generatingPdf, setGeneratingPdf] = useState(false);
 
@@ -595,6 +620,40 @@ export default function NominaAdminPage() {
                     )}
                   </div>
                 </div>
+
+                {/* Faltas de la semana con auditoría: quién las marcó/modificó y cuándo.
+                    Visible solo para el dueño (esta página ya es owner/super) para
+                    respaldar el descuento al sueldo fijo. */}
+                {(absenceDetailByEmp[emp.id]?.length ?? 0) > 0 && (
+                  <div className="px-5 py-3 border-b border-white/5 bg-amber-500/5">
+                    <p className="text-amber-300/90 text-xs font-semibold mb-2">
+                      Faltas registradas esta semana ({absenceDetailByEmp[emp.id].length})
+                    </p>
+                    <div className="space-y-1.5">
+                      {absenceDetailByEmp[emp.id].map((ab, i) => {
+                        const modified = ab.updated_by_name && ab.updated_at !== ab.created_at;
+                        return (
+                          <div key={i} className="flex items-start justify-between gap-3 text-xs flex-wrap">
+                            <div className="flex-1 min-w-40">
+                              <span className="text-red-300 font-medium">{fmtDate(ab.work_date)}</span>
+                              {ab.absence_reason ? <span className="text-slate-400"> · {ab.absence_reason}</span> : <span className="text-amber-400/60"> · sin razón</span>}
+                            </div>
+                            <div className="text-right text-slate-500">
+                              {ab.created_by_name ? (
+                                <span>Registró: <span className="text-slate-300">{ab.created_by_name}</span>{ab.created_at ? <span className="text-slate-600"> · {fmtDateTime(ab.created_at)}</span> : null}</span>
+                              ) : (
+                                <span className="text-slate-600">Registró: —</span>
+                              )}
+                              {modified && (
+                                <span className="block text-slate-600">Modificó: <span className="text-slate-400">{ab.updated_by_name}</span> · {fmtDateTime(ab.updated_at)}</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Entradas existentes */}
                 {empEntries.length > 0 && (
