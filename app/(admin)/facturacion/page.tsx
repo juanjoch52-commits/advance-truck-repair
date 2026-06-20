@@ -17,6 +17,7 @@ interface Invoice {
   document_type: DocumentType;
   client_id: string | null;
   client_name: string | null;
+  customer_name: string | null;
   truck_id: string | null;
   truck_label: string | null;
   order_number: string | null;
@@ -680,10 +681,10 @@ export default function FacturacionPage() {
           <h1 className="display-font text-3xl font-bold text-slate-100 tracking-wide">{t('invoices.title')}</h1>
           <p className="text-slate-400 mt-1">{invoices.length} {t('invoices.registered')}</p>
         </div>
-        <button data-tour="fac-add" onClick={() => setShowForm(true)} className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 px-5 rounded-lg transition display-font tracking-wide flex items-center gap-2">
+        <a data-tour="fac-add" href="/facturacion/nueva" className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 px-5 rounded-lg transition display-font tracking-wide flex items-center gap-2">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
           {t('invoices.addInvoice')}
-        </button>
+        </a>
       </div>
 
       <div data-tour="fac-filters" className="flex gap-2 mb-5 flex-wrap">
@@ -717,7 +718,7 @@ export default function FacturacionPage() {
                   <span className="text-xs px-2 py-0.5 rounded-full border bg-slate-700/40 border-white/10 text-slate-400">{t(`invoices.pm.${inv.payment_method}`)}</span>
                 </div>
                 <div className="flex items-center gap-3 mt-1.5 flex-wrap text-xs text-slate-500">
-                  <span className="text-slate-400">{inv.client_name ?? t('invoices.noClient')}</span>
+                  <span className="text-slate-400">{inv.client_name ?? inv.customer_name ?? t('invoices.noClient')}</span>
                   {inv.truck_label && <span className="text-sky-300/80">🚛 {inv.truck_label}</span>}
                   {inv.order_number && <span className="text-purple-300/80">{t('invoices.orderNumberLabel')} {inv.order_number}</span>}
                   <span>{t('invoices.issueDate')}: {inv.issue_date}</span>

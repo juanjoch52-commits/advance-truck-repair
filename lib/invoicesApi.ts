@@ -1,5 +1,6 @@
 import { getSupabaseServerClient } from '@/lib/supabaseServer';
 import { requireRole } from '@/lib/apiAuth';
+import { computePayout } from '@/lib/money';
 
 export const PAYMENT_METHODS = ['cash', 'check', 'card', 'deposit', 'credit'] as const;
 // Métodos válidos para un PAGO real recibido (no incluye 'credit', que es un término
@@ -21,7 +22,7 @@ export function isFiscalDocument(t: unknown): boolean {
 }
 
 export const INVOICE_COLS =
-  'id,shop_id,client_id,location_id,truck_id,work_report_id,order_number,document_number,document_type,issue_date,due_date,payment_method,status,subtotal,tax_amount,tax_exempt,tax_exempt_certificate,discount,total,amount_paid,balance,description,notes,emitted_at,commissions_generated,created_by,created_at,updated_at';
+  'id,shop_id,client_id,customer_name,location_id,truck_id,work_report_id,order_number,document_number,document_type,issue_date,due_date,payment_method,status,subtotal,tax_amount,tax_exempt,tax_exempt_certificate,discount,total,amount_paid,balance,description,notes,emitted_at,commissions_generated,created_by,created_at,updated_at';
 
 // Facturación / cuentas por cobrar: owner / admin / super_user (gestión diaria).
 export async function requireInvoicesAccess() {
@@ -107,4 +108,121 @@ export function agingBucket(daysPastDue: number): 'current' | 'd1_30' | 'd31_60'
 export function daysBetween(fromISO: string, toDate: Date): number {
   const from = new Date(fromISO + 'T00:00:00');
   return Math.floor((toDate.getTime() - from.getTime()) / 86400000);
+}
+
+// ─── Factura ↔ Orden de trabajo ──────────────────────────────────────────────
+// La orden de trabajo (work_reports) exige company y truck_number NOT NULL. Aquí
+// resolvemos esas etiquetas desde la factura: el nombre del cliente registrado, o
+// el cliente esporádico (customer_name), o "Walk-in"; y la unidad/placa del camión.
+export async function resolveOrderLabels(
+  supabase: any,
+  opts: { client_id?: string | null; customer_name?: string | null; truck_id?: string | null },
+): Promise<{ company: string; truckNumber: string }> {
+  let company = (opts.customer_name ?? '').trim();
+  if (!company && opts.client_id) {
+    const { data: cli } = await supabase.from('clients').select('name').eq('id', opts.client_id).maybeSingle();
+    company = (cli?.name ?? '').trim();
+  }
+  if (!company) company = 'Walk-in';
+
+  let truckNumber = '';
+  if (opts.truck_id) {
+    const { data: tr } = await supabase.from('trucks').select('unit_number,plate').eq('id', opts.truck_id).maybeSingle();
+    truckNumber = (tr?.unit_number || tr?.plate || '').trim();
+  }
+  if (!truckNumber) truckNumber = '—';
+
+  return { company, truckNumber };
+}
+
+// Crea la ORDEN DE TRABAJO amarrada a una factura al finalizarla (emisión o
+// creación directa): work_reports + report_tasks (renglones de mano de obra) +
+// task_assignments (sus mecánicos, hasta 2) + earned_entries (las comisiones, que
+// entran a la planilla — el MISMO origen que /ordenes, así no se paga doble).
+//
+// `laborItems`: renglones line_type='labor' (con id, description, amount).
+// `assignmentsByItem`: invoice_item_id → [{ employee_id, commission_pct }].
+// Devuelve el id de la orden creada, o null si ningún renglón tiene mecánico
+// (no se crea una orden de trabajo vacía).
+export async function createWorkOrderFromInvoice(
+  supabase: any,
+  args: {
+    invoice: any;
+    laborItems: any[];
+    assignmentsByItem: Record<string, Array<{ employee_id: string; commission_pct: number }>>;
+    emitDate: string;
+    createdById: string | null;
+    createdByName: string | null;
+  },
+): Promise<string | null> {
+  const { invoice, laborItems, assignmentsByItem, emitDate, createdById, createdByName } = args;
+
+  // ¿Hay al menos un renglón de mano de obra con mecánico asignado?
+  const hasAnyMechanic = laborItems.some(it => (assignmentsByItem[it.id] ?? []).some(a => a.employee_id));
+  if (!hasAnyMechanic) return null;
+
+  const { company, truckNumber } = await resolveOrderLabels(supabase, {
+    client_id: invoice.client_id, customer_name: invoice.customer_name, truck_id: invoice.truck_id,
+  });
+
+  const { data: report, error: repErr } = await supabase.from('work_reports').insert({
+    external_order_number: invoice.order_number || invoice.document_number || null,
+    truck_number: truckNumber,
+    company,
+    work_date: emitDate,
+    notes: invoice.description || null,
+    client_id: invoice.client_id || null,
+    location_id: invoice.location_id || null,
+    truck_id: invoice.truck_id || null,
+    created_by: createdById,
+    created_by_name: createdByName,
+    created_by_role: null,
+  }).select('id').single();
+  if (repErr || !report) throw new Error(repErr?.message ?? 'No se pudo crear la orden de trabajo');
+
+  const { start: week_start, end: week_end } = weekRangeMonSun(emitDate);
+
+  let sortOrder = 0;
+  for (const item of laborItems) {
+    const assigns = (assignmentsByItem[item.id] ?? []).filter(a => a.employee_id);
+    if (assigns.length === 0) continue; // tarea sin mecánico → no entra a la orden
+
+    const amount = round2(item.amount);
+    const { data: task, error: taskErr } = await supabase.from('report_tasks').insert({
+      report_id: report.id,
+      description: (item.description ?? '').trim() || 'Mano de obra',
+      amount_charged_to_client: amount,
+      sort_order: sortOrder++,
+    }).select('id').single();
+    if (taskErr || !task) throw new Error(taskErr?.message ?? 'No se pudo crear la tarea de la orden');
+
+    for (const a of assigns) {
+      const pct = Math.min(100, Math.max(0, round2(a.commission_pct)));
+      const payout = computePayout(amount, pct);
+      const { data: assignment, error: asgErr } = await supabase.from('task_assignments').insert({
+        task_id: task.id,
+        employee_id: a.employee_id,
+        commission_percentage: pct,
+        mechanic_payout: payout,
+      }).select('id').single();
+      if (asgErr || !assignment) throw new Error(asgErr?.message ?? 'No se pudo asignar el mecánico');
+
+      await supabase.from('earned_entries').insert({
+        task_assignment_id: assignment.id,
+        work_report_id: report.id,
+        invoice_item_id: item.id,
+        employee_id: a.employee_id,
+        amount: payout,
+        work_date: emitDate,
+        truck_number: truckNumber,
+        mechanic_role: 'mechanic',
+        entry_type: 'mechanic',
+        description: `Factura ${invoice.document_number ?? ''}${item.description ? ' · ' + item.description : ''}`.trim(),
+        week_start,
+        week_end,
+      });
+    }
+  }
+
+  return report.id;
 }

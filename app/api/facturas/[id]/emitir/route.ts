@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { INVOICE_COLS, deriveBalanceStatus, applyWarehouseDeduction, weekRangeMonSun, round2, nextReceiptNumber } from '@/lib/invoicesApi';
+import { INVOICE_COLS, deriveBalanceStatus, applyWarehouseDeduction, round2, nextReceiptNumber, createWorkOrderFromInvoice } from '@/lib/invoicesApi';
 import { computePayout } from '@/lib/money';
 import { sanitizeDbError } from '@/lib/clientsApi';
 import { authErrorResponse, requireRole } from '@/lib/apiAuth';
@@ -10,8 +10,11 @@ import { getSupabaseServerClient } from '@/lib/supabaseServer';
 //   2. (salvo force) exige que las tareas de mano de obra estén marcadas hechas;
 //   3. asigna el número fiscal correlativo (atómico) del taller;
 //   4. descuenta inventario de las piezas de bodega;
-//   5. genera COMISIONES (earned_entries entry_type='mechanic') por cada renglón
-//      de labor con mecánico asignado → entran a la nómina de mecánicos;
+//   5. CREA LA ORDEN DE TRABAJO amarrada (work_reports + report_tasks +
+//      task_assignments + earned_entries) por cada renglón de mano de obra con
+//      mecánico → las comisiones entran a la planilla DESDE UN SOLO ORIGEN (la
+//      orden). Si la factura ya venía enlazada a una orden existente, NO se
+//      recrea: se respetan sus comisiones (evita doble pago).
 //   6. fija estado/saldo según el pago y marca emitted_at + commissions_generated.
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -27,14 +30,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (invoice.commissions_generated) return NextResponse.json({ error: 'Esta factura ya fue emitida.' }, { status: 400 });
 
     const { data: items } = await supabase.from('invoice_items')
-      .select('id,line_type,description,qty,unit_price,amount,cost,part_source,inventory_item_id,mechanic_id,commission_pct,done')
+      .select('id,line_type,description,qty,unit_price,amount,cost,part_source,inventory_item_id,done')
       .eq('invoice_id', id);
     const allItems = items ?? [];
+    const laborItems = allItems.filter((it: any) => it.line_type === 'labor');
 
     // Tareas de mano de obra pendientes (sin marcar hechas) → bloquea salvo force.
-    const pendingLabor = allItems.filter((it: any) => it.line_type === 'labor' && !it.done);
+    const pendingLabor = laborItems.filter((it: any) => !it.done);
     if (pendingLabor.length > 0 && body.force !== true) {
       return NextResponse.json({ error: 'pending_tasks', pending: pendingLabor.length }, { status: 409 });
+    }
+
+    // Asignaciones de mecánicos por renglón de mano de obra (hasta 2 por tarea).
+    const laborIds = laborItems.map((it: any) => it.id);
+    const assignmentsByItem: Record<string, Array<{ employee_id: string; commission_pct: number }>> = {};
+    if (laborIds.length) {
+      const { data: asgs } = await supabase.from('invoice_item_assignments')
+        .select('invoice_item_id,employee_id,commission_pct,sort_order')
+        .in('invoice_item_id', laborIds)
+        .order('sort_order', { ascending: true });
+      for (const a of (asgs ?? [])) {
+        (assignmentsByItem[a.invoice_item_id] ??= []).push({ employee_id: a.employee_id, commission_pct: Number(a.commission_pct) });
+      }
     }
 
     // Fecha de emisión (la del número y la de la comisión).
@@ -86,35 +103,45 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       });
     }
 
-    // Comisiones: un earned_entry por renglón de labor con mecánico asignado.
-    const { start: week_start, end: week_end } = weekRangeMonSun(emitDate);
-    const commissionRows = allItems
-      .filter((it: any) => it.line_type === 'labor' && it.mechanic_id && Number(it.amount) > 0)
-      .map((it: any) => ({
-        invoice_item_id: it.id,
-        employee_id: it.mechanic_id,
-        amount: computePayout(it.amount, it.commission_pct ?? 50),
-        work_date: emitDate,
-        truck_number: null,
-        mechanic_role: 'mechanic',
-        entry_type: 'mechanic',
-        description: `Factura ${document_number}${it.description ? ' · ' + it.description : ''}`,
-        week_start,
-        week_end,
-      }));
-
+    // Orden de trabajo + comisiones. Si la factura YA viene enlazada a una orden
+    // existente, NO se recrea (sus comisiones ya están en la planilla); solo se
+    // emite. Si no, se crea la orden desde los renglones de mano de obra con mecánico.
+    let workReportId: string | null = (invoice.work_report_id as any) ?? null;
     let commissionsCreated = 0;
-    if (commissionRows.length) {
-      const { error: ceErr } = await supabase.from('earned_entries').insert(commissionRows);
-      if (ceErr) return NextResponse.json({ error: sanitizeDbError('facturas/emitir.commissions', ceErr.message) }, { status: 500 });
-      commissionsCreated = commissionRows.length;
+    let commissionsTotal = 0;
+    if (!workReportId) {
+      try {
+        const newReportId = await createWorkOrderFromInvoice(supabase, {
+          invoice: updated,
+          laborItems,
+          assignmentsByItem,
+          emitDate,
+          createdById: (session as any)?.id ?? null,
+          createdByName: (session as any)?.full_name ?? null,
+        });
+        if (newReportId) {
+          workReportId = newReportId;
+          await supabase.from('invoices').update({ work_report_id: newReportId }).eq('id', id);
+          // Conteo / total de comisiones generadas (para el aviso al usuario).
+          for (const it of laborItems) {
+            for (const a of (assignmentsByItem[it.id] ?? [])) {
+              if (!a.employee_id) continue;
+              commissionsCreated += 1;
+              commissionsTotal += computePayout(round2(it.amount), Math.min(100, Math.max(0, round2(a.commission_pct))));
+            }
+          }
+        }
+      } catch (e: any) {
+        return NextResponse.json({ error: sanitizeDbError('facturas/emitir.workorder', e?.message ?? 'error') }, { status: 500 });
+      }
     }
 
     return NextResponse.json({
       ok: true,
       invoice: updated,
+      work_report_id: workReportId,
       commissions_created: commissionsCreated,
-      commissions_total: round2(commissionRows.reduce((s, r) => s + Number(r.amount), 0)),
+      commissions_total: round2(commissionsTotal),
     });
   } catch (err) {
     const authResp = authErrorResponse(err);

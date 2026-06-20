@@ -113,7 +113,7 @@ export function InvoicePdfButton({ invoiceId, className, mode = 'download' }: { 
       doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(SOFT, SOFT, SOFT);
       doc.text('BILL TO', M, y);
       doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(INK, INK, INK);
-      doc.text(client?.name || 'Cliente', M, y + 13);
+      doc.text(client?.name || invoice?.customer_name || 'Cliente', M, y + 13);
       doc.setFontSize(8); doc.setTextColor(SOFT, SOFT, SOFT);
       let by = y + 24;
       for (const l of addr(client)) { doc.text(l, M, by); by += 10; }

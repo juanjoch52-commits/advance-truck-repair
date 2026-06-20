@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireInvoicesAccess, INVOICE_COLS, PAYMENT_METHODS, DOCUMENT_TYPES, isFiscalDocument, computeAutoTax, applyWarehouseDeduction, round2, deriveBalanceStatus, nextReceiptNumber } from '@/lib/invoicesApi';
+import { requireInvoicesAccess, INVOICE_COLS, PAYMENT_METHODS, DOCUMENT_TYPES, isFiscalDocument, computeAutoTax, applyWarehouseDeduction, round2, deriveBalanceStatus, nextReceiptNumber, createWorkOrderFromInvoice } from '@/lib/invoicesApi';
 import { sanitizeDbError } from '@/lib/clientsApi';
 import { authErrorResponse, requireRole } from '@/lib/apiAuth';
 import { getSupabaseServerClient } from '@/lib/supabaseServer';
@@ -93,9 +93,24 @@ export async function POST(request: Request) {
     // Renglones opcionales (mano de obra / piezas / cargos). Si vienen, el
     // subtotal se calcula a partir de ellos (si no, se usa el subtotal plano).
     const rawItems: any[] = Array.isArray(body.items) ? body.items : [];
+    // Asignaciones de mecánicos por renglón (hasta 2 por tarea de mano de obra).
+    // Acepta `assignments: [{ employee_id, commission_pct }]`; por compatibilidad,
+    // si solo viene `mechanic_id`, lo trata como una asignación única.
+    const assignmentsByIdx: Record<number, Array<{ employee_id: string; commission_pct: number }>> = {};
     const items = rawItems.map((it: any, idx: number) => {
       const qty = round2(it.qty ?? 1) || 1;
       const unit_price = round2(it.unit_price);
+      let assigns: Array<{ employee_id: string; commission_pct: number }> = [];
+      if (it.line_type === 'labor') {
+        const raw = Array.isArray(it.assignments) && it.assignments.length
+          ? it.assignments
+          : (it.mechanic_id ? [{ employee_id: it.mechanic_id, commission_pct: it.commission_pct ?? 50 }] : []);
+        assigns = raw
+          .filter((a: any) => a && a.employee_id)
+          .slice(0, 2)
+          .map((a: any) => ({ employee_id: a.employee_id, commission_pct: Math.min(100, Math.max(0, round2(a.commission_pct ?? 50))) }));
+        if (assigns.length) assignmentsByIdx[idx] = assigns;
+      }
       return {
         line_type: ['labor', 'part', 'fee'].includes(it.line_type) ? it.line_type : 'part',
         description: String(it.description ?? '').trim() || null,
@@ -106,10 +121,9 @@ export async function POST(request: Request) {
         part_source: ['new_purchased', 'used', 'warehouse'].includes(it.part_source) ? it.part_source : null,
         inventory_item_id: it.inventory_item_id || null,
         taxable: Boolean(it.taxable),
-        // Comisión de mecánico (opt-in, solo mano de obra): si el renglón de
-        // labor lleva mecánico, al emitir genera comisión (commission_pct % del monto).
-        mechanic_id: it.line_type === 'labor' ? (it.mechanic_id || null) : null,
-        commission_pct: it.line_type === 'labor' ? round2(it.commission_pct ?? 50) : 0,
+        // Compat: primer mecánico también en el renglón (display / esquema viejo).
+        mechanic_id: assigns[0]?.employee_id ?? null,
+        commission_pct: assigns[0] ? assigns[0].commission_pct : 0,
         done: Boolean(it.done),
         sort_order: idx,
       };
@@ -164,6 +178,8 @@ export async function POST(request: Request) {
     const payload = {
       shop_id: body.shop_id || null,
       client_id: body.client_id || null,
+      // Cliente esporádico (walk-in): nombre a mano cuando no hay client_id.
+      customer_name: !body.client_id ? (String(body.customer_name ?? '').trim() || null) : null,
       location_id: body.location_id || null,
       truck_id: body.truck_id || null,
       work_report_id,
@@ -201,13 +217,60 @@ export async function POST(request: Request) {
 
     // Renglones. El descuento de bodega solo ocurre al FINALIZAR: si es factura
     // fiscal directa, ahora; si es borrador, se difiere a /emitir.
+    let insertedItems: any[] = [];
     if (items.length) {
       const rows = items.map(it => ({ ...it, invoice_id: invoice.id }));
-      const { error: itErr } = await supabase.from('invoice_items').insert(rows);
+      const { data: itRows, error: itErr } = await supabase.from('invoice_items').insert(rows)
+        .select('id,line_type,description,amount,inventory_item_id,qty,cost,sort_order');
       if (itErr) return NextResponse.json({ error: sanitizeDbError('facturas.POST.items', itErr.message) }, { status: 500 });
+      insertedItems = itRows ?? [];
+
+      // Asignaciones de mecánicos por renglón (mapeadas por sort_order = idx).
+      const itemByIdx: Record<number, string> = {};
+      for (const r of insertedItems) itemByIdx[r.sort_order] = r.id;
+      const asgRows: any[] = [];
+      for (const [idxStr, assigns] of Object.entries(assignmentsByIdx)) {
+        const itemId = itemByIdx[Number(idxStr)];
+        if (!itemId) continue;
+        assigns.forEach((a, i) => asgRows.push({
+          invoice_item_id: itemId, employee_id: a.employee_id, commission_pct: a.commission_pct, sort_order: i,
+        }));
+      }
+      if (asgRows.length) {
+        const { error: asgErr } = await supabase.from('invoice_item_assignments').insert(asgRows);
+        if (asgErr) return NextResponse.json({ error: sanitizeDbError('facturas.POST.assignments', asgErr.message) }, { status: 500 });
+      }
 
       if (isFiscal && !isDraft) {
         await applyWarehouseDeduction(supabase, items, invoice.id, (session as any)?.id ?? null);
+      }
+    }
+
+    // Factura fiscal DIRECTA (no borrador) con mano de obra y mecánicos → crea la
+    // orden de trabajo amarrada + comisiones en el acto (mismo origen que /emitir),
+    // salvo que venga enlazada a una orden existente. Borradores lo difieren a /emitir.
+    if (isFiscal && !isDraft && !work_report_id && insertedItems.length) {
+      const laborItems = insertedItems.filter((it: any) => it.line_type === 'labor');
+      const assignmentsByItem: Record<string, Array<{ employee_id: string; commission_pct: number }>> = {};
+      for (const it of laborItems) {
+        const assigns = assignmentsByIdx[it.sort_order];
+        if (assigns?.length) assignmentsByItem[it.id] = assigns;
+      }
+      try {
+        const newReportId = await createWorkOrderFromInvoice(supabase, {
+          invoice,
+          laborItems,
+          assignmentsByItem,
+          emitDate: invoice.issue_date,
+          createdById: (session as any)?.id ?? null,
+          createdByName: (session as any)?.full_name ?? null,
+        });
+        if (newReportId) {
+          await supabase.from('invoices').update({ work_report_id: newReportId, commissions_generated: true }).eq('id', invoice.id);
+          (invoice as any).work_report_id = newReportId;
+        }
+      } catch (e: any) {
+        return NextResponse.json({ error: sanitizeDbError('facturas.POST.workorder', e?.message ?? 'error') }, { status: 500 });
       }
     }
 
