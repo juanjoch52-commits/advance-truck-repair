@@ -137,6 +137,16 @@ export function InvoicePdfButton({ invoiceId, className, mode = 'download' }: { 
         // Cliente ocasional: camión / vehículo escrito a mano.
         doc.text(`Unit: ${invoice.customer_truck}`, M, by); by += 10;
       }
+      // Seguro: a quién se le cobra y bajo qué reclamo (factura enviada al seguro).
+      if (invoice.insurance_company || invoice.insurance_claim) {
+        const insLine = [
+          invoice.insurance_company ? `Insurance: ${invoice.insurance_company}` : null,
+          invoice.insurance_claim ? `Claim #: ${invoice.insurance_claim}` : null,
+        ].filter(Boolean).join('  ·  ');
+        doc.setTextColor(INK, INK, INK);
+        doc.text(insLine, M, by); by += 10;
+        doc.setTextColor(SOFT, SOFT, SOFT);
+      }
       y = by + 8;
 
       // ── Renglones ──

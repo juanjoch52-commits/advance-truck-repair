@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 // ─── Pantalla "Nueva factura" estilo orden de trabajo ────────────────────────
@@ -37,8 +37,20 @@ const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'check', 'card', 'deposit', 'c
 const HARD_CAP = 100;
 
 export default function NuevaFacturaPage() {
+  return (
+    <Suspense fallback={null}>
+      <NuevaFacturaInner />
+    </Suspense>
+  );
+}
+
+function NuevaFacturaInner() {
   const { t, lang } = useLanguage();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Edición de un BORRADOR existente: ?id=<uuid>. Sin id → factura nueva.
+  const editId = searchParams.get('id') || '';
+  const isEditing = !!editId;
 
   // Diccionario bilingüe local (sin tocar los archivos grandes de traducción).
   const L = lang === 'en' ? EN : ES;
@@ -68,6 +80,12 @@ export default function NuevaFacturaPage() {
   const [dueDate, setDueDate] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
 
+  // Seguro (opcional): aseguradora + nº de reclamo/póliza. Al activarlo, la factura
+  // se cobra "a crédito" (queda abierta hasta que el seguro pague).
+  const [insuranceOn, setInsuranceOn] = useState(false);
+  const [insuranceCompany, setInsuranceCompany] = useState('');
+  const [insuranceClaim, setInsuranceClaim] = useState('');
+
   // Líneas
   const [tasks, setTasks] = useState<Task[]>([newTask()]);
   const [parts, setParts] = useState<Part[]>([]);
@@ -90,6 +108,80 @@ export default function NuevaFacturaPage() {
       try { const r = await fetch('/api/facturas/ordenes'); if (r.ok) { const j = await r.json(); setWorkOrders((j.orders ?? []) as WorkOrderOpt[]); } } catch {}
     })();
   }, []);
+
+  // Edición: cargar el borrador y poblar el formulario. Solo borradores son editables.
+  useEffect(() => {
+    if (!editId) return;
+    (async () => {
+      try {
+        const [invRes, itRes] = await Promise.all([
+          fetch(`/api/facturas/${editId}`),
+          fetch(`/api/facturas/${editId}/items`),
+        ]);
+        if (!invRes.ok) { setError(L.editNotFound); return; }
+        const { invoice } = await invRes.json();
+        const its = itRes.ok ? ((await itRes.json()).items ?? []) : [];
+        if (!invoice) { setError(L.editNotFound); return; }
+        if (invoice.status !== 'draft') { setError(L.editOnlyDraft); return; }
+
+        // Cliente
+        if (invoice.client_id) {
+          setWalkin(false);
+          setClientId(invoice.client_id);
+          setLocationId(invoice.location_id ?? '');
+          setTruckId(invoice.truck_id ?? '');
+        } else {
+          setWalkin(true);
+          setCustomerName(invoice.customer_name ?? '');
+          setCustomerCompany(invoice.customer_company ?? '');
+          setCustomerPhone(invoice.customer_phone ?? '');
+          setCustomerTruck(invoice.customer_truck ?? '');
+        }
+        // Encabezado
+        setWorkReportId(invoice.work_report_id ?? '');
+        setOrderNumber(invoice.order_number ?? '');
+        setShopId(invoice.shop_id ?? '');
+        setIssueDate(invoice.issue_date ?? new Date().toISOString().slice(0, 10));
+        setDueDate(invoice.due_date ?? '');
+        setPaymentMethod((invoice.payment_method as PaymentMethod) ?? 'cash');
+        // Seguro
+        if (invoice.insurance_company || invoice.insurance_claim) {
+          setInsuranceOn(true);
+          setInsuranceCompany(invoice.insurance_company ?? '');
+          setInsuranceClaim(invoice.insurance_claim ?? '');
+        }
+        // Totales
+        setDiscount(invoice.discount ? String(invoice.discount) : '');
+
+        // Renglones → tareas (mano de obra) y piezas.
+        const laborItems = its.filter((it: any) => it.line_type === 'labor');
+        const partItems = its.filter((it: any) => it.line_type !== 'labor');
+        if (laborItems.length) {
+          setTasks(laborItems.map((it: any) => ({
+            id: uid(),
+            description: it.description ?? '',
+            amount: String(Number(it.unit_price ?? it.amount ?? 0)),
+            mechanics: (it.assignments && it.assignments.length)
+              ? it.assignments.map((a: any) => ({ id: uid(), employee_id: a.employee_id, commission_pct: String(Number(a.commission_pct ?? 50)) }))
+              : [newMech()],
+          })));
+        }
+        if (partItems.length) {
+          setParts(partItems.map((it: any) => ({
+            id: uid(),
+            description: it.description ?? '',
+            qty: String(Number(it.qty ?? 1)),
+            unit_price: String(Number(it.unit_price ?? 0)),
+            cost: String(Number(it.cost ?? 0)),
+            part_source: (['new_purchased', 'used', 'warehouse'].includes(it.part_source) ? it.part_source : 'new_purchased') as PartSource,
+            inventory_item_id: it.inventory_item_id ?? '',
+            taxable: !!it.taxable,
+          })));
+        }
+      } catch { setError(L.editNotFound); }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editId]);
 
   const selectedClient = clients.find(c => c.id === clientId) || null;
   const clientLocations = selectedClient?.locations ?? [];
@@ -205,31 +297,40 @@ export default function NuevaFacturaPage() {
     const err = validate();
     if (err) { setError(err); return; }
     setSaving(true);
-    const res = await fetch('/api/facturas', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id: walkin ? null : (clientId || null),
-        customer_name: walkin ? customerName.trim() : (clientId ? null : customerName.trim()),
-        customer_company: walkin ? (customerCompany.trim() || null) : null,
-        customer_phone: walkin ? (customerPhone.trim() || null) : null,
-        customer_truck: walkin ? (customerTruck.trim() || null) : null,
-        location_id: walkin ? null : (locationId || null),
-        truck_id: walkin ? null : (truckId || null),
-        work_report_id: workReportId || null,
-        order_number: orderNumber.trim() || null,
-        shop_id: shopId || null,
-        document_type: 'invoice',
-        draft: asDraft,
-        issue_date: issueDate,
-        due_date: dueDate || null,
-        payment_method: paymentMethod,
-        tax_override: taxOverride,
-        tax_amount: taxN,
-        discount: discountN,
-        mark_paid: !asDraft && !isCredit && markPaid,
-        items: buildItems(),
-      }),
-    });
+    const body: any = {
+      client_id: walkin ? null : (clientId || null),
+      customer_name: walkin ? customerName.trim() : (clientId ? null : customerName.trim()),
+      customer_company: walkin ? (customerCompany.trim() || null) : null,
+      customer_phone: walkin ? (customerPhone.trim() || null) : null,
+      customer_truck: walkin ? (customerTruck.trim() || null) : null,
+      insurance_company: insuranceOn ? (insuranceCompany.trim() || null) : null,
+      insurance_claim: insuranceOn ? (insuranceClaim.trim() || null) : null,
+      location_id: walkin ? null : (locationId || null),
+      truck_id: walkin ? null : (truckId || null),
+      work_report_id: workReportId || null,
+      order_number: orderNumber.trim() || null,
+      shop_id: shopId || null,
+      issue_date: issueDate,
+      due_date: dueDate || null,
+      payment_method: paymentMethod,
+      tax_override: taxOverride,
+      tax_amount: taxN,
+      discount: discountN,
+      items: buildItems(),
+    };
+
+    let res: Response;
+    if (isEditing) {
+      // Guardar cambios del borrador (sigue siendo borrador hasta que se emita).
+      res = await fetch(`/api/facturas/${editId}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+    } else {
+      res = await fetch('/api/facturas', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, document_type: 'invoice', draft: asDraft, mark_paid: !asDraft && !isCredit && !insuranceOn && markPaid }),
+      });
+    }
     const j = await res.json().catch(() => ({}));
     if (!res.ok) { setError(j.error ?? 'Error'); setSaving(false); return; }
     router.push('/facturacion');
@@ -247,7 +348,7 @@ export default function NuevaFacturaPage() {
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
         {L.back}
       </a>
-      <h1 className="display-font text-3xl md:text-4xl font-bold text-slate-100 tracking-wide mb-7">{L.title}</h1>
+      <h1 className="display-font text-3xl md:text-4xl font-bold text-slate-100 tracking-wide mb-7">{isEditing ? L.editTitle : L.title}</h1>
 
       <div className="space-y-6">
         {/* ─── Cliente ─── */}
@@ -355,6 +456,31 @@ export default function NuevaFacturaPage() {
               {isCredit && <p className="text-amber-300/90 text-base mt-2">{L.creditHint}</p>}
             </div>
           </div>
+        </div>
+
+        {/* ─── Seguro (opcional) ─── */}
+        <div className={card}>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" checked={insuranceOn} onChange={e => {
+              const on = e.target.checked;
+              setInsuranceOn(on);
+              if (on) setPaymentMethod('credit'); // cobrar al seguro = a crédito
+            }} className="accent-amber-500 w-6 h-6" />
+            <span className="display-font text-slate-100 font-bold text-xl md:text-2xl tracking-wide">{L.sectionInsurance}</span>
+          </label>
+          {insuranceOn && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
+              <div>
+                <label className={label}>{L.insurer}</label>
+                <input value={insuranceCompany} onChange={e => setInsuranceCompany(e.target.value)} placeholder={L.insurerHint} className={input} />
+              </div>
+              <div>
+                <label className={label}>{L.claim}</label>
+                <input value={insuranceClaim} onChange={e => setInsuranceClaim(e.target.value)} placeholder={L.claimHint} className={input} />
+              </div>
+              <p className="md:col-span-2 text-amber-300/90 text-base">{L.insuranceHint}</p>
+            </div>
+          )}
         </div>
 
         {/* ─── Mano de obra ─── */}
@@ -520,7 +646,7 @@ export default function NuevaFacturaPage() {
             )}
           </div>
 
-          {!isCredit && (
+          {!isCredit && !isEditing && (
             <label className="flex items-center gap-3 mt-5 text-lg text-slate-200 cursor-pointer">
               <input type="checkbox" checked={markPaid} onChange={e => setMarkPaid(e.target.checked)} className="accent-amber-500 w-6 h-6" />
               {L.markPaid}
@@ -531,18 +657,33 @@ export default function NuevaFacturaPage() {
         {error && <div className="bg-red-500/10 border border-red-500/40 rounded-xl px-5 py-4 text-red-300 text-lg">{error}</div>}
 
         {/* ─── Botones ─── */}
-        <div className="flex gap-3 flex-wrap pb-10">
-          <button type="button" disabled={saving} onClick={() => submit(false)}
-            className="bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-slate-950 font-bold text-xl py-4 px-10 rounded-xl transition display-font tracking-wide">
-            {saving ? L.saving : L.create}
-          </button>
-          <button type="button" disabled={saving} onClick={() => submit(true)}
-            className="bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-amber-200 border border-amber-500/40 text-lg font-semibold py-4 px-8 rounded-xl transition">
-            {L.saveDraft}
-          </button>
-          <a href="/facturacion" className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-lg py-4 px-8 rounded-xl transition flex items-center">{t('common.cancel')}</a>
-        </div>
-        <p className="text-slate-500 text-base -mt-6 pb-10">{L.draftHint}</p>
+        {isEditing ? (
+          <>
+            <div className="flex gap-3 flex-wrap pb-10">
+              <button type="button" disabled={saving} onClick={() => submit(true)}
+                className="bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-slate-950 font-bold text-xl py-4 px-10 rounded-xl transition display-font tracking-wide">
+                {saving ? L.saving : L.saveChanges}
+              </button>
+              <a href="/facturacion" className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-lg py-4 px-8 rounded-xl transition flex items-center">{t('common.cancel')}</a>
+            </div>
+            <p className="text-slate-500 text-base -mt-6 pb-10">{L.editHint}</p>
+          </>
+        ) : (
+          <>
+            <div className="flex gap-3 flex-wrap pb-10">
+              <button type="button" disabled={saving} onClick={() => submit(false)}
+                className="bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-slate-950 font-bold text-xl py-4 px-10 rounded-xl transition display-font tracking-wide">
+                {saving ? L.saving : L.create}
+              </button>
+              <button type="button" disabled={saving} onClick={() => submit(true)}
+                className="bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-amber-200 border border-amber-500/40 text-lg font-semibold py-4 px-8 rounded-xl transition">
+                {L.saveDraft}
+              </button>
+              <a href="/facturacion" className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-lg py-4 px-8 rounded-xl transition flex items-center">{t('common.cancel')}</a>
+            </div>
+            <p className="text-slate-500 text-base -mt-6 pb-10">{L.draftHint}</p>
+          </>
+        )}
       </div>
     </div>
   );
@@ -551,6 +692,12 @@ export default function NuevaFacturaPage() {
 // ─── Textos (bilingüe local) ─────────────────────────────────────────────────
 const ES = {
   back: 'Volver a facturas', title: 'Nueva factura',
+  editTitle: 'Editar borrador', saveChanges: 'Guardar cambios',
+  editHint: 'Estás editando un borrador. Al guardar sigue como borrador; emítela desde la lista cuando esté lista.',
+  editNotFound: 'No se pudo cargar el borrador.', editOnlyDraft: 'Solo se puede editar un borrador (una factura emitida se anula, no se edita).',
+  sectionInsurance: 'Cobrar a seguro', insurer: 'Aseguradora', insurerHint: 'Ej. Progressive, GEICO…',
+  claim: 'Nº de reclamo / póliza', claimHint: 'Ej. CLM-00123',
+  insuranceHint: 'La factura se cobra "a crédito": queda abierta y la envías al seguro; registras el pago cuando paguen.',
   sectionClient: 'Cliente', registered: 'Cliente registrado', walkin: 'Cliente ocasional',
   walkinName: 'Nombre del cliente', walkinNameHint: 'Escriba el nombre del cliente', optional: '(opcional)',
   walkinCompany: 'Empresa / compañía', walkinCompanyHint: 'Ej. Transportes López',
@@ -582,6 +729,12 @@ const ES = {
 };
 const EN = {
   back: 'Back to invoices', title: 'New invoice',
+  editTitle: 'Edit draft', saveChanges: 'Save changes',
+  editHint: 'You are editing a draft. Saving keeps it a draft; emit it from the list when ready.',
+  editNotFound: 'Could not load the draft.', editOnlyDraft: 'Only a draft can be edited (an issued invoice is voided, not edited).',
+  sectionInsurance: 'Bill to insurance', insurer: 'Insurance company', insurerHint: 'e.g. Progressive, GEICO…',
+  claim: 'Claim / policy #', claimHint: 'e.g. CLM-00123',
+  insuranceHint: 'The invoice is billed "on credit": it stays open and you send it to the insurer; record the payment when they pay.',
   sectionClient: 'Customer', registered: 'Registered customer', walkin: 'Walk-in customer',
   walkinName: 'Customer name', walkinNameHint: 'Type the customer name', optional: '(optional)',
   walkinCompany: 'Company', walkinCompanyHint: 'e.g. Lopez Trucking',

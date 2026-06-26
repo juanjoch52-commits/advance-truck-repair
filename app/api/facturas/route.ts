@@ -184,6 +184,9 @@ export async function POST(request: Request) {
       customer_company: !body.client_id ? (String(body.customer_company ?? '').trim() || null) : null,
       customer_phone: !body.client_id ? (String(body.customer_phone ?? '').trim() || null) : null,
       customer_truck: !body.client_id ? (String(body.customer_truck ?? '').trim() || null) : null,
+      // Seguro (aplica a registrado u ocasional): a quién se le cobra y el reclamo.
+      insurance_company: String(body.insurance_company ?? '').trim() || null,
+      insurance_claim: String(body.insurance_claim ?? '').trim() || null,
       location_id: body.location_id || null,
       truck_id: body.truck_id || null,
       work_report_id,

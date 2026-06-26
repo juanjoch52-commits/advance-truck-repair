@@ -732,6 +732,9 @@ export default function FacturacionPage() {
               <div data-tour="fac-actions" className="flex items-center gap-1 flex-shrink-0">
                 {isPending && (
                   <>
+                    <a href={`/facturacion/nueva?id=${inv.id}`} className="text-xs px-2.5 py-1.5 rounded border border-sky-500/30 text-sky-300 hover:bg-sky-500/10 transition">
+                      {t('common.edit')}
+                    </a>
                     <button onClick={() => toggleDraft(inv.id)} className="text-xs px-2.5 py-1.5 rounded border border-white/10 text-slate-300 hover:bg-slate-700 transition">
                       {expandedDraft === inv.id ? t('invoices.hideTasks') : t('invoices.viewTasks')}
                     </button>
