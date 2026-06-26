@@ -22,13 +22,13 @@ interface InvItem { id: string; name: string; part_number: string | null; sale_p
 interface WorkOrderOpt { id: string; external_order_number: string | null; company: string | null; truck_number: string | null; work_date: string | null; client_id: string | null; truck_id: string | null }
 
 interface Mech { id: string; employee_id: string; commission_pct: string }
-interface Task { id: string; description: string; amount: string; mechanics: Mech[] }
+interface Task { id: string; description: string; amount: string; mechanics: Mech[]; taxable: boolean }
 interface Part { id: string; description: string; qty: string; unit_price: string; cost: string; part_source: PartSource; inventory_item_id: string; taxable: boolean }
 
 let seq = 0;
 const uid = () => `r${++seq}`;
 const newMech = (pct = 50): Mech => ({ id: uid(), employee_id: '', commission_pct: String(pct) });
-const newTask = (): Task => ({ id: uid(), description: '', amount: '', mechanics: [newMech()] });
+const newTask = (): Task => ({ id: uid(), description: '', amount: '', mechanics: [newMech()], taxable: false });
 const newPart = (): Part => ({ id: uid(), description: '', qty: '1', unit_price: '', cost: '', part_source: 'new_purchased', inventory_item_id: '', taxable: true });
 
 const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
@@ -161,6 +161,7 @@ function NuevaFacturaInner() {
             id: uid(),
             description: it.description ?? '',
             amount: String(Number(it.unit_price ?? it.amount ?? 0)),
+            taxable: !!it.taxable,
             mechanics: (it.assignments && it.assignments.length)
               ? it.assignments.map((a: any) => ({ id: uid(), employee_id: a.employee_id, commission_pct: String(Number(a.commission_pct ?? 50)) }))
               : [newMech()],
@@ -242,7 +243,11 @@ function NuevaFacturaInner() {
   const laborTotal = round2(tasks.reduce((s, tk) => s + taskAmount(tk), 0));
   const partsTotal = round2(parts.reduce((s, pt) => s + partAmount(pt), 0));
   const subtotal = round2(laborTotal + partsTotal);
-  const taxableBase = round2(parts.filter(p => p.taxable).reduce((s, p) => s + partAmount(p), 0));
+  // Base gravable: piezas marcadas + mano de obra marcada (casilla por trabajo).
+  const taxableBase = round2(
+    parts.filter(p => p.taxable).reduce((s, p) => s + partAmount(p), 0) +
+    tasks.filter(tk => tk.taxable).reduce((s, tk) => s + taskAmount(tk), 0)
+  );
   const autoTax = !!selectedShop && !taxOverride && !clientExempt;
   const taxN = clientExempt ? 0 : (autoTax ? round2(taxableBase * (selectedShop!.tax_rate) / 100) : (parseFloat(taxManual) || 0));
   const discountN = parseFloat(discount) || 0;
@@ -261,7 +266,7 @@ function NuevaFacturaInner() {
         description: tk.description.trim(),
         qty: 1,
         unit_price: taskAmount(tk),
-        taxable: false,
+        taxable: tk.taxable,
         assignments: tk.mechanics.filter(m => m.employee_id).map(m => ({ employee_id: m.employee_id, commission_pct: parseFloat(m.commission_pct) || 0 })),
       }));
     const partItems = parts
@@ -514,6 +519,11 @@ function NuevaFacturaInner() {
                     </div>
                   </div>
 
+                  <label className="flex items-center gap-2.5 text-base text-slate-300 cursor-pointer mb-4">
+                    <input type="checkbox" checked={tk.taxable} onChange={e => updTask(tk.id, { taxable: e.target.checked })} className="accent-amber-500 w-5 h-5" />
+                    {L.taxableLabor}
+                  </label>
+
                   {!linkedToOrder && (
                     <div className="bg-slate-900/40 rounded-xl p-4">
                       <div className="flex items-center justify-between mb-3">
@@ -713,6 +723,7 @@ const ES = {
   paymentMethod: 'Forma de pago', creditHint: 'A crédito: la factura queda pendiente de pago.',
   sectionLabor: 'Mano de obra', addTask: 'Agregar trabajo', task: 'Trabajo', remove: 'Quitar',
   taskDesc: '¿Qué se hizo?', taskDescHint: 'Ej. Cambio de frenos', amount: 'Precio ($)',
+  taxableLabor: 'Cobra impuesto a esta mano de obra',
   whoWorked: '¿Quién trabajó?', addMechanic: 'Agregar mecánico', selectMechanic: 'Seleccione mecánico',
   laborLinkedHint: 'Esta factura está enlazada a una orden existente; las comisiones vienen de esa orden.',
   sectionParts: 'Piezas y repuestos', addPart: 'Agregar pieza', noParts: 'Sin piezas todavía.',
@@ -750,6 +761,7 @@ const EN = {
   paymentMethod: 'Payment method', creditHint: 'On credit: the invoice stays unpaid.',
   sectionLabor: 'Labor', addTask: 'Add job', task: 'Job', remove: 'Remove',
   taskDesc: 'What was done?', taskDescHint: 'e.g. Brake replacement', amount: 'Price ($)',
+  taxableLabor: 'Charge tax on this labor',
   whoWorked: 'Who worked on it?', addMechanic: 'Add mechanic', selectMechanic: 'Select mechanic',
   laborLinkedHint: 'This invoice is linked to an existing order; commissions come from that order.',
   sectionParts: 'Parts', addPart: 'Add part', noParts: 'No parts yet.',
