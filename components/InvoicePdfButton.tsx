@@ -117,6 +117,11 @@ export function InvoicePdfButton({ invoiceId, className, mode = 'download' }: { 
       doc.setFontSize(8); doc.setTextColor(SOFT, SOFT, SOFT);
       let by = y + 24;
       for (const l of addr(client)) { doc.text(l, M, by); by += 10; }
+      // Cliente ocasional (walk-in): empresa / teléfono a texto (no hay ficha CRM).
+      if (!client) {
+        if (invoice.customer_company) { doc.text(String(invoice.customer_company), M, by); by += 10; }
+        if (invoice.customer_phone) { doc.text(`Tel: ${invoice.customer_phone}`, M, by); by += 10; }
+      }
       // Camión / unidad de la factura (historial por unidad).
       if (truck) {
         const unit = truck.unit_number || truck.plate;
@@ -128,6 +133,9 @@ export function InvoicePdfButton({ invoiceId, className, mode = 'download' }: { 
           truck.vin ? `VIN: ${truck.vin}` : null,
         ].filter(Boolean).join('  ·  ');
         if (truckLine) { doc.text(truckLine, M, by); by += 10; }
+      } else if (invoice.customer_truck) {
+        // Cliente ocasional: camión / vehículo escrito a mano.
+        doc.text(`Unit: ${invoice.customer_truck}`, M, by); by += 10;
       }
       y = by + 8;
 

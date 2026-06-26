@@ -178,8 +178,12 @@ export async function POST(request: Request) {
     const payload = {
       shop_id: body.shop_id || null,
       client_id: body.client_id || null,
-      // Cliente esporádico (walk-in): nombre a mano cuando no hay client_id.
+      // Cliente esporádico (walk-in): nombre + datos opcionales a mano cuando no
+      // hay client_id (para registrados esos datos viven en el CRM).
       customer_name: !body.client_id ? (String(body.customer_name ?? '').trim() || null) : null,
+      customer_company: !body.client_id ? (String(body.customer_company ?? '').trim() || null) : null,
+      customer_phone: !body.client_id ? (String(body.customer_phone ?? '').trim() || null) : null,
+      customer_truck: !body.client_id ? (String(body.customer_truck ?? '').trim() || null) : null,
       location_id: body.location_id || null,
       truck_id: body.truck_id || null,
       work_report_id,

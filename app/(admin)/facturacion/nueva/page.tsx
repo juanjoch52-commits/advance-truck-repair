@@ -53,6 +53,9 @@ export default function NuevaFacturaPage() {
   // Cliente
   const [walkin, setWalkin] = useState(false);
   const [customerName, setCustomerName] = useState('');
+  const [customerCompany, setCustomerCompany] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerTruck, setCustomerTruck] = useState('');
   const [clientId, setClientId] = useState('');
   const [locationId, setLocationId] = useState('');
   const [truckId, setTruckId] = useState('');
@@ -81,7 +84,7 @@ export default function NuevaFacturaPage() {
   useEffect(() => {
     (async () => {
       try { const r = await fetch('/api/clientes?tree=1'); if (r.ok) { const j = await r.json(); setClients((j.clients ?? []) as ClientOpt[]); } } catch {}
-      try { const r = await fetch('/api/shops'); if (r.ok) { const j = await r.json(); setShops((j.shops ?? []).map((s: any) => ({ id: s.id, name: s.name, tax_rate: Number(s.tax_rate) || 0 }))); } } catch {}
+      try { const r = await fetch('/api/shops/options'); if (r.ok) { const j = await r.json(); setShops((j.shops ?? []).map((s: any) => ({ id: s.id, name: s.name, tax_rate: Number(s.tax_rate) || 0 }))); } } catch {}
       try { const r = await fetch('/api/empleados'); if (r.ok) { const j = await r.json(); setMechanics((j.employees ?? []).filter((e: any) => (e.role ?? '').toLowerCase() === 'mechanic' || e.payment_type === 'mechanic_commission').map((e: any) => ({ id: e.id, full_name: e.full_name }))); } } catch {}
       try { const r = await fetch('/api/inventario'); if (r.ok) { const j = await r.json(); setInvItems((j.items ?? []) as InvItem[]); } } catch {}
       try { const r = await fetch('/api/facturas/ordenes'); if (r.ok) { const j = await r.json(); setWorkOrders((j.orders ?? []) as WorkOrderOpt[]); } } catch {}
@@ -101,7 +104,7 @@ export default function NuevaFacturaPage() {
   function onWalkinToggle(on: boolean) {
     setWalkin(on);
     if (on) { setClientId(''); setLocationId(''); setTruckId(''); }
-    else { setCustomerName(''); }
+    else { setCustomerName(''); setCustomerCompany(''); setCustomerPhone(''); setCustomerTruck(''); }
   }
 
   // ─── Partir de una orden existente (opcional): solo enlaza, no recrea comisión ───
@@ -207,6 +210,9 @@ export default function NuevaFacturaPage() {
       body: JSON.stringify({
         client_id: walkin ? null : (clientId || null),
         customer_name: walkin ? customerName.trim() : (clientId ? null : customerName.trim()),
+        customer_company: walkin ? (customerCompany.trim() || null) : null,
+        customer_phone: walkin ? (customerPhone.trim() || null) : null,
+        customer_truck: walkin ? (customerTruck.trim() || null) : null,
         location_id: walkin ? null : (locationId || null),
         truck_id: walkin ? null : (truckId || null),
         work_report_id: workReportId || null,
@@ -260,9 +266,23 @@ export default function NuevaFacturaPage() {
           </div>
 
           {walkin ? (
-            <div>
-              <label className={label}>{L.walkinName}</label>
-              <input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder={L.walkinNameHint} className={input} />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className={label}>{L.walkinName}</label>
+                <input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder={L.walkinNameHint} className={input} />
+              </div>
+              <div>
+                <label className={label}>{L.walkinCompany} <span className="text-slate-500 text-sm font-normal">{L.optional}</span></label>
+                <input value={customerCompany} onChange={e => setCustomerCompany(e.target.value)} placeholder={L.walkinCompanyHint} className={input} />
+              </div>
+              <div>
+                <label className={label}>{L.walkinPhone} <span className="text-slate-500 text-sm font-normal">{L.optional}</span></label>
+                <input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder={L.walkinPhoneHint} className={input} />
+              </div>
+              <div className="md:col-span-2">
+                <label className={label}>{L.walkinTruck} <span className="text-slate-500 text-sm font-normal">{L.optional}</span></label>
+                <input value={customerTruck} onChange={e => setCustomerTruck(e.target.value)} placeholder={L.walkinTruckHint} className={input} />
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -532,7 +552,10 @@ export default function NuevaFacturaPage() {
 const ES = {
   back: 'Volver a facturas', title: 'Nueva factura',
   sectionClient: 'Cliente', registered: 'Cliente registrado', walkin: 'Cliente ocasional',
-  walkinName: 'Nombre del cliente', walkinNameHint: 'Escriba el nombre del cliente',
+  walkinName: 'Nombre del cliente', walkinNameHint: 'Escriba el nombre del cliente', optional: '(opcional)',
+  walkinCompany: 'Empresa / compañía', walkinCompanyHint: 'Ej. Transportes López',
+  walkinPhone: 'Teléfono', walkinPhoneHint: 'Ej. (305) 555-1234',
+  walkinTruck: 'Camión / vehículo', walkinTruckHint: 'Ej. unidad 142 o placa ABC-1234',
   client: 'Cliente', selectClient: 'Seleccione un cliente', location: 'Distrito / Sucursal', noLocation: 'Sin distrito',
   truck: 'Camión', selectTruck: 'Seleccione un camión', exemptHint: 'Cliente exento de impuesto',
   sectionInvoice: 'Datos de la factura',
@@ -560,7 +583,10 @@ const ES = {
 const EN = {
   back: 'Back to invoices', title: 'New invoice',
   sectionClient: 'Customer', registered: 'Registered customer', walkin: 'Walk-in customer',
-  walkinName: 'Customer name', walkinNameHint: 'Type the customer name',
+  walkinName: 'Customer name', walkinNameHint: 'Type the customer name', optional: '(optional)',
+  walkinCompany: 'Company', walkinCompanyHint: 'e.g. Lopez Trucking',
+  walkinPhone: 'Phone', walkinPhoneHint: 'e.g. (305) 555-1234',
+  walkinTruck: 'Truck / vehicle', walkinTruckHint: 'e.g. unit 142 or plate ABC-1234',
   client: 'Customer', selectClient: 'Select a customer', location: 'District / Location', noLocation: 'No district',
   truck: 'Truck', selectTruck: 'Select a truck', exemptHint: 'Tax-exempt customer',
   sectionInvoice: 'Invoice details',
