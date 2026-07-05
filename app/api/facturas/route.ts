@@ -4,19 +4,49 @@ import { sanitizeDbError } from '@/lib/clientsApi';
 import { authErrorResponse, requireRole } from '@/lib/apiAuth';
 import { getSupabaseServerClient } from '@/lib/supabaseServer';
 
-// GET /api/facturas?status=&client_id=  → lista de facturas (con nombre de cliente)
+// GET /api/facturas → lista de facturas (con nombre de cliente), con filtros y
+// paginación: ?status= &client_id= &doctype= &q= &from= &to= &limit= &offset=
+//   q: busca por número de documento, número de orden, cliente ocasional o
+//      nombre de cliente registrado (resuelto contra la tabla clients).
 export async function GET(request: Request) {
   try {
     const supabase = await requireInvoicesAccess();
     const url = new URL(request.url);
     const status = url.searchParams.get('status');
     const clientId = url.searchParams.get('client_id');
+    const doctype = url.searchParams.get('doctype');
+    const from = url.searchParams.get('from');
+    const to = url.searchParams.get('to');
+    // Búsqueda: se limpian los caracteres que rompen la sintaxis del filtro .or().
+    const q = String(url.searchParams.get('q') ?? '').trim().replace(/[,%()]/g, ' ').trim();
+    const limit = Math.min(200, Math.max(1, parseInt(url.searchParams.get('limit') ?? '50', 10) || 50));
+    const offset = Math.max(0, parseInt(url.searchParams.get('offset') ?? '0', 10) || 0);
 
-    let query = supabase.from('invoices').select(INVOICE_COLS).order('issue_date', { ascending: false });
+    let query = supabase.from('invoices').select(INVOICE_COLS, { count: 'exact' })
+      .order('issue_date', { ascending: false })
+      .order('created_at', { ascending: false });
     if (status) query = query.eq('status', status);
     if (clientId) query = query.eq('client_id', clientId);
+    if (doctype) query = query.eq('document_type', doctype);
+    if (from) query = query.gte('issue_date', from);
+    if (to) query = query.lte('issue_date', to);
+    if (q) {
+      // Nombre de cliente registrado → ids que calcen con la búsqueda.
+      const { data: cliMatches } = await supabase.from('clients').select('id').ilike('name', `%${q}%`).limit(50);
+      const cliIds = (cliMatches ?? []).map((c: any) => c.id);
+      const ors = [
+        `document_number.ilike.%${q}%`,
+        `order_number.ilike.%${q}%`,
+        `customer_name.ilike.%${q}%`,
+        `customer_truck.ilike.%${q}%`,
+        `insurance_company.ilike.%${q}%`,
+      ];
+      if (cliIds.length) ors.push(`client_id.in.(${cliIds.join(',')})`);
+      query = query.or(ors.join(','));
+    }
+    query = query.range(offset, offset + limit - 1);
 
-    const { data: invoices, error } = await query;
+    const { data: invoices, error, count } = await query;
     if (error) return NextResponse.json({ error: sanitizeDbError('facturas.GET', error.message) }, { status: 500 });
 
     // Adjuntar nombre de cliente (consulta aparte; tablas con RLS deny-all).
@@ -39,7 +69,7 @@ export async function GET(request: Request) {
       truck_label: i.truck_id ? (truckById[i.truck_id] ?? null) : null,
     }));
 
-    return NextResponse.json({ invoices: withNames });
+    return NextResponse.json({ invoices: withNames, total: count ?? withNames.length, limit, offset });
   } catch (err) {
     const authResp = authErrorResponse(err);
     if (authResp) return authResp;

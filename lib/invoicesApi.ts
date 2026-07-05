@@ -22,7 +22,10 @@ export function isFiscalDocument(t: unknown): boolean {
 }
 
 export const INVOICE_COLS =
-  'id,shop_id,client_id,customer_name,customer_company,customer_phone,customer_truck,insurance_company,insurance_claim,location_id,truck_id,work_report_id,order_number,document_number,document_type,issue_date,due_date,payment_method,status,subtotal,tax_amount,tax_exempt,tax_exempt_certificate,discount,total,amount_paid,balance,description,notes,emitted_at,commissions_generated,created_by,created_at,updated_at';
+  'id,shop_id,client_id,customer_name,customer_company,customer_phone,customer_truck,insurance_company,insurance_claim,insurance_status,converted_to_invoice_id,location_id,truck_id,work_report_id,order_number,document_number,document_type,issue_date,due_date,payment_method,status,subtotal,tax_amount,tax_exempt,tax_exempt_certificate,discount,total,amount_paid,balance,description,notes,emitted_at,commissions_generated,created_by,created_at,updated_at';
+
+// Estados de seguimiento del reclamo al seguro (informativo; el dinero entra por pagos).
+export const INSURANCE_STATUSES = ['sent', 'approved', 'partial', 'paid', 'denied'] as const;
 
 // Facturación / cuentas por cobrar: owner / admin / super_user (gestión diaria).
 export async function requireInvoicesAccess() {

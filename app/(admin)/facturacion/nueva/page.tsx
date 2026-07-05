@@ -72,6 +72,11 @@ function NuevaFacturaInner() {
   const [locationId, setLocationId] = useState('');
   const [truckId, setTruckId] = useState('');
 
+  // Tipo de documento: factura fiscal o cotización (estimate, sin número fiscal,
+  // no cobra ni baja inventario; luego se puede CONVERTIR en factura).
+  const [docType, setDocType] = useState<'invoice' | 'estimate'>('invoice');
+  const isEstimate = docType === 'estimate';
+
   // Encabezado
   const [workReportId, setWorkReportId] = useState('');
   const [orderNumber, setOrderNumber] = useState('');
@@ -138,6 +143,7 @@ function NuevaFacturaInner() {
           setCustomerTruck(invoice.customer_truck ?? '');
         }
         // Encabezado
+        setDocType(invoice.document_type === 'estimate' ? 'estimate' : 'invoice');
         setWorkReportId(invoice.work_report_id ?? '');
         setOrderNumber(invoice.order_number ?? '');
         setShopId(invoice.shop_id ?? '');
@@ -333,7 +339,7 @@ function NuevaFacturaInner() {
     } else {
       res = await fetch('/api/facturas', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...body, document_type: 'invoice', draft: asDraft, mark_paid: !asDraft && !isCredit && !insuranceOn && markPaid }),
+        body: JSON.stringify({ ...body, document_type: docType, draft: asDraft, mark_paid: !isEstimate && !asDraft && !isCredit && !insuranceOn && markPaid }),
       });
     }
     const j = await res.json().catch(() => ({}));
@@ -353,9 +359,26 @@ function NuevaFacturaInner() {
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
         {L.back}
       </a>
-      <h1 className="display-font text-3xl md:text-4xl font-bold text-slate-100 tracking-wide mb-7">{isEditing ? L.editTitle : L.title}</h1>
+      <h1 className="display-font text-3xl md:text-4xl font-bold text-slate-100 tracking-wide mb-7">
+        {isEditing ? (isEstimate ? L.editEstimateTitle : L.editTitle) : L.title}
+      </h1>
 
       <div className="space-y-6">
+        {/* ─── Tipo de documento ─── */}
+        {!isEditing && (
+          <div className="flex gap-3 flex-wrap">
+            <button type="button" onClick={() => setDocType('invoice')}
+              className={`px-6 py-3.5 rounded-xl text-lg border transition ${!isEstimate ? 'bg-amber-500/15 border-amber-500/50 text-amber-200 font-semibold' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'}`}>
+              {L.docInvoice}
+            </button>
+            <button type="button" onClick={() => setDocType('estimate')}
+              className={`px-6 py-3.5 rounded-xl text-lg border transition ${isEstimate ? 'bg-purple-500/15 border-purple-500/50 text-purple-200 font-semibold' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'}`}>
+              {L.docEstimate}
+            </button>
+            {isEstimate && <p className="w-full text-purple-300/90 text-base">{L.estimateHint}</p>}
+          </div>
+        )}
+
         {/* ─── Cliente ─── */}
         <div className={card}>
           <h2 className={sectionTitle}>{L.sectionClient}</h2>
@@ -596,6 +619,15 @@ function NuevaFacturaInner() {
                       <span className="text-emerald-300 text-xl font-semibold">{money(partAmount(pt))}</span>
                     </div>
                   </div>
+                  {/* Aviso de existencias: si la cantidad supera lo que hay en bodega. */}
+                  {pt.part_source === 'warehouse' && pt.inventory_item_id && (() => {
+                    const inv = invItems.find(i => i.id === pt.inventory_item_id);
+                    const qty = parseFloat(pt.qty) || 0;
+                    if (inv && qty > Number(inv.quantity_on_hand)) {
+                      return <p className="text-amber-300 text-base mt-2">⚠ {L.stockWarn.replace('{q}', String(inv.quantity_on_hand))}</p>;
+                    }
+                    return null;
+                  })()}
                   <div className="flex items-center gap-4 mt-3 flex-wrap">
                     {pt.part_source !== 'warehouse' && (
                       <select value={pt.part_source} onChange={e => updPart(pt.id, { part_source: e.target.value as PartSource })} className="bg-slate-800 border border-white/15 rounded-lg px-3 py-2 text-base text-slate-100">
@@ -656,7 +688,7 @@ function NuevaFacturaInner() {
             )}
           </div>
 
-          {!isCredit && !isEditing && (
+          {!isCredit && !isEditing && !isEstimate && (
             <label className="flex items-center gap-3 mt-5 text-lg text-slate-200 cursor-pointer">
               <input type="checkbox" checked={markPaid} onChange={e => setMarkPaid(e.target.checked)} className="accent-amber-500 w-6 h-6" />
               {L.markPaid}
@@ -677,6 +709,17 @@ function NuevaFacturaInner() {
               <a href="/facturacion" className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-lg py-4 px-8 rounded-xl transition flex items-center">{t('common.cancel')}</a>
             </div>
             <p className="text-slate-500 text-base -mt-6 pb-10">{L.editHint}</p>
+          </>
+        ) : isEstimate ? (
+          <>
+            <div className="flex gap-3 flex-wrap pb-10">
+              <button type="button" disabled={saving} onClick={() => submit(true)}
+                className="bg-purple-500 hover:bg-purple-400 disabled:bg-purple-500/50 text-slate-950 font-bold text-xl py-4 px-10 rounded-xl transition display-font tracking-wide">
+                {saving ? L.saving : L.createEstimate}
+              </button>
+              <a href="/facturacion" className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-lg py-4 px-8 rounded-xl transition flex items-center">{t('common.cancel')}</a>
+            </div>
+            <p className="text-slate-500 text-base -mt-6 pb-10">{L.estimateHint}</p>
           </>
         ) : (
           <>
@@ -702,6 +745,10 @@ function NuevaFacturaInner() {
 // ─── Textos (bilingüe local) ─────────────────────────────────────────────────
 const ES = {
   back: 'Volver a facturas', title: 'Nueva factura',
+  docInvoice: 'Factura', docEstimate: 'Cotización',
+  estimateHint: 'Cotización: no lleva número fiscal, no cobra ni baja inventario. Si el cliente acepta, se convierte en factura con un botón.',
+  createEstimate: 'Guardar cotización', editEstimateTitle: 'Editar cotización',
+  stockWarn: 'Solo hay {q} en bodega; el inventario quedará en negativo al emitir.',
   editTitle: 'Editar borrador', saveChanges: 'Guardar cambios',
   editHint: 'Estás editando un borrador. Al guardar sigue como borrador; emítela desde la lista cuando esté lista.',
   editNotFound: 'No se pudo cargar el borrador.', editOnlyDraft: 'Solo se puede editar un borrador (una factura emitida se anula, no se edita).',
@@ -740,6 +787,10 @@ const ES = {
 };
 const EN = {
   back: 'Back to invoices', title: 'New invoice',
+  docInvoice: 'Invoice', docEstimate: 'Estimate',
+  estimateHint: 'Estimate: no tax number, no charge, no inventory deduction. If the customer accepts, convert it into an invoice with one click.',
+  createEstimate: 'Save estimate', editEstimateTitle: 'Edit estimate',
+  stockWarn: 'Only {q} in stock; inventory will go negative when emitted.',
   editTitle: 'Edit draft', saveChanges: 'Save changes',
   editHint: 'You are editing a draft. Saving keeps it a draft; emit it from the list when ready.',
   editNotFound: 'Could not load the draft.', editOnlyDraft: 'Only a draft can be edited (an issued invoice is voided, not edited).',

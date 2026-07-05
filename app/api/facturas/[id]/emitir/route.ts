@@ -26,6 +26,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { data: invoice, error } = await supabase.from('invoices').select(INVOICE_COLS).eq('id', id).maybeSingle();
     if (error) return NextResponse.json({ error: sanitizeDbError('facturas/emitir.GET', error.message) }, { status: 500 });
     if (!invoice) return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
+    if (invoice.document_type !== 'invoice') return NextResponse.json({ error: 'Solo una FACTURA se puede emitir. Convierta la cotización en factura primero.' }, { status: 400 });
     if (invoice.status !== 'draft') return NextResponse.json({ error: 'Solo se puede emitir un borrador.' }, { status: 400 });
     if (invoice.commissions_generated) return NextResponse.json({ error: 'Esta factura ya fue emitida.' }, { status: 400 });
 

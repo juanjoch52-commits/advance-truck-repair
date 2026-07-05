@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireInvoicesAccess, INVOICE_COLS, PAYMENT_METHODS, computeAutoTax, round2, deriveBalanceStatus } from '@/lib/invoicesApi';
+import { requireInvoicesAccess, INVOICE_COLS, PAYMENT_METHODS, INSURANCE_STATUSES, computeAutoTax, round2, deriveBalanceStatus } from '@/lib/invoicesApi';
 import { sanitizeDbError } from '@/lib/clientsApi';
 import { authErrorResponse } from '@/lib/apiAuth';
 
@@ -13,9 +13,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     if (error) return NextResponse.json({ error: sanitizeDbError('facturas/[id].GET', error.message) }, { status: 500 });
     if (!invoice) return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
 
-    const [{ data: payments }, { data: items }, clientRes, shopRes, truckRes] = await Promise.all([
+    const [{ data: payments }, { data: items }, { data: credits }, clientRes, shopRes, truckRes] = await Promise.all([
       supabase.from('invoice_payments').select('id,amount,method,payment_type,receipt_number,reference,paid_at,notes,created_by_name,voided,voided_by_name,void_reason,created_at').eq('invoice_id', id).order('paid_at', { ascending: false }),
       supabase.from('invoice_items').select('id,line_type,description,qty,unit_price,amount,cost,part_source,taxable,mechanic_id,commission_pct,done,sort_order').eq('invoice_id', id).order('sort_order', { ascending: true }),
+      supabase.from('invoice_credits').select('id,credit_number,amount,reason,created_by_name,created_at').eq('invoice_id', id).order('created_at', { ascending: false }),
       invoice.client_id
         ? supabase.from('clients').select('id,name,billing_address_line,city,state,zip,phone,email').eq('id', invoice.client_id).maybeSingle()
         : Promise.resolve({ data: null }),
@@ -31,6 +32,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       invoice,
       payments: payments ?? [],
       items: items ?? [],
+      credits: credits ?? [],
       client: (clientRes as any).data ?? null,
       shop: (shopRes as any).data ?? null,
       truck: (truckRes as any).data ?? null,
@@ -55,6 +57,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (body.payment_method !== undefined && PAYMENT_METHODS.includes(body.payment_method)) payload.payment_method = body.payment_method;
     if (body.description !== undefined) payload.description = String(body.description).trim() || null;
     if (body.notes !== undefined) payload.notes = String(body.notes).trim() || null;
+    // Seguro: metadata editable incluso después de emitir (no toca montos).
+    if (body.insurance_company !== undefined) payload.insurance_company = String(body.insurance_company).trim() || null;
+    if (body.insurance_claim !== undefined) payload.insurance_claim = String(body.insurance_claim).trim() || null;
+    if (body.insurance_status !== undefined) {
+      payload.insurance_status = INSURANCE_STATUSES.includes(body.insurance_status) ? body.insurance_status : null;
+    }
     // Anular (void): solo cambio de estado, no toca montos.
     if (body.status === 'void') payload.status = 'void';
 

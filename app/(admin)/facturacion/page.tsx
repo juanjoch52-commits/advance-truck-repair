@@ -8,7 +8,6 @@ import { PaymentReceiptButton } from '@/components/PaymentReceiptButton';
 type PaymentMethod = 'cash' | 'check' | 'card' | 'deposit' | 'credit';
 type ReceiptMethod = 'cash' | 'check' | 'card' | 'deposit';
 type InvoiceStatus = 'draft' | 'open' | 'partial' | 'paid' | 'void';
-
 type DocumentType = 'invoice' | 'estimate' | 'work_order';
 
 interface Invoice {
@@ -20,6 +19,10 @@ interface Invoice {
   customer_name: string | null;
   truck_id: string | null;
   truck_label: string | null;
+  customer_truck: string | null;
+  insurance_company: string | null;
+  insurance_status: string | null;
+  converted_to_invoice_id: string | null;
   order_number: string | null;
   shop_id: string | null;
   issue_date: string;
@@ -35,43 +38,11 @@ interface Invoice {
   description: string | null;
 }
 
-interface ClientOpt { id: string; name: string; tax_exempt: boolean; tax_exempt_certificate: string | null }
-interface TruckOpt { id: string; unit_number: string | null; plate: string | null }
-interface WorkOrderOpt { id: string; external_order_number: string | null; company: string | null; truck_number: string | null; work_date: string | null; client_id: string | null; truck_id: string | null }
-interface ShopOpt { id: string; name: string; tax_rate: number }
-interface InvItem { id: string; name: string; part_number: string | null; sale_price: number; unit_cost: number; quantity_on_hand: number }
-
-type LineType = 'labor' | 'part' | 'fee';
-type PartSource = 'new_purchased' | 'used' | 'warehouse';
-interface Line {
-  id: string;
-  line_type: LineType;
-  description: string;
-  qty: string;
-  unit_price: string;
-  cost: string;
-  part_source: PartSource;
-  inventory_item_id: string;
-  taxable: boolean;
-  mechanic_id: string;     // solo mano de obra: mecánico que gana la comisión
-  commission_pct: string;  // % de comisión (default 50)
-}
-interface MechanicOpt { id: string; full_name: string }
-const PART_SOURCES: PartSource[] = ['new_purchased', 'used', 'warehouse'];
-let lineSeq = 0;
-const newLine = (type: LineType = 'part'): Line => ({
-  id: `l${++lineSeq}`, line_type: type, description: '', qty: '1', unit_price: '', cost: '',
-  part_source: type === 'part' ? 'new_purchased' : 'new_purchased', inventory_item_id: '', taxable: type === 'part',
-  mechanic_id: '', commission_pct: '50',
-});
-
 type PaymentKind = 'deposit' | 'advance' | 'settlement';
-const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'check', 'card', 'deposit', 'credit'];
 const RECEIPT_METHODS: ReceiptMethod[] = ['cash', 'check', 'card', 'deposit'];
 const PAYMENT_TYPES: PaymentKind[] = ['deposit', 'advance', 'settlement'];
 const STATUSES: InvoiceStatus[] = ['draft', 'open', 'partial', 'paid', 'void'];
-const DOCUMENT_TYPES: DocumentType[] = ['invoice', 'estimate', 'work_order'];
-const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
+const PAGE_SIZE = 50;
 
 const inputCls =
   'w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/50 transition';
@@ -86,170 +57,105 @@ const STATUS_STYLE: Record<InvoiceStatus, string> = {
 };
 
 export default function FacturacionPage() {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
+  const L = lang === 'en' ? EN : ES;
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [clients, setClients] = useState<ClientOpt[]>([]);
-  const [trucks, setTrucks] = useState<TruckOpt[]>([]);
-  const [trucksLoading, setTrucksLoading] = useState(false);
-  const [workOrders, setWorkOrders] = useState<WorkOrderOpt[]>([]);
-  const [orderSearch, setOrderSearch] = useState('');
-  const [shops, setShops] = useState<ShopOpt[]>([]);
-  const [mechanics, setMechanics] = useState<MechanicOpt[]>([]);
-  const [invItems, setInvItems] = useState<InvItem[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [docFilter, setDocFilter] = useState<string>(''); // '' = facturas, 'estimate' = cotizaciones
+  const [qInput, setQInput] = useState('');
+  const [q, setQ] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
-  // Crear
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({
-    client_id: '', truck_id: '', work_report_id: '', order_number: '', shop_id: '', document_type: 'invoice' as DocumentType,
-    issue_date: new Date().toISOString().slice(0, 10),
-    due_date: '', payment_method: 'cash' as PaymentMethod,
-    subtotal: '', tax_amount: '', tax_override: false, discount: '', description: '', mark_paid: true,
-  });
-  const [lines, setLines] = useState<Line[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState('');
+  function buildParams(offset: number, limit = PAGE_SIZE) {
+    const p = new URLSearchParams();
+    if (statusFilter) p.set('status', statusFilter);
+    if (docFilter) p.set('doctype', docFilter);
+    if (q) p.set('q', q);
+    if (from) p.set('from', from);
+    if (to) p.set('to', to);
+    p.set('limit', String(limit));
+    p.set('offset', String(offset));
+    return p;
+  }
 
-  // Pago
+  async function load(reset = true) {
+    if (reset) setLoading(true); else setLoadingMore(true);
+    const offset = reset ? 0 : invoices.length;
+    try {
+      const res = await fetch('/api/facturas?' + buildParams(offset).toString());
+      const j = await res.json();
+      const rows = (j.invoices ?? []) as Invoice[];
+      setTotal(Number(j.total) || rows.length);
+      setInvoices(prev => reset ? rows : [...prev, ...rows]);
+    } catch { if (reset) { setInvoices([]); setTotal(0); } }
+    setLoading(false); setLoadingMore(false);
+  }
+
+  useEffect(() => { load(true); /* eslint-disable-next-line */ }, [statusFilter, docFilter, q, from, to]);
+
+  const hasMore = invoices.length < total;
+
+  // ─── Exportar CSV (respeta los filtros; trae todo por páginas) ───
+  async function exportCsv() {
+    setExporting(true);
+    try {
+      const all: Invoice[] = [];
+      for (let off = 0; off < 4000; off += 200) {
+        const res = await fetch('/api/facturas?' + buildParams(off, 200).toString());
+        if (!res.ok) break;
+        const j = await res.json();
+        const rows = (j.invoices ?? []) as Invoice[];
+        all.push(...rows);
+        if (all.length >= (Number(j.total) || 0) || rows.length === 0) break;
+      }
+      const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      const header = [L.csv.number, L.csv.type, L.csv.status, L.csv.date, L.csv.due, L.csv.client, L.csv.truck, L.csv.order, L.csv.method, L.csv.subtotal, L.csv.tax, L.csv.discount, L.csv.total, L.csv.paid, L.csv.balance, L.csv.insurance, L.csv.insuranceStatus];
+      const lines = all.map(i => [
+        esc(i.document_number ?? ''), esc(t(`invoices.docType.${i.document_type ?? 'invoice'}`)), esc(t(`invoices.status.${i.status}`)),
+        esc(i.issue_date), esc(i.due_date ?? ''), esc(i.client_name ?? i.customer_name ?? ''),
+        esc(i.truck_label ?? i.customer_truck ?? ''), esc(i.order_number ?? ''), esc(t(`invoices.pm.${i.payment_method}`)),
+        i.subtotal, i.tax_amount, i.discount, i.total, i.amount_paid, i.balance,
+        esc(i.insurance_company ?? ''), esc(i.insurance_status ? (L.ins as any)[i.insurance_status] ?? i.insurance_status : ''),
+      ].join(','));
+      const csv = '﻿' + [header.map(esc).join(','), ...lines].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `facturas_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally { setExporting(false); }
+  }
+
+  // ─── Convertir cotización → factura borrador ───
+  const [convertingId, setConvertingId] = useState<string | null>(null);
+  async function convertEstimate(inv: Invoice) {
+    if (!confirm(L.convertConfirm)) return;
+    setConvertingId(inv.id);
+    const res = await fetch(`/api/facturas/${inv.id}/convertir`, { method: 'POST' });
+    const j = await res.json().catch(() => ({}));
+    setConvertingId(null);
+    if (!res.ok) { alert(j.error ?? 'Error'); return; }
+    // Ir directo a revisar/completar el borrador creado.
+    window.location.href = `/facturacion/nueva?id=${j.invoice.id}`;
+  }
+
+  // ─── Pago ───
   const [payFor, setPayFor] = useState<Invoice | null>(null);
   const [payForm, setPayForm] = useState({ amount: '', payment_type: 'deposit' as PaymentKind, method: 'cash' as ReceiptMethod, reference: '', paid_at: new Date().toISOString().slice(0, 10), notes: '' });
   const [paySaving, setPaySaving] = useState(false);
   const [payError, setPayError] = useState('');
-  // Comprobante recién generado (paso posterior al pago, para imprimir al cliente).
   const [paidReceipt, setPaidReceipt] = useState<{ invoiceId: string; payment: any } | null>(null);
 
-  // Comprobantes guardados por factura (reimpresión posterior).
   const [paymentsByInvoice, setPaymentsByInvoice] = useState<Record<string, any[]>>({});
   const [expandedPayments, setExpandedPayments] = useState<string | null>(null);
-
-  async function load() {
-    try {
-      const res = await fetch('/api/facturas' + (statusFilter ? `?status=${statusFilter}` : ''));
-      const j = await res.json();
-      setInvoices((j.invoices ?? []) as Invoice[]);
-    } catch { setInvoices([]); }
-    setLoading(false);
-  }
-
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [statusFilter]);
-  useEffect(() => {
-    (async () => {
-      try { const r = await fetch('/api/clientes'); const j = await r.json(); setClients((j.clients ?? []).map((c: any) => ({ id: c.id, name: c.name, tax_exempt: !!c.tax_exempt, tax_exempt_certificate: c.tax_exempt_certificate ?? null }))); } catch {}
-      try { const r = await fetch('/api/shops'); if (r.ok) { const j = await r.json(); setShops((j.shops ?? []).map((s: any) => ({ id: s.id, name: s.name, tax_rate: Number(s.tax_rate) || 0 }))); } } catch {}
-      try { const r = await fetch('/api/empleados'); if (r.ok) { const j = await r.json(); setMechanics((j.employees ?? []).filter((e: any) => (e.role ?? '').toLowerCase() === 'mechanic').map((e: any) => ({ id: e.id, full_name: e.full_name }))); } } catch {}
-      try { const r = await fetch('/api/inventario'); if (r.ok) { const j = await r.json(); setInvItems((j.items ?? []) as InvItem[]); } } catch {}
-      try { const r = await fetch('/api/facturas/ordenes'); if (r.ok) { const j = await r.json(); setWorkOrders((j.orders ?? []) as WorkOrderOpt[]); } } catch {}
-    })();
-  }, []);
-
-  // Al elegir cliente, cargar sus camiones (el camión de la factura es opcional y
-  // se filtra por cliente). Se resetea el camión seleccionado al cambiar de cliente.
-  async function onClientChange(clientId: string) {
-    setForm(f => ({ ...f, client_id: clientId, truck_id: '' }));
-    setTrucks([]);
-    if (!clientId) return;
-    setTrucksLoading(true);
-    try {
-      const r = await fetch(`/api/clientes/${clientId}`);
-      if (r.ok) { const j = await r.json(); setTrucks((j.trucks ?? []).map((tr: any) => ({ id: tr.id, unit_number: tr.unit_number, plate: tr.plate }))); }
-    } catch {}
-    setTrucksLoading(false);
-  }
-  const truckLabel = (tr: TruckOpt) => tr.unit_number || tr.plate || '—';
-
-  const orderLabel = (o: WorkOrderOpt) =>
-    [o.external_order_number ? `#${o.external_order_number}` : t('invoices.orderNoNumber'), o.company, o.truck_number, o.work_date].filter(Boolean).join(' · ');
-
-  // Al elegir una orden de trabajo: la factura hereda su número de orden y, si la
-  // orden trae cliente/camión, se autollenan (el usuario los puede cambiar).
-  async function onWorkOrderChange(orderId: string) {
-    const o = workOrders.find(w => w.id === orderId) || null;
-    setForm(f => ({ ...f, work_report_id: orderId, order_number: o?.external_order_number ?? '' }));
-    if (o?.client_id) {
-      await onClientChange(o.client_id);
-      if (o.truck_id) setForm(f => ({ ...f, truck_id: o.truck_id as string }));
-    }
-  }
-
-  // ─── Renglones (mano de obra / piezas) ───
-  const lineAmount = (l: Line) => (parseFloat(l.qty) || 0) * (parseFloat(l.unit_price) || 0);
-  function addLine(type: LineType) { setLines(prev => [...prev, newLine(type)]); }
-  function removeLine(id: string) { setLines(prev => prev.filter(l => l.id !== id)); }
-  function updateLine(id: string, patch: Partial<Line>) { setLines(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l)); }
-  function pickInventory(id: string, invId: string) {
-    const inv = invItems.find(i => i.id === invId);
-    if (!inv) { updateLine(id, { inventory_item_id: '', part_source: 'new_purchased' }); return; }
-    updateLine(id, {
-      inventory_item_id: invId, part_source: 'warehouse',
-      description: inv.name, cost: String(inv.unit_cost),
-      unit_price: String(inv.sale_price || ''), taxable: true,
-    });
-  }
-
-  const linesSubtotal = round2(lines.reduce((s, l) => s + lineAmount(l), 0));
-  const subtotalN = lines.length ? linesSubtotal : (parseFloat(form.subtotal) || 0);
-
-  // Sales tax automático: si hay taller (con tasa) y renglones, se calcula sobre
-  // la base gravable (Σ renglones taxable). El usuario puede pasar a manual.
-  const selectedShop = shops.find(s => s.id === form.shop_id) || null;
-  const selectedClient = clients.find(c => c.id === form.client_id) || null;
-  const clientExempt = !!selectedClient?.tax_exempt;
-  const taxableBase = round2(lines.filter(l => l.taxable).reduce((s, l) => s + lineAmount(l), 0));
-  const autoTax = !!selectedShop && lines.length > 0 && !form.tax_override && !clientExempt;
-  // Cliente exento → tax 0 (el servidor lo fuerza igual según el certificado del cliente).
-  const taxN = clientExempt ? 0 : (autoTax ? round2(taxableBase * selectedShop!.tax_rate / 100) : (parseFloat(form.tax_amount) || 0));
-
-  const discountN = parseFloat(form.discount) || 0;
-  const totalN = Math.max(0, subtotalN + taxN - discountN);
-  const isCredit = form.payment_method === 'credit';
-  const isFiscal = form.document_type === 'invoice';
-
-  async function handleCreate(e: React.FormEvent | null, asDraft = false) {
-    if (e) e.preventDefault();
-    setFormError('');
-    if (totalN <= 0) { setFormError(t('invoices.errTotal')); return; }
-    setSaving(true);
-    const res = await fetch('/api/facturas', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id: form.client_id || null,
-        truck_id: form.truck_id || null,
-        work_report_id: form.work_report_id || null,
-        shop_id: form.shop_id || null,
-        document_type: form.document_type,
-        draft: asDraft && isFiscal,
-        issue_date: form.issue_date,
-        due_date: form.due_date || null,
-        payment_method: form.payment_method,
-        subtotal: subtotalN, tax_amount: taxN, tax_override: form.tax_override, discount: discountN,
-        description: form.description,
-        mark_paid: !asDraft && isFiscal && !isCredit && form.mark_paid,
-        items: lines.map(l => ({
-          line_type: l.line_type,
-          description: l.description,
-          qty: parseFloat(l.qty) || 0,
-          unit_price: parseFloat(l.unit_price) || 0,
-          cost: l.line_type === 'part' ? (parseFloat(l.cost) || 0) : 0,
-          part_source: l.line_type === 'part' ? l.part_source : null,
-          inventory_item_id: l.line_type === 'part' && l.part_source === 'warehouse' ? (l.inventory_item_id || null) : null,
-          taxable: l.taxable,
-          mechanic_id: l.line_type === 'labor' ? (l.mechanic_id || null) : null,
-          commission_pct: l.line_type === 'labor' ? (parseFloat(l.commission_pct) || 0) : 0,
-        })),
-      }),
-    });
-    const j = await res.json();
-    if (!res.ok) { setFormError(j.error ?? 'Error'); setSaving(false); return; }
-    setSaving(false); setShowForm(false);
-    setForm({ client_id: '', truck_id: '', work_report_id: '', order_number: '', shop_id: '', document_type: 'invoice', issue_date: new Date().toISOString().slice(0, 10), due_date: '', payment_method: 'cash', subtotal: '', tax_amount: '', tax_override: false, discount: '', description: '', mark_paid: true });
-    setTrucks([]);
-    setOrderSearch('');
-    setLines([]);
-    load();
-  }
 
   function openPay(inv: Invoice) {
     setPayFor(inv);
@@ -269,10 +175,8 @@ export default function FacturacionPage() {
     const j = await res.json();
     if (!res.ok) { setPayError(j.error ?? 'Error'); setPaySaving(false); return; }
     setPaySaving(false);
-    // Paso de comprobante: dejar el modal abierto mostrando el recibo para imprimir.
     if (j.payment) setPaidReceipt({ invoiceId: payFor.id, payment: j.payment });
     else setPayFor(null);
-    // Refrescar el panel de comprobantes de esa factura si estaba abierto.
     setPaymentsByInvoice(prev => ({ ...prev, [payFor.id]: undefined as any }));
     load();
   }
@@ -293,7 +197,7 @@ export default function FacturacionPage() {
 
   async function voidPayment(invId: string, p: any) {
     const reason = prompt(t('invoices.payment.voidPrompt').replace('{n}', p.receipt_number || ''));
-    if (reason === null) return; // cancelado
+    if (reason === null) return;
     const res = await fetch(`/api/facturas/${invId}/pagos/${p.id}`, {
       method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }),
     });
@@ -366,244 +270,6 @@ export default function FacturacionPage() {
 
   return (
     <div>
-      {/* Modal crear */}
-      {showForm && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-amber-500/20 rounded-2xl p-6 w-full max-w-2xl my-8 shadow-2xl">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="display-font text-slate-100 font-bold text-lg tracking-wide">{t('invoices.newInvoice')}</h2>
-              <div className="flex items-center gap-1">
-                <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('atr:start-tour', { detail: { key: 'factura-form' } }))} title={t('tour.explainFields')} className="text-amber-400/80 hover:text-amber-300 p-1.5 rounded-lg hover:bg-slate-700 transition">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                </button>
-                <button onClick={() => setShowForm(false)} className="text-slate-500 hover:text-slate-300 p-1.5 rounded-lg hover:bg-slate-700 transition">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-              </div>
-            </div>
-            <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2" data-tour="facf-doctype">
-                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.documentType')}</label>
-                <div className="flex gap-2 flex-wrap">
-                  {DOCUMENT_TYPES.map(dt => (
-                    <button key={dt} type="button" onClick={() => setForm(f => ({ ...f, document_type: dt }))}
-                      className={`px-3 py-1.5 rounded-lg text-sm border transition ${form.document_type === dt ? 'bg-amber-500/15 border-amber-500/40 text-amber-300' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'}`}>
-                      {t(`invoices.docType.${dt}`)}
-                    </button>
-                  ))}
-                </div>
-                {!isFiscal && <p className="text-amber-400/80 text-xs mt-1.5">{t('invoices.nonFiscalHint')}</p>}
-              </div>
-              <div className="md:col-span-2" data-tour="facf-order">
-                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.workOrder')}</label>
-                {workOrders.length > 8 && (
-                  <input value={orderSearch} onChange={e => setOrderSearch(e.target.value)} placeholder={t('invoices.searchOrder')} className={inputCls + ' mb-2'} />
-                )}
-                <select value={form.work_report_id} onChange={e => onWorkOrderChange(e.target.value)} className={inputCls}>
-                  <option value="">{t('invoices.noWorkOrder')}</option>
-                  {workOrders
-                    .filter(o => {
-                      const q = orderSearch.trim().toLowerCase();
-                      if (!q) return true;
-                      return [o.external_order_number, o.company, o.truck_number].some(v => (v ?? '').toLowerCase().includes(q));
-                    })
-                    .map(o => <option key={o.id} value={o.id}>{orderLabel(o)}</option>)}
-                </select>
-                {form.order_number && <p className="text-sky-300/80 text-xs mt-1">{t('invoices.orderNumberLabel')}: {form.order_number}</p>}
-              </div>
-              <div data-tour="facf-client">
-                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.client')}</label>
-                <select value={form.client_id} onChange={e => onClientChange(e.target.value)} className={inputCls}>
-                  <option value="">{t('invoices.selectClient')}</option>
-                  {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.tax_exempt ? ' ★' : ''}</option>)}
-                </select>
-                {clientExempt && <p className="text-emerald-400/80 text-xs mt-1">{t('invoices.clientExemptHint')}{selectedClient?.tax_exempt_certificate ? ` (#${selectedClient.tax_exempt_certificate})` : ''}</p>}
-              </div>
-              <div>
-                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.truck')}</label>
-                <select value={form.truck_id} onChange={e => setForm(f => ({ ...f, truck_id: e.target.value }))} disabled={!form.client_id || trucksLoading} className={inputCls + ' disabled:opacity-50'}>
-                  <option value="">{!form.client_id ? t('invoices.truckClientFirst') : trucksLoading ? t('common.loading') : t('invoices.noTruck')}</option>
-                  {trucks.map(tr => <option key={tr.id} value={tr.id}>{truckLabel(tr)}</option>)}
-                </select>
-              </div>
-              {shops.length > 0 && (
-                <div className="md:col-span-2" data-tour="facf-shop">
-                  <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.shop')}</label>
-                  <select value={form.shop_id} onChange={e => setForm(f => ({ ...f, shop_id: e.target.value }))} className={inputCls}>
-                    <option value="">{t('invoices.noShop')}</option>
-                    {shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </div>
-              )}
-              <div>
-                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.issueDate')}</label>
-                <input type="date" value={form.issue_date} onChange={e => setForm(f => ({ ...f, issue_date: e.target.value }))} className={inputCls} />
-              </div>
-              <div>
-                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.dueDate')}</label>
-                <input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} className={inputCls} />
-              </div>
-              <div className="md:col-span-2" data-tour="facf-payment">
-                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.paymentMethod')}</label>
-                <select value={form.payment_method} onChange={e => setForm(f => ({ ...f, payment_method: e.target.value as PaymentMethod }))} className={inputCls}>
-                  {PAYMENT_METHODS.map(pm => <option key={pm} value={pm}>{t(`invoices.pm.${pm}`)}</option>)}
-                </select>
-                {isCredit && <p className="text-amber-400/80 text-xs mt-1">{t('invoices.creditHint')}</p>}
-              </div>
-              {/* Renglones (mano de obra / piezas) */}
-              <div className="md:col-span-2 bg-slate-800/40 border border-white/5 rounded-xl p-3" data-tour="facf-lines">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-slate-400 text-sm">{t('invoices.lines.title')}</label>
-                  <div className="flex gap-2">
-                    <button type="button" onClick={() => addLine('labor')} className="text-sky-400 hover:text-sky-300 text-xs border border-sky-500/20 rounded px-2 py-1 transition">+ {t('invoices.lines.labor')}</button>
-                    <button type="button" onClick={() => addLine('part')} className="text-amber-400 hover:text-amber-300 text-xs border border-amber-500/20 rounded px-2 py-1 transition">+ {t('invoices.lines.part')}</button>
-                  </div>
-                </div>
-                {lines.length === 0 ? (
-                  <p className="text-slate-600 text-xs">{t('invoices.lines.empty')}</p>
-                ) : (
-                  <div className="space-y-2">
-                    {lines.map(l => (
-                      <div key={l.id} className="bg-slate-900/50 border border-white/5 rounded-lg p-2.5 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs px-1.5 py-0.5 rounded ${l.line_type === 'part' ? 'bg-amber-500/15 text-amber-300' : 'bg-sky-500/15 text-sky-300'}`}>{t(`invoices.lineType.${l.line_type}`)}</span>
-                          {l.line_type === 'part' && (
-                            <select value={l.inventory_item_id} onChange={e => pickInventory(l.id, e.target.value)}
-                              className="flex-1 bg-slate-800 border border-white/10 rounded px-2 py-1 text-slate-100 text-xs">
-                              <option value="">{t('invoices.lines.oneoff')}</option>
-                              {invItems.map(i => <option key={i.id} value={i.id}>{i.name}{i.part_number ? ` (#${i.part_number})` : ''} · {i.quantity_on_hand} {t('invoices.lines.inStock')}</option>)}
-                            </select>
-                          )}
-                          <button type="button" onClick={() => removeLine(l.id)} className="text-slate-600 hover:text-red-400 p-1 flex-shrink-0">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                          </button>
-                        </div>
-                        <input value={l.description} onChange={e => updateLine(l.id, { description: e.target.value })} placeholder={t('invoices.lines.description')}
-                          className="w-full bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-slate-100 text-sm" />
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                          <div>
-                            <label className="block text-slate-600 text-[10px] mb-0.5">{t('invoices.lines.qty')}</label>
-                            <input type="number" min="0" step="0.01" value={l.qty} onChange={e => updateLine(l.id, { qty: e.target.value })} className="w-full bg-slate-800 border border-white/10 rounded px-2 py-1 text-slate-100 text-sm" />
-                          </div>
-                          <div>
-                            <label className="block text-slate-600 text-[10px] mb-0.5">{t('invoices.lines.unitPrice')}</label>
-                            <input type="number" min="0" step="0.01" value={l.unit_price} onChange={e => updateLine(l.id, { unit_price: e.target.value })} className="w-full bg-slate-800 border border-white/10 rounded px-2 py-1 text-slate-100 text-sm" />
-                          </div>
-                          {l.line_type === 'part' && (
-                            <div>
-                              <label className="block text-slate-600 text-[10px] mb-0.5">{t('invoices.lines.cost')}</label>
-                              <input type="number" min="0" step="0.01" value={l.cost} disabled={l.part_source === 'warehouse'} onChange={e => updateLine(l.id, { cost: e.target.value })} className="w-full bg-slate-800 border border-white/10 rounded px-2 py-1 text-slate-100 text-sm disabled:opacity-50" />
-                            </div>
-                          )}
-                          <div className="flex items-end justify-end">
-                            <span className="text-emerald-300 text-sm font-semibold">{money(lineAmount(l))}</span>
-                          </div>
-                        </div>
-                        {l.line_type === 'part' && l.part_source !== 'warehouse' && (
-                          <div className="flex items-center gap-3">
-                            <select value={l.part_source} onChange={e => updateLine(l.id, { part_source: e.target.value as PartSource })} className="bg-slate-800 border border-white/10 rounded px-2 py-1 text-slate-100 text-xs">
-                              <option value="new_purchased">{t('invoices.source.new_purchased')}</option>
-                              <option value="used">{t('invoices.source.used')}</option>
-                            </select>
-                            <label className="flex items-center gap-1.5 text-xs text-slate-400">
-                              <input type="checkbox" checked={l.taxable} onChange={e => updateLine(l.id, { taxable: e.target.checked })} className="accent-amber-500" />
-                              {t('invoices.lines.taxable')}
-                            </label>
-                          </div>
-                        )}
-                        {l.line_type === 'labor' && isFiscal && (
-                          <div className="flex items-center gap-2 flex-wrap border-t border-white/5 pt-2">
-                            <span className="text-slate-500 text-[10px]">{t('invoices.lines.mechanic')}:</span>
-                            <select value={l.mechanic_id} onChange={e => updateLine(l.id, { mechanic_id: e.target.value })} className="bg-slate-800 border border-white/10 rounded px-2 py-1 text-slate-100 text-xs">
-                              <option value="">{t('invoices.lines.noMechanic')}</option>
-                              {mechanics.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
-                            </select>
-                            {l.mechanic_id && (
-                              <span className="flex items-center gap-1 text-xs text-slate-400">
-                                <input type="number" min="0" max="100" step="1" value={l.commission_pct} onChange={e => updateLine(l.id, { commission_pct: e.target.value })} className="w-12 bg-slate-800 border border-white/10 rounded px-1.5 py-1 text-slate-100 text-xs" />%
-                                <span className="text-emerald-400/70">= {money(lineAmount(l) * (parseFloat(l.commission_pct) || 0) / 100)}</span>
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.subtotal')} ($)</label>
-                {lines.length ? (
-                  <div className={inputCls + ' bg-slate-800/60'}>{money(subtotalN)}</div>
-                ) : (
-                  <input type="number" min="0" step="0.01" value={form.subtotal} onChange={e => setForm(f => ({ ...f, subtotal: e.target.value }))} className={inputCls} />
-                )}
-              </div>
-              <div data-tour="facf-tax">
-                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.tax')} ($)</label>
-                {clientExempt ? (
-                  <div className={inputCls + ' bg-slate-800/60 flex items-center justify-between'}>
-                    <span>{money(0)}</span>
-                    <span className="text-emerald-400/80 text-xs">{t('invoices.taxExempt')}{selectedClient?.tax_exempt_certificate ? ` · #${selectedClient.tax_exempt_certificate}` : ''}</span>
-                  </div>
-                ) : autoTax ? (
-                  <>
-                    <div className={inputCls + ' bg-slate-800/60 flex items-center justify-between'}>
-                      <span>{money(taxN)}</span>
-                      <span className="text-emerald-400/80 text-xs">{t('invoices.taxAuto').replace('{rate}', String(selectedShop!.tax_rate))}</span>
-                    </div>
-                    <button type="button" onClick={() => setForm(f => ({ ...f, tax_override: true, tax_amount: String(taxN) }))} className="text-slate-500 hover:text-slate-300 text-xs mt-1 underline">
-                      {t('invoices.taxOverride')}
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <input type="number" min="0" step="0.01" value={form.tax_amount} onChange={e => setForm(f => ({ ...f, tax_amount: e.target.value }))} className={inputCls} />
-                    {selectedShop && lines.length > 0
-                      ? <button type="button" onClick={() => setForm(f => ({ ...f, tax_override: false }))} className="text-emerald-500 hover:text-emerald-400 text-xs mt-1 underline">{t('invoices.taxBackToAuto')}</button>
-                      : <p className="text-slate-600 text-xs mt-1">{t('invoices.taxHint')}</p>}
-                  </>
-                )}
-              </div>
-              <div>
-                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.discount')} ($)</label>
-                <input type="number" min="0" step="0.01" value={form.discount} onChange={e => setForm(f => ({ ...f, discount: e.target.value }))} className={inputCls} />
-              </div>
-              <div className="flex items-end">
-                <div className="w-full bg-slate-800/60 border border-white/10 rounded-lg px-4 py-2.5">
-                  <span className="text-slate-400 text-sm">{t('invoices.total')}: </span>
-                  <span className="text-amber-300 font-bold display-font">{money(totalN)}</span>
-                </div>
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-slate-400 text-sm mb-1.5">{t('invoices.description')}</label>
-                <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder={t('invoices.descriptionPlaceholder')} className={inputCls} />
-              </div>
-              {isFiscal && !isCredit && (
-                <label className="md:col-span-2 flex items-center gap-2 text-sm text-slate-300 cursor-pointer" data-tour="facf-markpaid">
-                  <input type="checkbox" checked={form.mark_paid} onChange={e => setForm(f => ({ ...f, mark_paid: e.target.checked }))} className="accent-amber-500 w-4 h-4" />
-                  {t('invoices.markPaid')}
-                </label>
-              )}
-              {formError && <div className="md:col-span-2 bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2.5 text-red-400 text-sm">{formError}</div>}
-              <div className="md:col-span-2 flex gap-3 flex-wrap" data-tour="facf-submit">
-                <button type="submit" disabled={saving} className="bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-slate-950 font-bold py-2.5 px-6 rounded-lg transition display-font tracking-wide">
-                  {saving ? t('common.saving') : t('invoices.create')}
-                </button>
-                {isFiscal && (
-                  <button type="button" disabled={saving} onClick={() => handleCreate(null, true)} className="bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-amber-300 border border-amber-500/30 py-2.5 px-5 rounded-lg transition text-sm font-semibold">
-                    {t('invoices.saveDraft')}
-                  </button>
-                )}
-                <button type="button" onClick={() => setShowForm(false)} className="bg-slate-700 hover:bg-slate-600 text-slate-300 py-2.5 px-5 rounded-lg transition text-sm">{t('common.cancel')}</button>
-              </div>
-              {isFiscal && <p className="md:col-span-2 text-slate-600 text-xs -mt-1">{t('invoices.draftHint')}</p>}
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Modal pago */}
       {payFor && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto">
@@ -617,7 +283,6 @@ export default function FacturacionPage() {
             <p className="text-slate-400 text-sm mb-4">{payFor.document_number} · {t('invoices.balance')}: <span className="text-amber-300 font-semibold">{money(payFor.balance)}</span></p>
 
             {paidReceipt ? (
-              /* Paso de comprobante: imprimir/descargar el recibo para el cliente. */
               <div className="space-y-4">
                 <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 text-center">
                   <p className="text-emerald-300 display-font text-2xl font-bold">{money(paidReceipt.payment.amount)}</p>
@@ -679,19 +344,53 @@ export default function FacturacionPage() {
       <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <div>
           <h1 className="display-font text-3xl font-bold text-slate-100 tracking-wide">{t('invoices.title')}</h1>
-          <p className="text-slate-400 mt-1">{invoices.length} {t('invoices.registered')}</p>
+          <p className="text-slate-400 mt-1">{total} {t('invoices.registered')}</p>
         </div>
-        <a data-tour="fac-add" href="/facturacion/nueva" className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 px-5 rounded-lg transition display-font tracking-wide flex items-center gap-2">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-          {t('invoices.addInvoice')}
-        </a>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={exportCsv} disabled={exporting || total === 0}
+            className="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 border border-white/10 text-slate-200 text-sm px-4 py-2.5 rounded-lg transition flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+            {exporting ? L.exporting : L.exportCsv}
+          </button>
+          <a data-tour="fac-add" href="/facturacion/nueva" className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 px-5 rounded-lg transition display-font tracking-wide flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+            {t('invoices.addInvoice')}
+          </a>
+        </div>
       </div>
 
+      {/* Búsqueda + fechas */}
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <form className="flex-1 min-w-64 flex gap-2" onSubmit={e => { e.preventDefault(); setQ(qInput.trim()); }}>
+          <input value={qInput} onChange={e => setQInput(e.target.value)} placeholder={L.searchPlaceholder} className={inputCls} />
+          <button type="submit" className="bg-slate-800 hover:bg-slate-700 border border-white/10 text-slate-300 px-4 rounded-lg transition flex-shrink-0">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+          </button>
+          {q && (
+            <button type="button" onClick={() => { setQInput(''); setQ(''); }} className="text-slate-500 hover:text-slate-300 text-sm px-2 flex-shrink-0">✕</button>
+          )}
+        </form>
+        <div className="flex items-center gap-2">
+          <input type="date" value={from} onChange={e => setFrom(e.target.value)} className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-slate-100 text-sm focus:outline-none focus:border-amber-400/50" />
+          <span className="text-slate-600 text-xs">—</span>
+          <input type="date" value={to} onChange={e => setTo(e.target.value)} className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-slate-100 text-sm focus:outline-none focus:border-amber-400/50" />
+          {(from || to) && (
+            <button type="button" onClick={() => { setFrom(''); setTo(''); }} className="text-slate-500 hover:text-slate-300 text-sm px-1">✕</button>
+          )}
+        </div>
+      </div>
+
+      {/* Filtros de estado + tipo */}
       <div data-tour="fac-filters" className="flex gap-2 mb-5 flex-wrap">
         <button onClick={() => setStatusFilter('')} className={`px-3 py-1.5 rounded-lg text-sm border transition ${statusFilter === '' ? 'bg-amber-500/15 border-amber-500/40 text-amber-300' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'}`}>{t('invoices.filterAll')}</button>
         {STATUSES.map(s => (
           <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-sm border transition ${statusFilter === s ? 'bg-amber-500/15 border-amber-500/40 text-amber-300' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'}`}>{t(`invoices.status.${s}`)}</button>
         ))}
+        <span className="w-px bg-white/10 mx-1" />
+        <button onClick={() => setDocFilter(docFilter === 'estimate' ? '' : 'estimate')}
+          className={`px-3 py-1.5 rounded-lg text-sm border transition ${docFilter === 'estimate' ? 'bg-purple-500/15 border-purple-500/40 text-purple-300' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'}`}>
+          {L.estimatesFilter}
+        </button>
       </div>
 
       {loading ? (
@@ -701,40 +400,58 @@ export default function FacturacionPage() {
       ) : (
         <div className="space-y-3">
           {invoices.map(inv => {
+            const isEstimate = inv.document_type === 'estimate';
             const isPending = inv.status === 'draft' && (inv.document_type ?? 'invoice') === 'invoice';
+            const isEditableDraft = inv.status === 'draft' && (inv.document_type === 'invoice' || isEstimate);
             const tasks = draftItems[inv.id] ?? [];
             const laborTasks = tasks.filter((it: any) => it.line_type === 'labor');
             const pendingTasks = laborTasks.filter((it: any) => !it.done).length;
             return (
             <div key={inv.id} className={`bg-slate-900/60 border rounded-xl ${inv.status === 'void' ? 'opacity-60' : ''} ${isPending ? 'border-amber-500/25' : 'border-white/5'}`}>
               <div className="px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex-1 min-w-0">
+              <a href={`/facturacion/${inv.id}`} className="flex-1 min-w-0 group cursor-pointer">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="display-font font-semibold tracking-wide text-slate-200">{inv.document_number || t('invoices.draftLabel')}</span>
+                  <span className="display-font font-semibold tracking-wide text-slate-200 group-hover:text-amber-300 transition">{inv.document_number || t('invoices.draftLabel')}</span>
                   {inv.document_type && inv.document_type !== 'invoice' && (
                     <span className="text-xs px-2 py-0.5 rounded-full border bg-purple-500/10 border-purple-500/30 text-purple-300">{t(`invoices.docType.${inv.document_type}`)}</span>
                   )}
                   <span className={`text-xs px-2 py-0.5 rounded-full border ${STATUS_STYLE[inv.status]}`}>{isPending ? t('invoices.pendingLabel') : t(`invoices.status.${inv.status}`)}</span>
                   <span className="text-xs px-2 py-0.5 rounded-full border bg-slate-700/40 border-white/10 text-slate-400">{t(`invoices.pm.${inv.payment_method}`)}</span>
+                  {inv.insurance_company && (
+                    <span className="text-xs px-2 py-0.5 rounded-full border bg-sky-500/10 border-sky-500/30 text-sky-300">
+                      🛡 {inv.insurance_company}{inv.insurance_status ? ` · ${(L.ins as any)[inv.insurance_status] ?? inv.insurance_status}` : ''}
+                    </span>
+                  )}
+                  {isEstimate && inv.converted_to_invoice_id && (
+                    <span className="text-xs px-2 py-0.5 rounded-full border bg-emerald-500/10 border-emerald-500/30 text-emerald-300">{L.converted}</span>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 mt-1.5 flex-wrap text-xs text-slate-500">
                   <span className="text-slate-400">{inv.client_name ?? inv.customer_name ?? t('invoices.noClient')}</span>
-                  {inv.truck_label && <span className="text-sky-300/80">🚛 {inv.truck_label}</span>}
+                  {(inv.truck_label || inv.customer_truck) && <span className="text-sky-300/80">🚛 {inv.truck_label ?? inv.customer_truck}</span>}
                   {inv.order_number && <span className="text-purple-300/80">{t('invoices.orderNumberLabel')} {inv.order_number}</span>}
                   <span>{t('invoices.issueDate')}: {inv.issue_date}</span>
                   {inv.due_date && <span>{t('invoices.dueDate')}: {inv.due_date}</span>}
                 </div>
-              </div>
+              </a>
               <div className="text-right flex-shrink-0">
                 <p className="text-slate-200 font-semibold display-font">{money(inv.total)}</p>
                 {inv.balance > 0.001 && inv.status !== 'void' && inv.status !== 'draft' && <p className="text-amber-400 text-xs">{t('invoices.balance')}: {money(inv.balance)}</p>}
               </div>
               <div data-tour="fac-actions" className="flex items-center gap-1 flex-shrink-0">
+                {isEstimate && !inv.converted_to_invoice_id && inv.status !== 'void' && (
+                  <button onClick={() => convertEstimate(inv)} disabled={convertingId === inv.id}
+                    className="text-xs font-bold px-3 py-1.5 rounded bg-purple-500 hover:bg-purple-400 disabled:opacity-50 text-slate-950 transition display-font">
+                    {convertingId === inv.id ? t('common.saving') : L.convert}
+                  </button>
+                )}
+                {isEditableDraft && (
+                  <a href={`/facturacion/nueva?id=${inv.id}`} className="text-xs px-2.5 py-1.5 rounded border border-sky-500/30 text-sky-300 hover:bg-sky-500/10 transition">
+                    {t('common.edit')}
+                  </a>
+                )}
                 {isPending && (
                   <>
-                    <a href={`/facturacion/nueva?id=${inv.id}`} className="text-xs px-2.5 py-1.5 rounded border border-sky-500/30 text-sky-300 hover:bg-sky-500/10 transition">
-                      {t('common.edit')}
-                    </a>
                     <button onClick={() => toggleDraft(inv.id)} className="text-xs px-2.5 py-1.5 rounded border border-white/10 text-slate-300 hover:bg-slate-700 transition">
                       {expandedDraft === inv.id ? t('invoices.hideTasks') : t('invoices.viewTasks')}
                     </button>
@@ -826,8 +543,40 @@ export default function FacturacionPage() {
             </div>
             );
           })}
+
+          {/* Paginación */}
+          {hasMore && (
+            <div className="text-center pt-2 pb-6">
+              <button onClick={() => load(false)} disabled={loadingMore}
+                className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 border border-white/10 text-slate-300 text-sm px-6 py-2.5 rounded-lg transition">
+                {loadingMore ? t('common.loading') : `${L.loadMore} (${invoices.length}/${total})`}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
+
+// ─── Textos locales (bilingüe) para lo nuevo de la lista ────────────────────
+const ES = {
+  searchPlaceholder: 'Buscar por número, cliente, camión, orden o aseguradora…',
+  exportCsv: 'Exportar CSV', exporting: 'Exportando…',
+  loadMore: 'Cargar más',
+  estimatesFilter: 'Cotizaciones',
+  convert: 'CONVERTIR EN FACTURA', converted: 'Convertida',
+  convertConfirm: '¿Convertir esta cotización en una factura borrador? La cotización queda marcada como convertida.',
+  ins: { sent: 'Enviado', approved: 'Aprobado', partial: 'Pago parcial', paid: 'Pagado', denied: 'Negado' } as Record<string, string>,
+  csv: { number: 'Número', type: 'Tipo', status: 'Estado', date: 'Fecha', due: 'Vence', client: 'Cliente', truck: 'Camión', order: 'Orden', method: 'Método', subtotal: 'Subtotal', tax: 'Impuesto', discount: 'Descuento', total: 'Total', paid: 'Pagado', balance: 'Saldo', insurance: 'Aseguradora', insuranceStatus: 'Estado seguro' },
+};
+const EN = {
+  searchPlaceholder: 'Search by number, customer, truck, order or insurer…',
+  exportCsv: 'Export CSV', exporting: 'Exporting…',
+  loadMore: 'Load more',
+  estimatesFilter: 'Estimates',
+  convert: 'CONVERT TO INVOICE', converted: 'Converted',
+  convertConfirm: 'Convert this estimate into a draft invoice? The estimate will be marked as converted.',
+  ins: { sent: 'Sent', approved: 'Approved', partial: 'Partially paid', paid: 'Paid', denied: 'Denied' } as Record<string, string>,
+  csv: { number: 'Number', type: 'Type', status: 'Status', date: 'Date', due: 'Due', client: 'Customer', truck: 'Truck', order: 'Order', method: 'Method', subtotal: 'Subtotal', tax: 'Tax', discount: 'Discount', total: 'Total', paid: 'Paid', balance: 'Balance', insurance: 'Insurer', insuranceStatus: 'Insurance status' },
+};
