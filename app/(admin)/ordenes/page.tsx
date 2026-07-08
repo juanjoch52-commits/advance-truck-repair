@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { fmtDate } from '@/lib/fmt';
 import ReportDetailModal from '@/components/reports/ReportDetailModal';
@@ -24,7 +23,6 @@ interface WorkReport {
 
 export default function OrdenesPage() {
   const { t } = useLanguage();
-  const supabase = createClient();
 
   const now = new Date();
   const [dateFrom, setDateFrom] = useState(
@@ -50,9 +48,7 @@ export default function OrdenesPage() {
     '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   useEffect(() => {
-    // Detect role from BOTH auth flows:
-    //  1) PIN-based session cookie (/api/auth/me)
-    //  2) Supabase Auth + profiles.role (email/password login)
+    // Rol de la sesión (cookie de PIN validada en el servidor).
     (async () => {
       try {
         const res = await fetch('/api/auth/me');
@@ -60,32 +56,22 @@ export default function OrdenesPage() {
           const j = await res.json();
           if (j?.authenticated && j.user?.role) {
             setCurrentUserRole(j.user.role);
-            return;
           }
-        }
-      } catch {}
-
-      // Fallback to Supabase Auth
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data } = await (supabase as any)
-            .from('profiles').select('role').eq('id', user.id).single();
-          if ((data as any)?.role) setCurrentUserRole((data as any).role);
         }
       } catch {}
     })();
 
-    // Fetch mechanics only (for the mechanic filter dropdown)
-    (supabase as any).from('employees')
-      .select('id, full_name, role, payment_type')
-      .order('full_name')
-      .then(({ data }: any) => {
-        const mechanics = (data ?? []).filter((e: any) =>
+    // Solo mecánicos para el filtro (mismo criterio que antes:
+    // role='mechanic' O payment_type='mechanic_commission').
+    fetch('/api/empleados')
+      .then(r => r.ok ? r.json() : { employees: [] })
+      .then(j => {
+        const mechanics = ((j.employees ?? []) as any[]).filter((e: any) =>
           e.role === 'mechanic' || e.payment_type === 'mechanic_commission'
         );
         setEmployees(mechanics.map((e: any) => ({ id: e.id, full_name: e.full_name })));
-      });
+      })
+      .catch(() => setEmployees([]));
   }, []);
 
   useEffect(() => { loadReports(); }, [dateFrom, dateTo, selectedMechanic, globalView]);
@@ -93,47 +79,37 @@ export default function OrdenesPage() {
   async function loadReports() {
     setLoading(true);
 
-    let query = (supabase as any)
-      .from('work_reports')
-      .select('id, external_order_number, truck_number, company, work_date, created_by_name, created_by_role')
-      .order('work_date', { ascending: false });
-
+    // Todo el listado sale de la API server-side; en vista global no se
+    // envía rango de fechas (la API devuelve todo).
+    const params = new URLSearchParams();
     if (!globalView) {
-      query = query.gte('work_date', dateFrom).lte('work_date', dateTo);
+      params.set('start', dateFrom);
+      params.set('end', dateTo);
     }
+    if (selectedMechanic) params.set('mechanic_id', selectedMechanic);
 
-    const { data: rawReports } = await query;
-    if (!rawReports || rawReports.length === 0) {
+    let rawReports: any[] = [];
+    let tasks: any[] = [];
+    let assignments: any[] = [];
+    try {
+      const res = await fetch(`/api/ordenes?${params.toString()}`);
+      if (res.ok) {
+        const j = await res.json();
+        rawReports = j.reports ?? [];
+        tasks = j.tasks ?? [];
+        assignments = j.assignments ?? [];
+      }
+    } catch {}
+
+    if (rawReports.length === 0) {
       setReports([]);
       setLoading(false);
       return;
     }
 
-    const rids: string[] = rawReports.map((r: any) => r.id);
-
-    const { data: tasks } = await (supabase as any)
-      .from('report_tasks')
-      .select('id, report_id, amount_charged_to_client')
-      .in('report_id', rids);
-
-    const taskIds: string[] = (tasks ?? []).map((t: any) => t.id);
-
-    let assignQuery = (supabase as any)
-      .from('task_assignments')
-      .select('task_id, employee_id, mechanic_payout')
-      .in('task_id', taskIds.length > 0 ? taskIds : ['00000000-0000-0000-0000-000000000000']);
-
-    if (selectedMechanic) {
-      assignQuery = assignQuery.eq('employee_id', selectedMechanic);
-    }
-
-    const { data: assignments } = await assignQuery;
-
     const taskToReport: Record<string, string> = {};
-    const taskCharged: Record<string, number> = {};
     for (const t of tasks ?? []) {
       taskToReport[t.id] = t.report_id;
-      taskCharged[t.id] = Number(t.amount_charged_to_client);
     }
 
     const tasksByReport: Record<string, Set<string>> = {};
@@ -178,24 +154,13 @@ export default function OrdenesPage() {
     setDeleting(true);
     const rid = deleteTarget.id;
     try {
-      // 1. Get task IDs
-      const { data: tasks } = await (supabase as any)
-        .from('report_tasks').select('id').eq('report_id', rid);
-      const taskIds = (tasks ?? []).map((t: any) => t.id);
-
-      // 2. Delete earned_entries for this report
-      await (supabase as any).from('earned_entries').delete().eq('work_report_id', rid);
-
-      // 3. Delete task_assignments for these tasks
-      if (taskIds.length > 0) {
-        await (supabase as any).from('task_assignments').delete().in('task_id', taskIds);
+      // El borrado en cascada (earned_entries → asignaciones → tareas →
+      // reporte) ahora vive en el servidor.
+      const res = await fetch(`/api/ordenes/${rid}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j?.error ?? 'Error al eliminar');
       }
-
-      // 4. Delete report_tasks
-      await (supabase as any).from('report_tasks').delete().eq('report_id', rid);
-
-      // 5. Delete work_report
-      await (supabase as any).from('work_reports').delete().eq('id', rid);
 
       setReports(prev => prev.filter(r => r.id !== rid));
       setDeleteTarget(null);

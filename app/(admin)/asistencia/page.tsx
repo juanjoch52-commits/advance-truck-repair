@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { createClient } from '@/lib/supabase';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { fmtDate } from '@/lib/fmt';
 import { weekDates, normalizeWorkDays, dailyRate, computeWeekPay, WEEKDAY_KEYS } from '@/lib/attendance';
@@ -33,7 +32,6 @@ function getWeekRange(offsetWeeks = 0) {
 
 export default function AsistenciaPage() {
   const { t, lang } = useLanguage();
-  const supabase = createClient();
   const locale = lang === 'en' ? 'en-US' : 'es-MX';
   const fmtMoney = (n: number) => '$' + (Number(n) || 0).toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -49,47 +47,31 @@ export default function AsistenciaPage() {
   const [privileged, setPrivileged] = useState<boolean | null>(null);
   const [busyCell, setBusyCell] = useState<string | null>(null);
   const [editDaysFor, setEditDaysFor] = useState<string | null>(null);
-  // Nombre de quien está registrando, para la auditoría (quién marcó/modificó la falta).
-  const [meName, setMeName] = useState<string>('');
 
   const days = weekDates(weekStart); // 7 fechas Dom..Sáb de la semana
 
-  useEffect(() => {
-    (async () => {
-      let role = '';
-      try {
-        const res = await fetch('/api/auth/me');
-        if (res.ok) { const j = await res.json(); role = (j?.user?.role ?? '').toLowerCase(); setMeName(j?.user?.full_name ?? ''); }
-      } catch {}
-      const priv = role === 'super_user' || role === 'super_admin' || role === 'owner';
-      setPrivileged(priv);
-      // La administración registra asistencia; el salario solo lo ven los privilegiados.
-      setAllowed(priv || role === 'admin');
-    })();
-  }, []);
-
   const load = useCallback(async () => {
-    if (privileged === null) return; // esperar a saber el rol (para no pedir el salario si es admin)
     setLoading(true);
-    // A la administración NO se le envía weekly_salary (no solo se oculta en UI).
-    const cols = privileged
-      ? 'id, full_name, weekly_salary, work_days'
-      : 'id, full_name, work_days';
-    const { data: empData } = await (supabase as any)
-      .from('employees')
-      .select(cols)
-      .eq('payment_type', 'fixed_weekly')
-      .order('full_name');
-    setEmployees((empData ?? []) as SalariedEmployee[]);
-
-    const { data: attData } = await (supabase as any)
-      .from('attendance')
-      .select('id, employee_id, work_date, status, absence_reason')
-      .gte('work_date', weekStart)
-      .lte('work_date', weekEnd);
-    setAttendance((attData ?? []) as AttendanceRow[]);
+    // El servidor valida el rol y decide si se incluye weekly_salary
+    // (owner/super) o no (admin). Un 403 = sin acceso a la página.
+    try {
+      const res = await fetch(`/api/asistencia?start=${weekStart}&end=${weekEnd}`);
+      if (res.status === 401 || res.status === 403) {
+        setAllowed(false);
+        setLoading(false);
+        return;
+      }
+      const j = await res.json();
+      setAllowed(true);
+      setPrivileged(Boolean(j?.privileged));
+      setEmployees((j?.employees ?? []) as SalariedEmployee[]);
+      setAttendance((j?.absences ?? []) as AttendanceRow[]);
+    } catch {
+      setEmployees([]);
+      setAttendance([]);
+    }
     setLoading(false);
-  }, [weekStart, weekEnd, privileged]);
+  }, [weekStart, weekEnd]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -116,19 +98,28 @@ export default function AsistenciaPage() {
     setBusyCell(key);
     const existing = absenceAt(emp.id, iso);
     if (existing) {
-      await (supabase as any).from('attendance').delete().eq('id', existing.id);
+      await fetch('/api/asistencia', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [existing.id] }),
+      }).catch(() => undefined);
     } else {
-      await (supabase as any).from('attendance').upsert(
-        { employee_id: emp.id, work_date: iso, status: 'absent', absence_reason: '', created_by_name: meName, updated_by_name: meName },
-        { onConflict: 'employee_id,work_date' }
-      );
+      await fetch('/api/asistencia', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employee_id: emp.id, work_date: iso }),
+      }).catch(() => undefined);
     }
     setBusyCell(null);
     await load();
   }
 
   async function saveReason(rowId: string, reason: string) {
-    await (supabase as any).from('attendance').update({ absence_reason: reason, updated_by_name: meName }).eq('id', rowId);
+    await fetch('/api/asistencia', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: rowId, absence_reason: reason }),
+    }).catch(() => undefined);
     setAttendance(prev => prev.map(a => a.id === rowId ? { ...a, absence_reason: reason } : a));
   }
 
@@ -136,12 +127,20 @@ export default function AsistenciaPage() {
   async function markAllPresent(emp: SalariedEmployee) {
     const ids = absencesForEmp(emp.id).map(a => a.id);
     if (ids.length === 0) return;
-    await (supabase as any).from('attendance').delete().in('id', ids);
+    await fetch('/api/asistencia', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    }).catch(() => undefined);
     await load();
   }
 
   async function saveWorkDays(emp: SalariedEmployee, workDays: number[]) {
-    await (supabase as any).from('employees').update({ work_days: workDays }).eq('id', emp.id);
+    await fetch('/api/asistencia/dias', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employee_id: emp.id, work_days: workDays }),
+    }).catch(() => undefined);
     setEmployees(prev => prev.map(e => e.id === emp.id ? { ...e, work_days: workDays } : e));
   }
 

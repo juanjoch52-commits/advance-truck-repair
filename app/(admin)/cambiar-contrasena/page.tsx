@@ -36,11 +36,11 @@ export default function CambiarContrasenaPage() {
       return;
     }
 
-    // 2. Limpiar la bandera must_change_password en el perfil
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await (supabase as any).from('profiles').update({ must_change_password: false }).eq('id', user.id);
-    }
+    // 2. Limpiar la bandera must_change_password en el perfil vía API del
+    //    servidor (el navegador ya no escribe tablas directo; RLS cerrado).
+    //    Debe completarse ANTES de re-emitir la cookie: /api/auth/session lee
+    //    esta bandera para fijar requires_pin_update.
+    await fetch('/api/auth/password-changed', { method: 'POST' }).catch(() => undefined);
 
     // 3. Re-emitir la cookie de sesión firmada para que requires_pin_update
     //    quede en falso (evita el loop de redirección al cambio de contraseña).

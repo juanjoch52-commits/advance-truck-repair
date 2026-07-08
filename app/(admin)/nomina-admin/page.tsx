@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { createClient } from '@/lib/supabase';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { fmtDate } from '@/lib/fmt';
 import { normalizeWorkDays, computeWeekPay } from '@/lib/attendance';
@@ -59,7 +58,6 @@ function getWeekRange(offsetWeeks = 0) {
 
 export default function NominaAdminPage() {
   const { t, lang } = useLanguage();
-  const supabase = createClient();
   const locale = lang === 'en' ? 'en-US' : 'es-MX';
 
   const initialWeek = getWeekRange(0);
@@ -74,27 +72,6 @@ export default function NominaAdminPage() {
   const [loading, setLoading] = useState(true);
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [generatingAll, setGeneratingAll] = useState(false);
-
-  // Check role
-  useEffect(() => {
-    (async () => {
-      let role = '';
-      try {
-        const res = await fetch('/api/auth/me');
-        if (res.ok) { const j = await res.json(); role = (j?.user?.role ?? '').toLowerCase(); }
-      } catch {}
-      if (!role) {
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            const { data } = await (supabase as any).from('profiles').select('role').eq('id', user.id).single();
-            role = ((data as any)?.role ?? '').toLowerCase();
-          }
-        } catch {}
-      }
-      setAllowed(role === 'super_user' || role === 'super_admin' || role === 'owner');
-    })();
-  }, []);
 
   // Per-employee form state
   const [formByEmp, setFormByEmp] = useState<Record<string, {
@@ -113,27 +90,29 @@ export default function NominaAdminPage() {
   const load = useCallback(async () => {
     setLoading(true);
 
-    const { data: empData } = await (supabase as any)
-      .from('employees')
-      .select('id, full_name, payment_type, weekly_salary, hourly_rate, work_days')
-      .neq('payment_type', 'mechanic_commission')
-      .order('full_name');
-    const adminList = (empData ?? []) as AdminEmployee[];
-    setAdmins(adminList);
+    // Todo viene de la API server-side (service_role); sin queries del navegador.
+    let json: any = null;
+    try {
+      const res = await fetch(`/api/nomina?start=${weekStart}&end=${weekEnd}`);
+      if (res.status === 401 || res.status === 403) {
+        setAllowed(false);
+        setLoading(false);
+        return;
+      }
+      if (res.ok) json = await res.json();
+    } catch {}
+
+    if (!json) { setLoading(false); return; }
+    setAllowed(true);
+
+    setAdmins((json.employees ?? []) as AdminEmployee[]);
 
     // Faltas de la semana (status='absent') por empleado → prorratea el sueldo fijo.
-    // Trae también la auditoría (quién marcó/modificó y cuándo) para que el dueño
+    // Incluye la auditoría (quién marcó/modificó y cuándo) para que el dueño
     // sepa de dónde salen las faltas que descuentan el sueldo.
-    const { data: attData } = await (supabase as any)
-      .from('attendance')
-      .select('employee_id, work_date, absence_reason, created_by_name, updated_by_name, created_at, updated_at, status')
-      .eq('status', 'absent')
-      .gte('work_date', weekStart)
-      .lte('work_date', weekEnd)
-      .order('work_date');
     const absMap: Record<string, number> = {};
     const detMap: Record<string, AbsenceRow[]> = {};
-    for (const a of attData ?? []) {
+    for (const a of json.absences ?? []) {
       absMap[a.employee_id] = (absMap[a.employee_id] ?? 0) + 1;
       if (!detMap[a.employee_id]) detMap[a.employee_id] = [];
       detMap[a.employee_id].push(a as AbsenceRow);
@@ -141,24 +120,11 @@ export default function NominaAdminPage() {
     setAbsencesByEmp(absMap);
     setAbsenceDetailByEmp(detMap);
 
-    const { data: entryData } = await (supabase as any)
-      .from('earned_entries')
-      .select('id, employee_id, amount, hours_worked, description, work_date, week_start, week_end, entry_type')
-      .gte('work_date', weekStart)
-      .lte('work_date', weekEnd)
-      .in('entry_type', ['admin_fixed', 'admin_hourly', 'admin_manual']);
-
-    setEntries((entryData ?? []) as AdminEntry[]);
+    setEntries((json.entries ?? []) as AdminEntry[]);
 
     // Deducciones por deuda aplicadas esta semana
-    const { data: dpData } = await (supabase as any)
-      .from('debt_payments')
-      .select('debt_id, amount, debts!inner(employee_id, description)')
-      .gte('week_ending', weekStart)
-      .lte('week_ending', weekEnd);
-
     const dedMap: Record<string, DeductionItem[]> = {};
-    for (const dp of dpData ?? []) {
+    for (const dp of json.debtPayments ?? []) {
       const empId = (dp.debts as any)?.employee_id;
       const desc = (dp.debts as any)?.description ?? 'Deducción';
       if (!empId) continue;
@@ -222,12 +188,17 @@ export default function NominaAdminPage() {
         week_end: weekEnd,
         description: absent > 0 ? `${present}/${workDays} ${t('attendance.daysWorkedShort')}` : null,
         entry_type: 'admin_fixed',
-        mechanic_role: 'admin',
       };
     });
 
-    const { error } = await (supabase as any).from('earned_entries').insert(rows);
-    if (error) alert(error.message);
+    try {
+      const res = await fetch('/api/nomina', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entries: rows }),
+      });
+      if (!res.ok) { const j = await res.json().catch(() => ({})); alert(j.error ?? t('common.error')); }
+    } catch { alert(t('common.connectionError')); }
     setGeneratingAll(false);
     load();
   }
@@ -249,26 +220,33 @@ export default function NominaAdminPage() {
     if (amount <= 0) return;
     setForm(emp.id, { saving: true });
 
-    const { error } = await (supabase as any).from('earned_entries').insert({
-      employee_id: emp.id,
-      amount: parseFloat(amount.toFixed(2)),
-      hours_worked: hours,
-      work_date: weekEnd,
-      week_start: weekStart,
-      week_end: weekEnd,
-      description: f.description?.trim() || null,
-      entry_type: entryTypeForEmployee(emp),
-      mechanic_role: 'admin',
-    });
+    let errMsg: string | null = null;
+    try {
+      const res = await fetch('/api/nomina', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employee_id: emp.id,
+          amount: parseFloat(amount.toFixed(2)),
+          hours_worked: hours,
+          work_date: weekEnd,
+          week_start: weekStart,
+          week_end: weekEnd,
+          description: f.description?.trim() || null,
+          entry_type: entryTypeForEmployee(emp),
+        }),
+      });
+      if (!res.ok) { const j = await res.json().catch(() => ({})); errMsg = j.error ?? t('common.error'); }
+    } catch { errMsg = t('common.connectionError'); }
 
     setForm(emp.id, { saving: false, amount: '', hours: '', description: '' });
-    if (error) { alert(error.message); return; }
+    if (errMsg) { alert(errMsg); return; }
     load();
   }
 
   async function handleDelete(entryId: string) {
     if (!confirm(t('adminPayroll.confirmDelete'))) return;
-    await (supabase as any).from('earned_entries').delete().eq('id', entryId);
+    try { await fetch(`/api/nomina?id=${encodeURIComponent(entryId)}`, { method: 'DELETE' }); } catch {}
     load();
   }
 
@@ -281,7 +259,13 @@ export default function NominaAdminPage() {
     setSavingSalary(true);
     const val = parseFloat(salaryInput);
     if (isNaN(val) || val < 0) { setSavingSalary(false); return; }
-    await (supabase as any).from('employees').update({ weekly_salary: val }).eq('id', emp.id);
+    try {
+      await fetch('/api/nomina', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employee_id: emp.id, weekly_salary: val }),
+      });
+    } catch {}
     setSavingSalary(false);
     setEditingSalary(null);
     load();

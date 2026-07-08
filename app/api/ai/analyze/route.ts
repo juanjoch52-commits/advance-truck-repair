@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireSession, authErrorResponse } from '@/lib/apiAuth';
 import { buildWhatsappEstimatePreview } from '@/lib/estimation/formatEstimate';
 import { calculateEstimate } from '@/lib/estimation/pricingEngine';
 import type { AnalysisResult, ServiceType, SurfaceType } from '@/lib/estimation/types';
@@ -50,6 +51,15 @@ function inferAnalysisFromFilename(fileName: string, serviceType: ServiceType): 
 }
 
 export async function POST(request: Request) {
+  // Solo usuarios con sesión válida (endpoint antes público).
+  try {
+    await requireSession();
+  } catch (error) {
+    const resp = authErrorResponse(error);
+    if (resp) return resp;
+    throw error;
+  }
+
   const formData = await request.formData();
   const file = formData.get('image');
   const serviceTypeRaw = String(formData.get('serviceType') ?? 'pressure_washing');

@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { createClient } from '@/lib/supabase';
 import { useLanguage, getTranslator, type Lang } from '@/contexts/LanguageContext';
 import { fmtDate } from '@/lib/fmt';
 import { jsPDF } from 'jspdf';
@@ -12,6 +11,8 @@ type TipoReporte = 'semanal' | 'mensual' | 'anual';
 type TipoEmp = 'mecanicos' | 'admin' | 'todos';
 
 interface EmpOption { id: string; full_name: string; }
+// Fila de GET /api/empleados (solo los campos que usa esta página).
+interface EmpRow { id: string; full_name: string; payment_type: string | null; role: string | null; }
 
 function getWeekRange() {
   const now = new Date();
@@ -27,7 +28,6 @@ function getWeekRange() {
 export default function ReportesContent() {
   const searchParams = useSearchParams();
   const { t: tUI } = useLanguage();
-  const supabase = createClient();
 
   const now = new Date();
   const { start: defaultWeekStart, end: defaultWeekEnd } = getWeekRange();
@@ -36,6 +36,9 @@ export default function ReportesContent() {
   const [tipoEmp, setTipoEmp] = useState<TipoEmp>('mecanicos');
   const [selectedEmpId, setSelectedEmpId] = useState('');   // '' = todos
   const [empOptions, setEmpOptions] = useState<EmpOption[]>([]);
+  const [empAll, setEmpAll] = useState<EmpRow[]>([]);
+  // privileged: owner/super_user ven nómina administrativa; admin solo mecánicos.
+  const [privileged, setPrivileged] = useState<boolean | null>(null);
 
   const [desde, setDesde] = useState(searchParams.get('desde') ?? defaultWeekStart);
   const [hasta, setHasta] = useState(searchParams.get('hasta') ?? defaultWeekEnd);
@@ -44,23 +47,41 @@ export default function ReportesContent() {
   const [loading, setLoading] = useState(false);
   const [showLangModal, setShowLangModal] = useState(false);
 
-  // Load employee list whenever tipoEmp changes
+  // Lista de empleados + flag privileged desde el servidor (una sola vez).
+  // El servidor decide el flag según la sesión; el cliente no puede forzarlo.
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/empleados');
+        if (!res.ok) { setPrivileged(false); setEmpAll([]); return; }
+        const j = await res.json();
+        setPrivileged(Boolean(j?.privileged));
+        setEmpAll((j?.employees ?? []) as EmpRow[]);
+      } catch {
+        setPrivileged(false);
+        setEmpAll([]);
+      }
+    })();
+  }, []);
+
+  // Si el rol NO es privilegiado (admin), solo hay reportes de mecánicos.
+  useEffect(() => {
+    if (privileged === false && tipoEmp !== 'mecanicos') setTipoEmp('mecanicos');
+  }, [privileged, tipoEmp]);
+
+  // Recalcular opciones de empleado cuando cambia el tipo o llega la lista.
   useEffect(() => {
     setSelectedEmpId('');
     if (tipoEmp === 'todos') { setEmpOptions([]); return; }
 
-    (async () => {
-      let query = (supabase as any).from('employees').select('id, full_name, payment_type, role').order('full_name');
-      const { data } = await query;
-      const all: EmpOption[] = (data ?? [])
-        .filter((e: any) => {
-          const isMech = e.payment_type === 'mechanic_commission' || e.role === 'mechanic';
-          return tipoEmp === 'mecanicos' ? isMech : !isMech;
-        })
-        .map((e: any) => ({ id: e.id, full_name: e.full_name }));
-      setEmpOptions(all);
-    })();
-  }, [tipoEmp]);
+    const all: EmpOption[] = empAll
+      .filter((e) => {
+        const isMech = e.payment_type === 'mechanic_commission' || e.role === 'mechanic';
+        return tipoEmp === 'mecanicos' ? isMech : !isMech;
+      })
+      .map((e) => ({ id: e.id, full_name: e.full_name }));
+    setEmpOptions(all);
+  }, [tipoEmp, empAll]);
 
   const formatMoney = (n: number) =>
     '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -98,38 +119,47 @@ export default function ReportesContent() {
     }
 
     const INK = 30; const SOFT = 110; const LINE = 170;
-    const mechEntryTypes = ['mechanic'];
-    const adminEntryTypes = ['admin_fixed', 'admin_hourly', 'admin_manual'];
+
+    // Auditoría de generación: quién generó se estampa en el SERVIDOR.
+    const logGeneration = async () => {
+      try {
+        await fetch('/api/reportes/nomina', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tipo, fecha_desde: fechaDesde, fecha_hasta: fechaHasta, pdf_language: pdfLang }),
+        });
+      } catch (_) {}
+    };
 
     // ── Single-employee mode ───────────────────────────────────────────────────
     if (selectedEmpId) {
       const empName = empOptions.find(e => e.id === selectedEmpId)?.full_name ?? '—';
       const isMech = tipoEmp === 'mecanicos';
 
-      // Fetch entries
-      const entrySelect = isMech
-        ? `id, amount, work_date, truck_number, description,
-           work_reports!earned_entries_work_report_id_fkey(company, external_order_number)`
-        : `id, amount, work_date, hours_worked, description`;
-
-      const { data: entriesRaw } = await (supabase as any)
-        .from('earned_entries')
-        .select(entrySelect)
-        .gte('work_date', fechaDesde)
-        .lte('work_date', fechaHasta)
-        .eq('employee_id', selectedEmpId)
-        .in('entry_type', isMech ? mechEntryTypes : adminEntryTypes)
-        .order('work_date', { ascending: true });
-
-      const entries = entriesRaw ?? [];
-
-      // Fetch deductions for this employee in the period
-      const { data: debtRaw } = await (supabase as any)
-        .from('debt_payments')
-        .select('amount, week_ending, debts!inner(employee_id, description)')
-        .gte('week_ending', fechaDesde)
-        .lte('week_ending', fechaHasta)
-        .eq('debts.employee_id', selectedEmpId);
+      // Entradas + deducciones desde el servidor (valida rol y aplica joins)
+      let entries: any[] = [];
+      let debtRaw: any[] = [];
+      try {
+        const params = new URLSearchParams({
+          desde: fechaDesde,
+          hasta: fechaHasta,
+          scope: isMech ? 'mechanic' : 'admin',
+          employee_id: selectedEmpId,
+        });
+        const res = await fetch(`/api/reportes/nomina?${params.toString()}`);
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          alert(j?.error ?? tUI('payroll.empty'));
+          setLoading(false);
+          return;
+        }
+        const j = await res.json();
+        entries = j?.entries ?? [];
+        debtRaw = j?.deductions ?? [];
+      } catch {
+        setLoading(false);
+        return;
+      }
 
       const deductions: { desc: string; amount: number; weekEnding: string }[] =
         (debtRaw ?? []).map((dp: any) => ({
@@ -300,43 +330,32 @@ export default function ReportesContent() {
       doc.save(`comprobante_${safeName}_${suffix}.pdf`);
       setLoading(false);
 
-      // Audit log
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data: profile } = await (supabase as any).from('profiles').select('full_name, email').eq('id', user.id).single();
-          await (supabase as any).from('report_logs').insert({
-            generated_by: user.id,
-            generated_by_name: (profile as any)?.full_name || (profile as any)?.email || user.email,
-            tipo, fecha_desde: fechaDesde, fecha_hasta: fechaHasta, pdf_language: pdfLang,
-          });
-        }
-      } catch (_) {}
+      // Audit log (servidor)
+      await logGeneration();
       return;
     }
 
     // ── Multi-employee mode (existing logic) ──────────────────────────────────
+    // El servidor devuelve las entradas por tipo según el alcance pedido
+    // (scope 'admin'/'all' exige owner/super_user; 403 para admin).
     let mechData: any[] = [];
-    if (tipoEmp === 'mecanicos' || tipoEmp === 'todos') {
-      const { data } = await (supabase as any)
-        .from('earned_entries')
-        .select(`id, amount, work_date, truck_number, description,
-          employees!earned_entries_employee_id_fkey(full_name),
-          work_reports!earned_entries_work_report_id_fkey(company, external_order_number)`)
-        .gte('work_date', fechaDesde).lte('work_date', fechaHasta)
-        .in('entry_type', mechEntryTypes).order('work_date', { ascending: true });
-      mechData = data ?? [];
-    }
-
     let adminData: any[] = [];
-    if (tipoEmp === 'admin' || tipoEmp === 'todos') {
-      const { data } = await (supabase as any)
-        .from('earned_entries')
-        .select(`id, amount, work_date, hours_worked, description,
-          employees!earned_entries_employee_id_fkey(full_name)`)
-        .gte('work_date', fechaDesde).lte('work_date', fechaHasta)
-        .in('entry_type', adminEntryTypes).order('work_date', { ascending: true });
-      adminData = data ?? [];
+    try {
+      const scope = tipoEmp === 'mecanicos' ? 'mechanic' : tipoEmp === 'admin' ? 'admin' : 'all';
+      const params = new URLSearchParams({ desde: fechaDesde, hasta: fechaHasta, scope });
+      const res = await fetch(`/api/reportes/nomina?${params.toString()}`);
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        alert(j?.error ?? tUI('payroll.empty'));
+        setLoading(false);
+        return;
+      }
+      const j = await res.json();
+      mechData = j?.mechEntries ?? [];
+      adminData = j?.adminEntries ?? [];
+    } catch {
+      setLoading(false);
+      return;
     }
 
     if (mechData.length === 0 && adminData.length === 0) {
@@ -580,17 +599,8 @@ export default function ReportesContent() {
 
     doc.save(fileName);
 
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await (supabase as any).from('profiles').select('full_name, email').eq('id', user.id).single();
-        await (supabase as any).from('report_logs').insert({
-          generated_by: user.id,
-          generated_by_name: (profile as any)?.full_name || (profile as any)?.email || user.email,
-          tipo, fecha_desde: fechaDesde, fecha_hasta: fechaHasta, pdf_language: pdfLang,
-        });
-      }
-    } catch (_) {}
+    // Audit log (servidor)
+    await logGeneration();
 
     setLoading(false);
   }
@@ -608,6 +618,12 @@ export default function ReportesContent() {
     { key: 'todos',     label: tUI('reports.empAll'),       desc: tUI('reports.empAllDesc')       },
   ];
 
+  // El rol admin no ve montos de salarios administrativos: solo mecánicos.
+  // (El servidor devuelve 403 igualmente si lo intentan por la API.)
+  const visibleEmpTypes = privileged === true
+    ? EMP_TYPES
+    : EMP_TYPES.filter((et) => et.key === 'mecanicos');
+
   const selectedEmpName = empOptions.find(e => e.id === selectedEmpId)?.full_name ?? '';
 
   return (
@@ -622,8 +638,8 @@ export default function ReportesContent() {
         {/* Tipo de empleado */}
         <div className="bg-slate-900/60 border border-white/5 rounded-xl p-6">
           <h2 className="display-font text-slate-300 font-semibold mb-4 tracking-wide">{tUI('reports.empType')}</h2>
-          <div className="grid grid-cols-3 gap-3">
-            {EMP_TYPES.map((et) => (
+          <div className={`grid gap-3 ${visibleEmpTypes.length === 1 ? 'grid-cols-1' : 'grid-cols-3'}`}>
+            {visibleEmpTypes.map((et) => (
               <button key={et.key} type="button" onClick={() => setTipoEmp(et.key)}
                 className={`p-4 rounded-xl border text-left transition-all ${
                   tipoEmp === et.key

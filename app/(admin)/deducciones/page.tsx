@@ -1,15 +1,12 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { createClient } from '@/lib/supabase';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { fmtDate } from '@/lib/fmt';
 
 interface Employee {
   id: string;
   full_name: string;
-  role: string | null;
-  payment_type: string | null;
 }
 
 interface Debt {
@@ -79,13 +76,13 @@ function getCurrentWeekStart() {
 
 export default function DeduccionesPage() {
   const { t, lang } = useLanguage();
-  const supabase = createClient();
   const locale = lang === 'en' ? 'en-US' : 'es-MX';
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [paymentsThisWeek, setPaymentsThisWeek] = useState<DebtPayment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [allowed, setAllowed] = useState<boolean | null>(null);
   const [showForm, setShowForm] = useState(false);
 
   // Form state
@@ -115,28 +112,24 @@ export default function DeduccionesPage() {
   const load = useCallback(async () => {
     setLoading(true);
 
-    // Cargar todos los empleados
-    const { data: empData } = await (supabase as any)
-      .from('employees')
-      .select('id, full_name, role, payment_type')
-      .order('full_name');
-    setEmployees((empData ?? []) as Employee[]);
+    // Empleados + deudas activas + pagos de la semana desde la API server-side.
+    let json: any = null;
+    try {
+      const res = await fetch(`/api/nomina/deudas?start=${weekStart}&end=${weekEnd}`);
+      if (res.status === 401 || res.status === 403) {
+        setAllowed(false);
+        setLoading(false);
+        return;
+      }
+      if (res.ok) json = await res.json();
+    } catch {}
 
-    // Cargar deudas activas con nombre del empleado
-    const { data: debtData } = await (supabase as any)
-      .from('debts')
-      .select('id, employee_id, description, total_amount, remaining_balance, weekly_installment, is_active, created_at, start_week_ending, employees(full_name)')
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
-    setDebts((debtData ?? []) as Debt[]);
+    if (!json) { setLoading(false); return; }
+    setAllowed(true);
 
-    // Pagos aplicados esta semana
-    const { data: paymentsData } = await (supabase as any)
-      .from('debt_payments')
-      .select('debt_id, week_ending, amount')
-      .gte('week_ending', weekStart)
-      .lte('week_ending', weekEnd);
-    setPaymentsThisWeek((paymentsData ?? []) as DebtPayment[]);
+    setEmployees((json.employees ?? []) as Employee[]);
+    setDebts((json.debts ?? []) as Debt[]);
+    setPaymentsThisWeek((json.payments ?? []) as DebtPayment[]);
 
     setLoading(false);
   }, [weekStart, weekEnd]);
@@ -154,21 +147,27 @@ export default function DeduccionesPage() {
     const w = parseInt(weeks);
     if (!w || w < 1) { setFormError(t('deductions.form.errorWeeks')); return; }
 
-    const installment = parseFloat((total / w).toFixed(2));
     setSaving(true);
 
-    const { error } = await (supabase as any).from('debts').insert({
-      employee_id: empId,
-      description: description.trim(),
-      total_amount: total,
-      weekly_installment: installment,
-      remaining_balance: total,
-      is_active: true,
-      start_week_ending: startWeekEnding,
-    });
+    // La cuota semanal y el saldo inicial se calculan en el servidor.
+    let errMsg: string | null = null;
+    try {
+      const res = await fetch('/api/nomina/deudas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employee_id: empId,
+          description: description.trim(),
+          total_amount: total,
+          weeks: w,
+          start_week_ending: startWeekEnding,
+        }),
+      });
+      if (!res.ok) { const j = await res.json().catch(() => ({})); errMsg = j.error ?? t('common.error'); }
+    } catch { errMsg = t('common.connectionError'); }
 
     setSaving(false);
-    if (error) { setFormError(error.message); return; }
+    if (errMsg) { setFormError(errMsg); return; }
 
     setEmpId(''); setDescription(''); setTotalAmount(''); setWeeks('');
     setStartWeekEnding(getCurrentWeekEnd());
@@ -179,27 +178,22 @@ export default function DeduccionesPage() {
   async function handleApplyInstallment(debt: Debt) {
     setApplying(prev => ({ ...prev, [debt.id]: true }));
 
-    const amount = Math.min(Number(debt.weekly_installment), Number(debt.remaining_balance));
-    const newBalance = Math.max(0, Number(debt.remaining_balance) - amount);
+    // El servidor calcula la cuota (min(cuota, saldo)) y actualiza el saldo.
+    let errMsg: string | null = null;
+    try {
+      const res = await fetch(`/api/nomina/deudas/${debt.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ week_ending: weekEnd }),
+      });
+      if (!res.ok) { const j = await res.json().catch(() => ({})); errMsg = j.error ?? t('common.error'); }
+    } catch { errMsg = t('common.connectionError'); }
 
-    // Insertar pago
-    const { error: payErr } = await (supabase as any).from('debt_payments').insert({
-      debt_id: debt.id,
-      week_ending: weekEnd,
-      amount,
-    });
-
-    if (payErr) {
-      alert(payErr.message);
+    if (errMsg) {
+      alert(errMsg);
       setApplying(prev => ({ ...prev, [debt.id]: false }));
       return;
     }
-
-    // Actualizar saldo y marcar inactiva si se pagó completo
-    await (supabase as any).from('debts').update({
-      remaining_balance: newBalance,
-      is_active: newBalance > 0,
-    }).eq('id', debt.id);
 
     setApplying(prev => ({ ...prev, [debt.id]: false }));
     load();
@@ -207,7 +201,7 @@ export default function DeduccionesPage() {
 
   async function handleCancelDebt(debtId: string) {
     if (!confirm(t('deductions.card.cancelConfirm'))) return;
-    await (supabase as any).from('debts').update({ is_active: false }).eq('id', debtId);
+    try { await fetch(`/api/nomina/deudas/${debtId}`, { method: 'DELETE' }); } catch {}
     load();
   }
 
@@ -230,6 +224,17 @@ export default function DeduccionesPage() {
   const totalRemaining = debts.reduce((s, d) => s + Number(d.remaining_balance), 0);
   const totalWeekly = debts.reduce((s, d) => s + Number(d.weekly_installment), 0);
   const appliedThisWeek = paymentsThisWeek.reduce((s, p) => s + Number(p.amount), 0);
+
+  if (allowed === null) return <div className="text-center py-12 text-slate-500">{t('common.loading')}</div>;
+
+  if (!allowed) {
+    return (
+      <div className="max-w-2xl mx-auto bg-red-500/10 border border-red-500/30 rounded-xl p-8 text-center">
+        <h2 className="display-font text-red-400 font-bold text-xl mb-2">{t('adminPayroll.notAllowedTitle')}</h2>
+        <p className="text-slate-400 text-sm">{t('adminPayroll.notAllowedMsg')}</p>
+      </div>
+    );
+  }
 
   return (
     <div>

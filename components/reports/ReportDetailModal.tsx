@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createClient } from '@/lib/supabase';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 interface Props {
@@ -47,7 +46,6 @@ const ROLE_LABEL: Record<string, { es: string; en: string }> = {
 
 export default function ReportDetailModal({ reportId, onClose }: Props) {
   const { t, lang } = useLanguage();
-  const supabase = createClient();
 
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
@@ -83,66 +81,21 @@ export default function ReportDetailModal({ reportId, onClose }: Props) {
 
     (async () => {
       try {
-        // 1. Header
-        const { data: header, error: headerErr } = await (supabase as any)
-          .from('work_reports')
-          .select('id, external_order_number, truck_number, company, work_date, notes, created_at, created_by, created_by_name, created_by_role')
-          .eq('id', reportId)
-          .single();
-
-        if (headerErr) throw new Error(headerErr.message);
+        // Todo el detalle (encabezado + tareas + asignaciones + nombres de
+        // empleados, con el fallback del creador resuelto) sale de la API.
+        const res = await fetch(`/api/ordenes/${reportId}`);
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(j?.error ?? 'Error');
         if (cancelled) return;
 
-        // If created_by exists but the snapshot name is missing, try to look it up
-        let creatorName = header.created_by_name as string | null;
-        let creatorRole = header.created_by_role as string | null;
-        if (!creatorName && header.created_by) {
-          const { data: emp } = await (supabase as any)
-            .from('employees')
-            .select('full_name, role')
-            .eq('id', header.created_by)
-            .single();
-          if (emp) {
-            creatorName = (emp as any).full_name ?? null;
-            creatorRole = creatorRole ?? ((emp as any).role ?? null);
-          }
-        }
+        setReport(j.report as ReportHeader);
 
-        setReport({ ...header, created_by_name: creatorName, created_by_role: creatorRole } as ReportHeader);
+        const rawTasks: any[] = j.tasks ?? [];
+        const assignments: any[] = j.assignments ?? [];
 
-        // 2. Tasks
-        const { data: rawTasks, error: tasksErr } = await (supabase as any)
-          .from('report_tasks')
-          .select('id, description, amount_charged_to_client, sort_order')
-          .eq('report_id', reportId)
-          .order('sort_order', { ascending: true });
-
-        if (tasksErr) throw new Error(tasksErr.message);
-        if (cancelled) return;
-
-        const taskIds: string[] = (rawTasks ?? []).map((tr: any) => tr.id);
-
-        // 3. Assignments + employee names
-        let assignments: any[] = [];
-        if (taskIds.length > 0) {
-          const { data: ass, error: assErr } = await (supabase as any)
-            .from('task_assignments')
-            .select('id, task_id, employee_id, commission_percentage, mechanic_payout')
-            .in('task_id', taskIds);
-          if (assErr) throw new Error(assErr.message);
-          assignments = ass ?? [];
-        }
-
-        const empIds = Array.from(new Set(assignments.map((a: any) => a.employee_id)));
         const employeeNameById: Record<string, string> = {};
-        if (empIds.length > 0) {
-          const { data: emps } = await (supabase as any)
-            .from('employees')
-            .select('id, full_name')
-            .in('id', empIds);
-          for (const e of (emps ?? [])) {
-            employeeNameById[(e as any).id] = (e as any).full_name;
-          }
+        for (const e of (j.employees ?? [])) {
+          employeeNameById[(e as any).id] = (e as any).full_name;
         }
 
         const tasksByGroup: Record<string, MechanicAssignmentRow[]> = {};

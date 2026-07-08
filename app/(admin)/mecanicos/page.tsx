@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createClient } from '@/lib/supabase';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { fmtDate } from '@/lib/fmt';
 
@@ -14,8 +13,9 @@ interface Employee {
   notes: string | null;
   role: string | null;
   payment_type: string | null;
-  weekly_salary: number | null;
-  hourly_rate: number | null;
+  // Los montos solo vienen del servidor para owner/super_user (privileged).
+  weekly_salary?: number | null;
+  hourly_rate?: number | null;
   is_active: boolean;
 }
 
@@ -55,6 +55,7 @@ function FormBody({
   onSubmit,
   onCancel,
   isEdit,
+  privileged,
   t,
 }: {
   form: FormState;
@@ -64,6 +65,7 @@ function FormBody({
   onSubmit: (e: React.FormEvent) => void;
   onCancel: () => void;
   isEdit: boolean;
+  privileged: boolean; // solo owner/super ven y fijan montos de salario
   t: (key: string) => string;
 }) {
   return (
@@ -173,7 +175,7 @@ function FormBody({
             ))}
           </div>
 
-          {form.payType === 'fixed_weekly' && (
+          {privileged && form.payType === 'fixed_weekly' && (
             <div>
               <label className="block text-slate-400 text-xs mb-1.5">Sueldo semanal ($)</label>
               <div className="relative w-48">
@@ -189,7 +191,7 @@ function FormBody({
             </div>
           )}
 
-          {form.payType === 'hourly' && (
+          {privileged && form.payType === 'hourly' && (
             <div>
               <label className="block text-slate-400 text-xs mb-1.5">Tarifa por hora ($)</label>
               <div className="relative w-48">
@@ -234,11 +236,12 @@ function FormBody({
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function PersonalPage() {
   const { t, lang } = useLanguage();
-  const supabase = createClient();
   const locale = lang === 'en' ? 'en-US' : 'es-MX';
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
+  // privileged: la sesión puede ver/fijar montos de salario (owner/super).
+  const [privileged, setPrivileged] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
@@ -255,10 +258,21 @@ export default function PersonalPage() {
   const [editError, setEditError] = useState('');
 
   async function load() {
-    const { data } = await (supabase as any).from('employees')
-      .select('id, full_name, phone, email, hire_date, notes, role, payment_type, weekly_salary, hourly_rate, is_active')
-      .order('full_name');
-    setEmployees((data ?? []) as Employee[]);
+    // El servidor valida el rol y decide si incluye los montos de salario
+    // (owner/super) o no (admin).
+    try {
+      const res = await fetch('/api/empleados');
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setEmployees([]);
+        setPrivileged(false);
+      } else {
+        setPrivileged(Boolean(j?.privileged));
+        setEmployees((j?.employees ?? []) as Employee[]);
+      }
+    } catch {
+      setEmployees([]);
+    }
     setLoading(false);
   }
 
@@ -287,7 +301,7 @@ export default function PersonalPage() {
 
   function buildPayload(form: FormState) {
     const isAdmin = form.profile === 'admin';
-    return {
+    const payload: Record<string, unknown> = {
       full_name: form.fullName.trim(),
       phone: form.phone.trim() || null,
       email: form.email.trim() || null,
@@ -295,17 +309,31 @@ export default function PersonalPage() {
       notes: form.notes.trim() || null,
       role: isAdmin ? 'admin' : 'mechanic',
       payment_type: isAdmin ? form.payType : 'mechanic_commission',
-      weekly_salary: isAdmin && form.payType === 'fixed_weekly' ? parseFloat(form.weeklySalary) || null : null,
-      hourly_rate: isAdmin && form.payType === 'hourly' ? parseFloat(form.hourlyRate) || null : null,
     };
+    // Los montos de salario solo los envía una sesión privilegiada; para
+    // admin ni siquiera se incluyen (el servidor los ignoraría igual).
+    if (privileged) {
+      payload.weekly_salary = isAdmin && form.payType === 'fixed_weekly' ? parseFloat(form.weeklySalary) || null : null;
+      payload.hourly_rate = isAdmin && form.payType === 'hourly' ? parseFloat(form.hourlyRate) || null : null;
+    }
+    return payload;
   }
 
   // ── Add ──
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     setAddSaving(true); setAddError('');
-    const { error: err } = await (supabase as any).from('employees').insert(buildPayload(addForm));
-    if (err) { setAddError(err.message); setAddSaving(false); return; }
+    try {
+      const res = await fetch('/api/empleados', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildPayload(addForm)),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) { setAddError(j?.error ?? 'No se pudo guardar'); setAddSaving(false); return; }
+    } catch {
+      setAddError('No se pudo guardar'); setAddSaving(false); return;
+    }
     setAddForm(BLANK_FORM); setShowForm(false); setAddSaving(false);
     load();
   }
@@ -323,17 +351,31 @@ export default function PersonalPage() {
     e.preventDefault();
     if (!editingEmp) return;
     setEditSaving(true); setEditError('');
-    const { error: err } = await (supabase as any).from('employees').update(buildPayload(editForm)).eq('id', editingEmp.id);
-    if (err) { setEditError(err.message); setEditSaving(false); return; }
+    try {
+      const res = await fetch(`/api/empleados/${editingEmp.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildPayload(editForm)),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) { setEditError(j?.error ?? 'No se pudo guardar'); setEditSaving(false); return; }
+    } catch {
+      setEditError('No se pudo guardar'); setEditSaving(false); return;
+    }
     setEditSaving(false); closeEdit(); load();
   }
 
-  // ── Delete ──
+  // ── Delete (solo owner/super: la API lo niega para admin) ──
   async function handleDelete(id: string, name: string) {
     if (!confirm(t('staff.deleteConfirm').replace('{name}', name))) return;
     setDeletingId(id);
-    const { error: err } = await (supabase as any).from('employees').delete().eq('id', id);
-    if (err) alert(t('staff.deleteError') + err.message);
+    try {
+      const res = await fetch(`/api/empleados/${id}`, { method: 'DELETE' });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) alert(t('staff.deleteError') + (j?.error ?? ''));
+    } catch {
+      alert(t('staff.deleteError'));
+    }
     setDeletingId(null); load();
   }
 
@@ -345,7 +387,17 @@ export default function PersonalPage() {
         : `¿Reactivar a ${emp.full_name}?`
     )) return;
     setTogglingId(emp.id);
-    await (supabase as any).from('employees').update({ is_active: !emp.is_active }).eq('id', emp.id);
+    try {
+      const res = await fetch(`/api/empleados/${emp.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: !emp.is_active }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) alert(j?.error ?? 'No se pudo actualizar');
+    } catch {
+      alert('No se pudo actualizar');
+    }
     setTogglingId(null); load();
   }
 
@@ -460,7 +512,7 @@ export default function PersonalPage() {
                 <div className="flex items-center justify-end gap-1">
                   <EditBtn emp={emp} />
                   <SuspendBtn emp={emp} />
-                  <DeleteBtn emp={emp} />
+                  {privileged && <DeleteBtn emp={emp} />}
                 </div>
               </td>
             </tr>
@@ -489,8 +541,9 @@ export default function PersonalPage() {
                 <span className="text-xs px-2 py-0.5 rounded-full border bg-sky-500/10 border-sky-500/30 text-sky-300">
                   {payTypeLabel(emp)}
                 </span>
-                {sal && <span className="text-amber-400 font-semibold text-sm">{sal}</span>}
-                {!sal && (emp.payment_type === 'fixed_weekly' || emp.payment_type === 'hourly') && (
+                {/* Montos de salario: solo visibles para owner/super */}
+                {privileged && sal && <span className="text-amber-400 font-semibold text-sm">{sal}</span>}
+                {privileged && !sal && (emp.payment_type === 'fixed_weekly' || emp.payment_type === 'hourly') && (
                   <span className="text-slate-500 text-xs italic">Sin monto — usar editar</span>
                 )}
               </div>
@@ -503,7 +556,7 @@ export default function PersonalPage() {
             <div className="flex items-center gap-1 flex-shrink-0">
               <EditBtn emp={emp} />
               <SuspendBtn emp={emp} />
-              <DeleteBtn emp={emp} />
+              {privileged && <DeleteBtn emp={emp} />}
             </div>
           </div>
         );
@@ -538,6 +591,7 @@ export default function PersonalPage() {
             onSubmit={handleEditSave}
             onCancel={closeEdit}
             isEdit={true}
+            privileged={privileged}
             t={t}
           />
         </div>
@@ -578,6 +632,7 @@ export default function PersonalPage() {
             onSubmit={handleAdd}
             onCancel={() => { setShowForm(false); setAddForm(BLANK_FORM); }}
             isEdit={false}
+            privileged={privileged}
             t={t}
           />
         </div>

@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createClient } from '@/lib/supabase';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { fmtDate } from '@/lib/fmt';
 
@@ -26,7 +25,6 @@ const ROLE_COLORS: Record<string, string> = {
 
 export default function AdminPage() {
   const { t, lang } = useLanguage();
-  const supabase = createClient();
   const locale = lang === 'en' ? 'en-US' : 'es-MX';
 
   // Roles available to assign (super_admin can only be set by another super_admin)
@@ -56,22 +54,16 @@ export default function AdminPage() {
   const [createError, setCreateError] = useState('');
 
   async function load() {
-    const { data: session } = await supabase.auth.getUser();
-    if (session.user) {
-      setCurrentUserId(session.user.id);
-      const { data: profile } = await (supabase as any)
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
-        .single();
-      setCurrentUserRole(profile?.role ?? '');
-    }
-
-    const { data } = await (supabase as any)
-      .from('profiles')
-      .select('id, email, full_name, role, created_at')
-      .order('created_at');
-    setUsers(data ?? []);
+    // Perfiles + identidad del solicitante desde la API server-side.
+    try {
+      const res = await fetch('/api/perfiles');
+      if (res.ok) {
+        const j = await res.json();
+        setUsers(j.users ?? []);
+        setCurrentUserId(j.me?.id ?? '');
+        setCurrentUserRole(j.me?.role ?? '');
+      }
+    } catch {}
     setLoading(false);
   }
 
@@ -96,11 +88,19 @@ export default function AdminPage() {
 
   async function handleChangeRole(userId: string, newRole: string) {
     setChangingRole(userId);
-    const { error } = await (supabase as any)
-      .from('profiles')
-      .update({ role: newRole })
-      .eq('id', userId);
-    if (error) alert(t('users.errorChangeRole') + error.message);
+    try {
+      const res = await fetch('/api/perfiles', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: userId, role: newRole }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        alert(t('users.errorChangeRole') + (j.error ?? t('common.error')));
+      }
+    } catch {
+      alert(t('users.errorChangeRole') + t('common.connectionError'));
+    }
     setChangingRole(null);
     load();
   }

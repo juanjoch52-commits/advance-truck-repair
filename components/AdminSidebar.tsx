@@ -208,6 +208,8 @@ export default function AdminSidebar() {
   }, [pathname]);
 
   useEffect(() => {
+    // El rol viene solo de la sesión firmada del servidor (sin consultar
+    // tablas desde el navegador; RLS cerrado).
     (async () => {
       try {
         const res = await fetch('/api/auth/me');
@@ -215,16 +217,7 @@ export default function AdminSidebar() {
           const j = await res.json();
           if (j?.authenticated && j.user?.role) {
             setRole(String(j.user.role).toLowerCase());
-            return;
           }
-        }
-      } catch {}
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data } = await (supabase as any)
-            .from('profiles').select('role').eq('id', user.id).single();
-          if ((data as any)?.role) setRole(String((data as any).role).toLowerCase());
         }
       } catch {}
     })();

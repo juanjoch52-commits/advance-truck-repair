@@ -1,173 +1,89 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { getEffectiveRole, getServerSession } from '@/lib/authSession';
-import { getDemoEmployees } from '@/lib/demoData';
+import { authErrorResponse } from '@/lib/apiAuth';
+import { requirePayrollAccess, isPrivilegedSession, sanitizeDbError } from '@/lib/payrollApi';
 
-type CreateEmployeeBody = {
-  full_name: string;
-  phone?: string | null;
-  hire_date: string;
-  notes?: string | null;
-  role?: 'mechanic' | 'admin' | 'SUPER_USER';
-};
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-type GenericRow = Record<string, unknown>;
+// Tipos de pago válidos para un empleado.
+const PAYMENT_TYPES = ['mechanic_commission', 'fixed_weekly', 'hourly', 'manual'] as const;
 
-type EmployeeResponse = {
-  id: string;
-  full_name: string;
-  phone: string | null;
-  hire_date: string;
-  role: 'mechanic' | 'admin' | 'SUPER_USER';
-  notes: string | null;
-};
-
-function mapRole(value: unknown): EmployeeResponse['role'] {
-  const normalized = String(value ?? '').trim().toLowerCase();
-  if (normalized === 'super_user' || normalized === 'superuser') return 'SUPER_USER';
-  if (normalized === 'admin' || normalized === 'administrador' || normalized === 'administradora') return 'admin';
-  return 'mechanic';
+// Normaliza un monto de salario: número >= 0 o null (campo vacío).
+function parseSalary(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n;
 }
 
-function mapEmployeeRow(row: GenericRow): EmployeeResponse | null {
-  const id = String(row.id ?? row.employee_id ?? row.empleado_id ?? '').trim();
-  const fullName = String(row.full_name ?? row.nombre_completo ?? row.nombre ?? '').trim();
-  if (!id || !fullName) return null;
-
-  return {
-    id,
-    full_name: fullName,
-    phone: String(row.phone ?? row.telefono ?? '').trim() || null,
-    hire_date: String(row.hire_date ?? row.fecha_contratacion ?? row.fecha_ingreso ?? '').trim() || new Date().toISOString().slice(0, 10),
-    role: mapRole(row.role ?? row.rol ?? row.tipo),
-    notes: String(row.notes ?? row.notas ?? '').trim() || null,
-  };
-}
-
-function normalizeSupabaseError(message: string) {
-  if (message.toLowerCase().includes('row-level security policy')) {
-    return 'Supabase bloqueó la operación por permisos (RLS). Configura SUPABASE_SERVICE_ROLE_KEY en Vercel o habilita INSERT para esta tabla.';
-  }
-  // No exponer detalles internos de Postgres al cliente; loguear en servidor.
-  console.error('[empleados] Supabase error:', message);
-  return 'No se pudo completar la operación. Intenta de nuevo.';
-}
-
-function getClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return null;
-  return createClient(url, key, { auth: { persistSession: false } });
-}
-
+// Listado de empleados. Los montos de salario (weekly_salary, hourly_rate)
+// solo se envían a owner/super_user: el rol admin gestiona personal sin verlos.
 export async function GET() {
-  const supabase = getClient();
-  if (!supabase) {
-    return NextResponse.json({ employees: [] });
+  try {
+    const { session, supabase } = await requirePayrollAccess();
+    const privileged = isPrivilegedSession(session);
+
+    const cols = privileged
+      ? 'id, full_name, phone, email, hire_date, notes, role, payment_type, is_active, work_days, weekly_salary, hourly_rate'
+      : 'id, full_name, phone, email, hire_date, notes, role, payment_type, is_active, work_days';
+
+    const { data, error } = await supabase
+      .from('employees')
+      .select(cols)
+      .order('full_name');
+
+    if (error) return NextResponse.json({ error: sanitizeDbError('empleados', error.message) }, { status: 500 });
+    return NextResponse.json({ privileged, employees: data ?? [] });
+  } catch (error) {
+    const resp = authErrorResponse(error);
+    if (resp) return resp;
+    throw error;
   }
-
-  const primary = await supabase
-    .from('employees')
-    .select('id,full_name,phone,hire_date,role,notes')
-    .order('full_name', { ascending: true })
-    .returns<EmployeeResponse[]>();
-
-  if (!primary.error) {
-    return NextResponse.json({ employees: (primary.data?.length ? primary.data : getDemoEmployees()) ?? [] });
-  }
-
-  if (primary.error.code !== 'PGRST205') {
-    return NextResponse.json({ employees: getDemoEmployees() });
-  }
-
-  const fallback = await supabase
-    .from('empleados')
-    .select('*')
-    .returns<GenericRow[]>();
-
-  if (fallback.error) {
-    return NextResponse.json({ employees: getDemoEmployees() });
-  }
-
-  const mapped = (fallback.data ?? [])
-    .map((row) => mapEmployeeRow(row))
-    .filter((row): row is EmployeeResponse => row !== null)
-    .sort((a, b) => a.full_name.localeCompare(b.full_name, 'es'));
-
-  return NextResponse.json({ employees: mapped.length > 0 ? mapped : getDemoEmployees() });
 }
 
+// Crear empleado. Los montos de salario solo se aplican si la sesión es
+// privilegiada (owner/super); para admin se ignoran silenciosamente.
 export async function POST(request: Request) {
-  const session = await getServerSession();
-  if (!session || getEffectiveRole(session) !== 'owner') {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
-  }
+  try {
+    const { session, supabase } = await requirePayrollAccess();
+    const privileged = isPrivilegedSession(session);
+    const body = await request.json().catch(() => ({}));
 
-  const supabase = getClient();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Supabase no configurado' }, { status: 500 });
-  }
-
-  const body = await request.json() as CreateEmployeeBody;
-  const full_name = body.full_name?.trim();
-  const phone = body.phone?.trim() || null;
-  const hire_date = body.hire_date;
-  const notes = body.notes?.trim() || null;
-  const role = body.role ?? 'mechanic';
-
-  if (!full_name || !hire_date) {
-    return NextResponse.json({ error: 'Nombre y fecha de contratación son requeridos' }, { status: 400 });
-  }
-
-  const existingPrimary = await supabase
-    .from('employees')
-    .select('id')
-    .eq('full_name', full_name)
-    .maybeSingle();
-
-  if (existingPrimary.data) {
-    return NextResponse.json({ error: 'Ese empleado ya existe' }, { status: 409 });
-  }
-
-  if (existingPrimary.error && existingPrimary.error.code !== 'PGRST205') {
-    return NextResponse.json({ error: normalizeSupabaseError(existingPrimary.error.message) }, { status: 500 });
-  }
-
-  if (existingPrimary.error?.code === 'PGRST205') {
-    const existingFallback = await supabase
-      .from('empleados')
-      .select('*')
-      .returns<GenericRow[]>();
-
-    if (existingFallback.error) {
-      return NextResponse.json({ error: normalizeSupabaseError(existingFallback.error.message) }, { status: 500 });
+    const fullName = String(body.full_name ?? '').trim();
+    const hireDate = String(body.hire_date ?? '').trim();
+    if (!fullName || !ISO_DATE.test(hireDate)) {
+      return NextResponse.json({ error: 'Nombre y fecha de contratación son requeridos' }, { status: 400 });
     }
 
-    const duplicate = (existingFallback.data ?? []).some((row) => {
-      const name = String(row.nombre_completo ?? row.nombre ?? row.full_name ?? '').trim().toLowerCase();
-      return name === full_name.toLowerCase();
-    });
-
-    if (duplicate) {
-      return NextResponse.json({ error: 'Ese empleado ya existe' }, { status: 409 });
+    const paymentType = body.payment_type != null ? String(body.payment_type) : null;
+    if (paymentType !== null && !PAYMENT_TYPES.includes(paymentType as (typeof PAYMENT_TYPES)[number])) {
+      return NextResponse.json({ error: 'Tipo de pago inválido' }, { status: 400 });
     }
+
+    const insertPayload: Record<string, unknown> = {
+      full_name: fullName,
+      phone: String(body.phone ?? '').trim() || null,
+      email: String(body.email ?? '').trim() || null,
+      hire_date: hireDate,
+      notes: String(body.notes ?? '').trim() || null,
+      role: String(body.role ?? '').trim() || 'mechanic',
+    };
+    if (paymentType !== null) insertPayload.payment_type = paymentType;
+    if (privileged) {
+      insertPayload.weekly_salary = parseSalary(body.weekly_salary);
+      insertPayload.hourly_rate = parseSalary(body.hourly_rate);
+    }
+
+    const { data, error } = await supabase
+      .from('employees')
+      .insert(insertPayload)
+      .select('id, full_name')
+      .single();
+
+    if (error) return NextResponse.json({ error: sanitizeDbError('empleados', error.message) }, { status: 500 });
+    return NextResponse.json({ ok: true, employee: data }, { status: 201 });
+  } catch (error) {
+    const resp = authErrorResponse(error);
+    if (resp) return resp;
+    throw error;
   }
-
-  const primaryInsert = await supabase
-    .from('employees')
-    .insert({
-      full_name,
-      phone,
-      hire_date,
-      notes,
-      role,
-    })
-    .select('id,full_name,phone,hire_date,role,notes')
-    .single<EmployeeResponse>();
-
-  if (!primaryInsert.error) {
-    return NextResponse.json({ ok: true, employee: primaryInsert.data }, { status: 201 });
-  }
-
-  return NextResponse.json({ error: normalizeSupabaseError(primaryInsert.error.message) }, { status: 500 });
 }
