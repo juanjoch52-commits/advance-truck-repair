@@ -3,10 +3,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { requireRole, authErrorResponse } from '@/lib/apiAuth';
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Creación perezosa: a nivel de módulo rompería el build cuando faltan las
+// variables de entorno (p. ej. en previews de Vercel sin env configurado).
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 function generateTempPassword() {
   // 6-char password: easy to communicate verbally, mix of letters and digits
@@ -19,6 +23,7 @@ function generateTempPassword() {
 }
 
 export async function POST(req: NextRequest) {
+  const supabaseAdmin = getSupabaseAdmin();
   try {
     await requireRole('owner', 'super_user');
   } catch (e) {
