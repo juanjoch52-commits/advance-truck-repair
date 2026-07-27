@@ -941,7 +941,9 @@
       "noLocation": "No district",
       "selectTruck": "Select truck",
       "deleteConfirm": "Delete truck \"{name}\"?"
-    }
+    },
+    "taxIdHint": "The customer’s tax ID (EIN if a company). Optional.",
+    "billingHint": "Appears in the invoice PDF “Bill To”."
   },
   "attendance": {
     "title": "ATTENDANCE",

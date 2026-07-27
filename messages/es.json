@@ -941,7 +941,9 @@
       "noLocation": "Sin distrito",
       "selectTruck": "Seleccionar camión",
       "deleteConfirm": "¿Eliminar el camión \"{name}\"?"
-    }
+    },
+    "taxIdHint": "Identificación fiscal del cliente (EIN si es empresa). Opcional.",
+    "billingHint": "Sale en el “Bill To” del PDF de la factura."
   },
   "attendance": {
     "title": "ASISTENCIA",

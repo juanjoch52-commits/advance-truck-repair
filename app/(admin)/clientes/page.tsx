@@ -135,12 +135,14 @@ function ClientFormBody({
         <label className="block text-slate-400 text-sm mb-1.5">{t('clients.taxId')}</label>
         <input value={form.taxId} onChange={e => onChange({ taxId: e.target.value })}
           placeholder={t('clients.taxIdPlaceholder')} className={inputCls} />
+        <p className="text-slate-600 text-xs mt-1">{t('clients.taxIdHint')}</p>
       </div>
 
       {/* Dirección de facturación */}
       <div className="md:col-span-2">
         <label className="block text-slate-400 text-sm mb-1.5">{t('clients.billingAddress')}</label>
         <input value={form.billingAddress} onChange={e => onChange({ billingAddress: e.target.value })} className={inputCls} />
+        <p className="text-slate-600 text-xs mt-1">{t('clients.billingHint')}</p>
       </div>
       <div>
         <label className="block text-slate-400 text-sm mb-1.5">{t('clients.city')}</label>

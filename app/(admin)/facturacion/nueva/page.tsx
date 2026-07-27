@@ -352,6 +352,7 @@ function NuevaFacturaInner() {
   const input = 'w-full bg-slate-800 border border-white/15 rounded-xl px-4 py-3 text-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400/60 transition';
   const card = 'bg-slate-900/60 border border-white/10 rounded-2xl p-6 md:p-7';
   const sectionTitle = 'display-font text-slate-100 font-bold text-xl md:text-2xl tracking-wide mb-5';
+  const hint = 'text-slate-500 text-base mt-1.5'; // ayuda gris permanente bajo un campo
 
   return (
     <div className="max-w-4xl">
@@ -359,31 +360,41 @@ function NuevaFacturaInner() {
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
         {L.back}
       </a>
-      <h1 className="display-font text-3xl md:text-4xl font-bold text-slate-100 tracking-wide mb-7">
-        {isEditing ? (isEstimate ? L.editEstimateTitle : L.editTitle) : L.title}
-      </h1>
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-7">
+        <h1 className="display-font text-3xl md:text-4xl font-bold text-slate-100 tracking-wide">
+          {isEditing ? (isEstimate ? L.editEstimateTitle : L.editTitle) : L.title}
+        </h1>
+        <button type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent('atr:start-tour', { detail: { key: 'facturacion-nueva' } }))}
+          className="text-amber-400/90 hover:text-amber-300 text-base flex items-center gap-1.5 border border-amber-500/30 hover:border-amber-500/50 rounded-xl px-4 py-2.5 transition">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          {t('tour.explainFields')}
+        </button>
+      </div>
 
       <div className="space-y-6">
         {/* ─── Tipo de documento ─── */}
         {!isEditing && (
-          <div className="flex gap-3 flex-wrap">
-            <button type="button" onClick={() => setDocType('invoice')}
-              className={`px-6 py-3.5 rounded-xl text-lg border transition ${!isEstimate ? 'bg-amber-500/15 border-amber-500/50 text-amber-200 font-semibold' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'}`}>
-              {L.docInvoice}
-            </button>
-            <button type="button" onClick={() => setDocType('estimate')}
-              className={`px-6 py-3.5 rounded-xl text-lg border transition ${isEstimate ? 'bg-purple-500/15 border-purple-500/50 text-purple-200 font-semibold' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'}`}>
-              {L.docEstimate}
-            </button>
-            {isEstimate && <p className="w-full text-purple-300/90 text-base">{L.estimateHint}</p>}
+          <div data-tour="facn-doctype">
+            <div className="flex gap-3 flex-wrap">
+              <button type="button" onClick={() => setDocType('invoice')}
+                className={`px-6 py-3.5 rounded-xl text-lg border transition ${!isEstimate ? 'bg-amber-500/15 border-amber-500/50 text-amber-200 font-semibold' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'}`}>
+                {L.docInvoice}
+              </button>
+              <button type="button" onClick={() => setDocType('estimate')}
+                className={`px-6 py-3.5 rounded-xl text-lg border transition ${isEstimate ? 'bg-purple-500/15 border-purple-500/50 text-purple-200 font-semibold' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'}`}>
+                {L.docEstimate}
+              </button>
+            </div>
+            <p className={hint}>{isEstimate ? L.estimateHint : L.docHint}</p>
           </div>
         )}
 
         {/* ─── Cliente ─── */}
-        <div className={card}>
+        <div className={card} data-tour="facn-client">
           <h2 className={sectionTitle}>{L.sectionClient}</h2>
 
-          <div className="flex gap-3 mb-5 flex-wrap">
+          <div className="flex gap-3 mb-2 flex-wrap">
             <button type="button" onClick={() => onWalkinToggle(false)}
               className={`px-5 py-3 rounded-xl text-lg border transition ${!walkin ? 'bg-amber-500/15 border-amber-500/50 text-amber-200 font-semibold' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'}`}>
               {L.registered}
@@ -393,6 +404,7 @@ function NuevaFacturaInner() {
               {L.walkin}
             </button>
           </div>
+          <p className={`${hint} mb-5`}>{walkin ? L.walkinDesc : L.registeredDesc}</p>
 
           {walkin ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -436,13 +448,14 @@ function NuevaFacturaInner() {
                   {clientTrucks.map(tk => <option key={tk.id} value={tk.id}>{truckLabel(tk)}</option>)}
                 </select>
               </div>
+              <p className={`${hint} md:col-span-3`}>{L.locTruckDesc}</p>
             </div>
           )}
           {clientExempt && <p className="text-emerald-300/90 text-base mt-3">{L.exemptHint}{selectedClient?.tax_exempt_certificate ? ` (#${selectedClient.tax_exempt_certificate})` : ''}</p>}
         </div>
 
         {/* ─── Datos de la factura ─── */}
-        <div className={card}>
+        <div className={card} data-tour="facn-invoice">
           <h2 className={sectionTitle}>{L.sectionInvoice}</h2>
           {workOrders.length > 0 && (
             <div className="mb-5">
@@ -458,6 +471,7 @@ function NuevaFacturaInner() {
             <div>
               <label className={label}>{L.orderNumber}</label>
               <input value={orderNumber} onChange={e => setOrderNumber(e.target.value)} placeholder={L.orderNumberHint} className={input} />
+              <p className={hint}>{L.orderNumberDesc}</p>
             </div>
             {shops.length > 0 && (
               <div>
@@ -466,6 +480,7 @@ function NuevaFacturaInner() {
                   <option value="">{L.noShop}</option>
                   {shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
+                <p className={hint}>{L.shopDesc}</p>
               </div>
             )}
             <div>
@@ -475,19 +490,20 @@ function NuevaFacturaInner() {
             <div>
               <label className={label}>{L.dueDate}</label>
               <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={input} />
+              <p className={hint}>{L.dueDateDesc}</p>
             </div>
             <div className="md:col-span-2">
               <label className={label}>{L.paymentMethod}</label>
               <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as PaymentMethod)} className={input}>
                 {PAYMENT_METHODS.map(pm => <option key={pm} value={pm}>{L.pm[pm]}</option>)}
               </select>
-              {isCredit && <p className="text-amber-300/90 text-base mt-2">{L.creditHint}</p>}
+              {isCredit ? <p className="text-amber-300/90 text-base mt-2">{L.creditHint}</p> : <p className={hint}>{L.pmDesc}</p>}
             </div>
           </div>
         </div>
 
         {/* ─── Seguro (opcional) ─── */}
-        <div className={card}>
+        <div className={card} data-tour="facn-insurance">
           <label className="flex items-center gap-3 cursor-pointer">
             <input type="checkbox" checked={insuranceOn} onChange={e => {
               const on = e.target.checked;
@@ -512,11 +528,12 @@ function NuevaFacturaInner() {
         </div>
 
         {/* ─── Mano de obra ─── */}
-        <div className={card}>
-          <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
+        <div className={card} data-tour="facn-labor">
+          <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
             <h2 className="display-font text-slate-100 font-bold text-xl md:text-2xl tracking-wide">{L.sectionLabor}</h2>
             <button type="button" onClick={addTask} className="bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/40 text-sky-200 text-lg font-semibold rounded-xl px-5 py-2.5 transition">+ {L.addTask}</button>
           </div>
+          <p className={`${hint} mb-5`}>{L.laborDesc}</p>
 
           {linkedToOrder && <p className="text-sky-300/90 text-base mb-4">{L.laborLinkedHint}</p>}
 
@@ -583,11 +600,12 @@ function NuevaFacturaInner() {
         </div>
 
         {/* ─── Piezas ─── */}
-        <div className={card}>
-          <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
+        <div className={card} data-tour="facn-parts">
+          <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
             <h2 className="display-font text-slate-100 font-bold text-xl md:text-2xl tracking-wide">{L.sectionParts}</h2>
             <button type="button" onClick={addPart} className="bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-200 text-lg font-semibold rounded-xl px-5 py-2.5 transition">+ {L.addPart}</button>
           </div>
+          <p className={`${hint} mb-5`}>{L.partsDesc}</p>
           {parts.length === 0 ? (
             <p className="text-slate-500 text-lg">{L.noParts}</p>
           ) : (
@@ -647,8 +665,9 @@ function NuevaFacturaInner() {
         </div>
 
         {/* ─── Totales ─── */}
-        <div className={card}>
-          <h2 className={sectionTitle}>{L.sectionTotals}</h2>
+        <div className={card} data-tour="facn-totals">
+          <h2 className="display-font text-slate-100 font-bold text-xl md:text-2xl tracking-wide mb-2">{L.sectionTotals}</h2>
+          <p className={`${hint} mb-5`}>{L.totalsDesc}</p>
           <div className="space-y-3 text-lg">
             <div className="flex justify-between"><span className="text-slate-400">{L.labor}</span><span className="text-slate-200 font-medium">{money(laborTotal)}</span></div>
             <div className="flex justify-between"><span className="text-slate-400">{L.partsLabel}</span><span className="text-slate-200 font-medium">{money(partsTotal)}</span></div>
@@ -701,7 +720,7 @@ function NuevaFacturaInner() {
         {/* ─── Botones ─── */}
         {isEditing ? (
           <>
-            <div className="flex gap-3 flex-wrap pb-10">
+            <div className="flex gap-3 flex-wrap pb-10" data-tour="facn-submit">
               <button type="button" disabled={saving} onClick={() => submit(true)}
                 className="bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-slate-950 font-bold text-xl py-4 px-10 rounded-xl transition display-font tracking-wide">
                 {saving ? L.saving : L.saveChanges}
@@ -712,7 +731,7 @@ function NuevaFacturaInner() {
           </>
         ) : isEstimate ? (
           <>
-            <div className="flex gap-3 flex-wrap pb-10">
+            <div className="flex gap-3 flex-wrap pb-10" data-tour="facn-submit">
               <button type="button" disabled={saving} onClick={() => submit(true)}
                 className="bg-purple-500 hover:bg-purple-400 disabled:bg-purple-500/50 text-slate-950 font-bold text-xl py-4 px-10 rounded-xl transition display-font tracking-wide">
                 {saving ? L.saving : L.createEstimate}
@@ -723,7 +742,7 @@ function NuevaFacturaInner() {
           </>
         ) : (
           <>
-            <div className="flex gap-3 flex-wrap pb-10">
+            <div className="flex gap-3 flex-wrap pb-10" data-tour="facn-submit">
               <button type="button" disabled={saving} onClick={() => submit(false)}
                 className="bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-slate-950 font-bold text-xl py-4 px-10 rounded-xl transition display-font tracking-wide">
                 {saving ? L.saving : L.create}
@@ -747,6 +766,17 @@ const ES = {
   back: 'Volver a facturas', title: 'Nueva factura',
   docInvoice: 'Factura', docEstimate: 'Cotización',
   estimateHint: 'Cotización: no lleva número fiscal, no cobra ni baja inventario. Si el cliente acepta, se convierte en factura con un botón.',
+  docHint: 'Factura = documento fiscal que cobra y baja inventario. Cotización = presupuesto, no cobra ni lleva número.',
+  registeredDesc: 'Un cliente que ya está guardado en tu lista. Aparecen su distrito y camión si los tiene cargados.',
+  walkinDesc: 'Alguien que llega una sola vez. Escribes su nombre a mano; no se guarda como cliente.',
+  locTruckDesc: 'El distrito y el camión solo aparecen si el cliente los tiene registrados. Son opcionales.',
+  orderNumberDesc: 'El número de la orden del otro sistema, si lo tienes. Sale en la factura. Opcional.',
+  shopDesc: 'El negocio que emite la factura (01 papá / 02 hijo). Define la numeración y la tasa de impuesto.',
+  dueDateDesc: 'Hasta cuándo tiene el cliente para pagar (cuando es a crédito).',
+  pmDesc: 'Efectivo, cheque, tarjeta o depósito = ya pagada. A crédito = queda pendiente en Cuentas por cobrar.',
+  laborDesc: 'Un renglón por trabajo: qué se hizo y su precio. Marca "cobra impuesto" solo si aplica (normalmente la mano de obra no lo lleva en Florida). Elige quién trabajó y su % de comisión.',
+  partsDesc: '"De bodega" descuenta el stock y usa el costo guardado. "Suelta" es una pieza que no manejas en inventario: le pones costo (lo que te costó) y precio (lo que cobras) a mano.',
+  totalsDesc: 'El impuesto se calcula solo con la tasa del taller; puedes ponerlo a mano. El descuento resta del total.',
   createEstimate: 'Guardar cotización', editEstimateTitle: 'Editar cotización',
   stockWarn: 'Solo hay {q} en bodega; el inventario quedará en negativo al emitir.',
   editTitle: 'Editar borrador', saveChanges: 'Guardar cambios',
@@ -789,6 +819,17 @@ const EN = {
   back: 'Back to invoices', title: 'New invoice',
   docInvoice: 'Invoice', docEstimate: 'Estimate',
   estimateHint: 'Estimate: no tax number, no charge, no inventory deduction. If the customer accepts, convert it into an invoice with one click.',
+  docHint: 'Invoice = a fiscal document that charges and lowers inventory. Estimate = a quote, no charge and no number.',
+  registeredDesc: 'A customer already saved in your list. Their district and truck show if they have them.',
+  walkinDesc: 'Someone who comes once. You type their name; it isn’t saved as a customer.',
+  locTruckDesc: 'District and truck only show if the customer has them registered. Both optional.',
+  orderNumberDesc: 'The order number from the other system, if you have it. It shows on the invoice. Optional.',
+  shopDesc: 'The business issuing the invoice (01 dad / 02 son). Sets the numbering and the tax rate.',
+  dueDateDesc: 'How long the customer has to pay (when on credit).',
+  pmDesc: 'Cash, check, card or deposit = already paid. On credit = stays open in Accounts receivable.',
+  laborDesc: 'One row per job: what was done and its price. Check “charge tax” only if it applies (labor usually isn’t taxed in Florida). Pick who worked and their commission %.',
+  partsDesc: '“From warehouse” lowers stock and uses the saved cost. “One-off” is a part you don’t keep in inventory: you enter cost (what you paid) and price (what you charge) by hand.',
+  totalsDesc: 'Tax is computed automatically with the shop rate; you can enter it by hand. The discount subtracts from the total.',
   createEstimate: 'Save estimate', editEstimateTitle: 'Edit estimate',
   stockWarn: 'Only {q} in stock; inventory will go negative when emitted.',
   editTitle: 'Edit draft', saveChanges: 'Save changes',

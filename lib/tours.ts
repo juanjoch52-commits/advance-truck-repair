@@ -149,35 +149,35 @@ const TOURS: Record<string, Step[]> = {
       'Download PDF, print, view payment receipts, record a payment, void and delete. Drafts also have “Emit”.', 'left'),
   ],
 
-  // ─── Formulario de factura (modal abierto) ───
-  'factura-form': [
-    S('[data-tour="facf-doctype"]', 'Tipo de documento', 'Document type',
-      'Factura (fiscal, consume número y cobra), Cotización u Orden de trabajo (no fiscales).',
-      'Invoice (fiscal, consumes a number and charges), Estimate or Work order (non-fiscal).'),
-    S('[data-tour="facf-order"]', 'Orden de trabajo', 'Work order',
-      'Enlaza una orden ya creada; la factura hereda su número de orden y autollena cliente y camión.',
-      'Link an existing work order; the invoice inherits its order number and auto-fills client and truck.'),
-    S('[data-tour="facf-client"]', 'Cliente y camión', 'Client and truck',
-      'Elige el cliente y, opcionalmente, el camión (se filtra por cliente). Si el cliente es exento, el impuesto se pone en $0.',
-      'Pick the client and, optionally, the truck (filtered by client). If the client is exempt, tax is set to $0.'),
-    S('[data-tour="facf-shop"]', 'Taller', 'Shop',
-      'El negocio que emite la factura (define la numeración y la tasa de impuesto).',
-      'The business issuing the invoice (sets the numbering and tax rate).'),
-    S('[data-tour="facf-payment"]', 'Forma de pago', 'Payment method',
-      'Efectivo, cheque, tarjeta, depósito o crédito. Si eliges crédito, la factura queda abierta y entra a Cuentas por cobrar.',
-      'Cash, check, card, deposit or credit. If you pick credit, the invoice stays open and enters Accounts receivable.'),
-    S('[data-tour="facf-lines"]', 'Renglones', 'Line items',
-      'Agrega mano de obra y piezas. A la mano de obra puedes asignarle un mecánico y % de comisión; las piezas pueden salir de bodega (baja stock) o ser sueltas.',
-      'Add labor and parts. Labor can have a mechanic and commission %; parts can come from the warehouse (reduces stock) or be one-off.'),
-    S('[data-tour="facf-tax"]', 'Subtotal, impuesto y total', 'Subtotal, tax and total',
-      'El sales tax se calcula solo (tasa del taller × piezas gravadas). Puedes pasarlo a manual si hace falta.',
-      'Sales tax is computed automatically (shop rate × taxable parts). You can switch to manual if needed.'),
-    S('[data-tour="facf-markpaid"]', 'Marcar como pagada', 'Mark as paid',
-      'Si ya te pagaron al momento, marca esto y se registra el cobro y su comprobante de una vez.',
-      'If you were paid right away, check this and the payment and its receipt are recorded at once.'),
-    S('[data-tour="facf-submit"]', 'Crear o Guardar borrador', 'Create or Save draft',
-      'Crea la factura, o guárdala como borrador para terminar el trabajo y emitirla después (ahí se generan las comisiones).',
-      'Create the invoice, or save it as a draft to finish the work and emit it later (commissions are generated then).'),
+  // ─── Pantalla "Nueva factura" (/facturacion/nueva) — tour de página ───
+  'facturacion-nueva': [
+    S(undefined, 'Nueva factura', 'New invoice',
+      'Esta pantalla crea una factura como si llenaras una orden de trabajo. Te explico cada sección; puedes repetir este tutorial con el botón “?” de arriba o el de abajo a la derecha.',
+      'This screen creates an invoice like filling out a work order. I’ll walk you through each section; replay this anytime with the “?” button at the top or bottom-right.'),
+    S('[data-tour="facn-doctype"]', 'Factura o Cotización', 'Invoice or Estimate',
+      'Factura = documento fiscal real: lleva número, cobra y baja el inventario. Cotización = presupuesto: no cobra ni lleva número; si el cliente acepta, un botón la convierte en factura.',
+      'Invoice = a real fiscal document: it gets a number, charges and lowers inventory. Estimate = a quote: no number, no charge; if the customer accepts, one button turns it into an invoice.'),
+    S('[data-tour="facn-client"]', 'Cliente', 'Customer',
+      '“Registrado” = un cliente que ya está en tu lista (aparecen su distrito y camión si los tiene). “Ocasional” = alguien de una sola vez, cuyo nombre escribes a mano. Si el cliente es exento, el impuesto se pone en $0 solo.',
+      '“Registered” = a customer already in your list (their district and truck show if they have them). “Walk-in” = a one-time customer whose name you type. If the customer is exempt, tax is set to $0 automatically.'),
+    S('[data-tour="facn-invoice"]', 'Datos de la factura', 'Invoice details',
+      'Si el trabajo ya tiene una orden, enlázala aquí y la factura hereda su número y sus comisiones (sin pagar doble). Elige el taller (define la numeración y el impuesto), las fechas y la forma de pago: “a crédito” deja la factura pendiente en Cuentas por cobrar.',
+      'If the job already has an order, link it here and the invoice inherits its number and commissions (no double pay). Pick the shop (sets the numbering and tax), the dates and the payment method: “on credit” leaves the invoice open in Accounts receivable.'),
+    S('[data-tour="facn-insurance"]', 'Cobrar a seguro', 'Bill to insurance',
+      'Actívalo solo si paga una aseguradora: pides aseguradora y nº de reclamo, y la factura queda “a crédito” hasta que el seguro pague.',
+      'Turn it on only if an insurer pays: you enter the insurer and claim #, and the invoice stays “on credit” until the insurance pays.'),
+    S('[data-tour="facn-labor"]', 'Mano de obra', 'Labor',
+      'Cada trabajo: qué se hizo y su precio. La mano de obra normalmente no lleva impuesto en Florida (la casilla está apagada). Abajo eliges quién trabajó (hasta 2 mecánicos) y su % de comisión: de ahí sale su pago a la planilla.',
+      'Each job: what was done and its price. Labor usually isn’t taxed in Florida (the box is off). Below, pick who worked (up to 2 mechanics) and their commission %: that’s where their payroll pay comes from.'),
+    S('[data-tour="facn-parts"]', 'Piezas y repuestos', 'Parts',
+      '“De bodega” descuenta el stock y usa el costo guardado; “suelta” es una pieza que no manejas en inventario, a la que le pones costo y precio a mano.',
+      '“From warehouse” lowers stock and uses the saved cost; “one-off” is a part you don’t keep in inventory, where you enter cost and price by hand.'),
+    S('[data-tour="facn-totals"]', 'Totales', 'Totals',
+      'El impuesto se calcula solo (tasa del taller sobre lo marcado como gravable); puedes ponerlo a mano. Si el cliente ya pagó todo, marca “Marcar como pagada ahora” y se genera el comprobante.',
+      'Tax is computed automatically (shop rate on what’s marked taxable); you can enter it by hand. If the customer already paid in full, check “Mark as paid now” and the receipt is generated.'),
+    S('[data-tour="facn-submit"]', 'Crear o Guardar borrador', 'Create or Save draft',
+      'Crear = factura firme (si hay mecánicos, crea la orden y las comisiones). Guardar borrador = la dejas a medias, sin número ni inventario; la “Emites” después desde la lista.',
+      'Create = a firm invoice (with mechanics, it creates the order and commissions). Save draft = leave it unfinished, with no number or inventory; you “Emit” it later from the list.'),
   ],
 
   // ─── Cuentas por cobrar ───
@@ -298,6 +298,7 @@ export function tourKeyForPath(pathname: string): string | null {
   if (p === '' || p === '/dashboard') return 'dashboard';
   if (p === '/clientes') return 'clientes';
   if (/^\/clientes\/[^/]+$/.test(p)) return 'cliente-detalle';
+  if (p === '/facturacion/nueva') return 'facturacion-nueva';
   if (p === '/facturacion') return 'facturacion';
   if (p === '/cuentas-por-cobrar') return 'cuentas-por-cobrar';
   if (p === '/ordenes') return 'ordenes';
