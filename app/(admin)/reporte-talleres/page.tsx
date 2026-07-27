@@ -18,6 +18,7 @@ interface ShopRow {
   num_facturas: number;
 }
 interface Totals { facturado: number; sales_tax: number; costo_piezas: number; ganancia_piezas: number; cobrado: number; por_cobrar: number; num_facturas: number }
+interface Labor { facturada: number; pagada: number; margen: number }
 
 function firstOfMonth() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10); }
 function firstOfQuarter() { const d = new Date(); const q = Math.floor(d.getMonth() / 3) * 3; return new Date(d.getFullYear(), q, 1).toISOString().slice(0, 10); }
@@ -33,6 +34,7 @@ export default function ReporteTalleresPage() {
   const [to, setTo] = useState(todayISO());
   const [shops, setShops] = useState<ShopRow[]>([]);
   const [totals, setTotals] = useState<Totals | null>(null);
+  const [labor, setLabor] = useState<Labor | null>(null);
   const [loading, setLoading] = useState(true);
   const [allowed, setAllowed] = useState<boolean | null>(null);
 
@@ -48,9 +50,9 @@ export default function ReporteTalleresPage() {
     setLoading(true);
     try {
       const r = await fetch(`/api/reportes/talleres?from=${from}&to=${to}`);
-      if (r.ok) { const j = await r.json(); setShops(j.shops ?? []); setTotals(j.totals ?? null); }
-      else { setShops([]); setTotals(null); }
-    } catch { setShops([]); setTotals(null); }
+      if (r.ok) { const j = await r.json(); setShops(j.shops ?? []); setTotals(j.totals ?? null); setLabor(j.labor ?? null); }
+      else { setShops([]); setTotals(null); setLabor(null); }
+    } catch { setShops([]); setTotals(null); setLabor(null); }
     setLoading(false);
   }, [from, to]);
 
@@ -89,6 +91,14 @@ export default function ReporteTalleresPage() {
       doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(INK, INK, INK);
       doc.text(`${t('shopReport.partsProfit')} (${t('shopReport.total').toLowerCase()}): ${money(totals.ganancia_piezas)}`, M, y);
       y += 16;
+    }
+    if (labor) {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(INK, INK, INK);
+      doc.text(`${t('shopReport.laborTitle')} (${t('shopReport.laborSubtitle')}):`, M, y);
+      y += 14;
+      doc.setFont('helvetica', 'normal');
+      doc.text(`${t('shopReport.laborBilled')}: ${money(labor.facturada)}    ${t('shopReport.laborPaid')}: ${money(labor.pagada)}    ${t('shopReport.laborMargin')}: ${money(labor.margen)}`, M, y);
+      y += 18;
     }
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(SOFT, SOFT, SOFT);
     doc.text(t('shopReport.cpaNote'), M, y, { maxWidth: W - M * 2 });
@@ -192,6 +202,18 @@ export default function ReporteTalleresPage() {
                 <Metric label={t('shopReport.partsProfit')} value={money(totals.ganancia_piezas)} accent="text-emerald-300" />
                 <Metric label={t('shopReport.collected')} value={money(totals.cobrado)} accent="text-emerald-300" />
                 <Metric label={t('shopReport.receivable')} value={money(totals.por_cobrar)} accent="text-orange-300" />
+              </div>
+            </div>
+          )}
+
+          {labor && (
+            <div className="bg-indigo-500/5 border border-indigo-500/20 rounded-xl p-5">
+              <p className="display-font text-indigo-300 font-semibold tracking-wide mb-1">{t('shopReport.laborTitle')}</p>
+              <p className="text-slate-500 text-xs mb-4">{t('shopReport.laborSubtitle')}</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <Metric label={t('shopReport.laborBilled')} value={money(labor.facturada)} accent="text-amber-300" />
+                <Metric label={t('shopReport.laborPaid')} value={money(labor.pagada)} accent="text-red-300" />
+                <Metric label={t('shopReport.laborMargin')} value={money(labor.margen)} accent="text-emerald-300" />
               </div>
             </div>
           )}

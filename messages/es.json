@@ -990,12 +990,17 @@
     "total": "TOTAL (todos los talleres)",
     "empty": "No hay facturas en este periodo.",
     "emptyHint": "Aparecerá cuando emitas facturas con taller en este rango de fechas.",
-    "cpaNote": "El costo de TODAS las piezas se carga al taller papá (01); cada taller conserva el ingreso de sus facturas y los negocios se ajustan entre ellos (préstamo). No incluye el reparto de mano de obra. El tratamiento fiscal lo valida el CPA.",
+    "cpaNote": "El costo de TODAS las piezas se carga al taller papá (01); cada taller conserva el ingreso de sus facturas y los negocios se ajustan entre ellos (préstamo). La mano de obra (facturada y pagada) se reporta unificada para ambos talleres, no se atribuye por taller. El tratamiento fiscal lo valida el CPA.",
     "partsCost": "Costo piezas",
     "exportPdf": "Exportar PDF",
     "business": "Negocio / Taller",
     "printed": "Impreso",
-    "absorbsCostsNote": "Incluye el costo de las piezas de ambos talleres (cargado al papá)."
+    "absorbsCostsNote": "Incluye el costo de las piezas de ambos talleres (cargado al papá).",
+    "laborTitle": "Mano de obra (unificada, ambos talleres)",
+    "laborSubtitle": "No se separa por taller: los mecánicos son compartidos",
+    "laborBilled": "Mano de obra facturada",
+    "laborPaid": "Pago a mecánicos",
+    "laborMargin": "Margen de mano de obra"
   },
   "salesReport": {
     "title": "INFORME DE VENTAS",

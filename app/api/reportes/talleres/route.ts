@@ -7,9 +7,11 @@ import { authErrorResponse } from '@/lib/apiAuth';
 // GET /api/reportes/talleres?from=YYYY-MM-DD&to=YYYY-MM-DD
 // Resumen financiero por taller (negocio) en un periodo: facturado, sales tax
 // cobrado, cobrado/por cobrar, ganancia en piezas y # de facturas.
-// Solo cuenta FACTURAS fiscales no anuladas/borrador. NO incluye el costo de
-// mano de obra repartido entre talleres (eso es el esquema intercompany,
-// pendiente de validación del CPA).
+// Solo cuenta FACTURAS fiscales no anuladas/borrador.
+// La MANO DE OBRA (facturada al cliente + pagada a mecánicos) se reporta
+// UNIFICADA para ambos talleres, en un solo bloque a nivel total — decisión
+// del dueño: no se atribuye por taller (los mecánicos son compartidos), así se
+// evita el reparto intercompany. Ver `labor` en la respuesta.
 export async function GET(request: Request) {
   try {
     const supabase = await requireShopsAccess();
@@ -35,18 +37,40 @@ export async function GET(request: Request) {
     const invIds = invList.map((i: any) => i.id);
 
     // Piezas por factura: costo (gasto atribuible al taller) y ganancia (cobrado − costo).
+    // La mano de obra facturada se suma UNIFICADA (no por taller).
     const profitByInvoice: Record<string, number> = {};
     const costByInvoice: Record<string, number> = {};
+    let laborBilled = 0; // Σ renglones de mano de obra de TODAS las facturas (ambos talleres)
     if (invIds.length) {
       const { data: items } = await supabase
         .from('invoice_items').select('invoice_id,line_type,amount,cost,qty').in('invoice_id', invIds);
       for (const it of items ?? []) {
+        if (it.line_type === 'labor') {
+          laborBilled = round2(laborBilled + Number(it.amount));
+          continue;
+        }
         if (it.line_type !== 'part') continue;
         const cost = round2(Number(it.cost) * Number(it.qty));
         profitByInvoice[it.invoice_id] = round2((profitByInvoice[it.invoice_id] ?? 0) + (Number(it.amount) - cost));
         costByInvoice[it.invoice_id] = round2((costByInvoice[it.invoice_id] ?? 0) + cost);
       }
     }
+
+    // Pago a mecánicos UNIFICADO: comisiones de mecánicos (earned_entries tipo
+    // 'mechanic') generadas en el periodo, sin separar por taller. Origen único
+    // (factura emitida u orden), ya agregado a nivel de negocio combinado.
+    let laborPaid = 0;
+    {
+      const { data: entries, error: entErr } = await supabase
+        .from('earned_entries')
+        .select('amount')
+        .eq('entry_type', 'mechanic')
+        .gte('work_date', from)
+        .lte('work_date', to);
+      if (entErr) return NextResponse.json({ error: sanitizeDbError('reportes/talleres.earned', entErr.message) }, { status: 500 });
+      for (const e of entries ?? []) laborPaid = round2(laborPaid + Number(e.amount));
+    }
+    const labor = { facturada: laborBilled, pagada: laborPaid, margen: round2(laborBilled - laborPaid) };
 
     // Taller que absorbe TODO el costo de piezas: el papá (business_code '01').
     // Decisión del dueño: las compras/costos de piezas se cargan al papá; los dos
@@ -99,7 +123,7 @@ export async function GET(request: Request) {
       num_facturas: rows.reduce((s, r) => s + r.num_facturas, 0),
     };
 
-    return NextResponse.json({ from, to, papa_shop_id: papaShopId, shops: rows, totals });
+    return NextResponse.json({ from, to, papa_shop_id: papaShopId, shops: rows, totals, labor });
   } catch (err) {
     const authResp = authErrorResponse(err);
     if (authResp) return authResp;

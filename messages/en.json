@@ -990,12 +990,17 @@
     "total": "TOTAL (all shops)",
     "empty": "No invoices in this period.",
     "emptyHint": "It will appear once you issue invoices with a shop in this date range.",
-    "cpaNote": "All parts cost is charged to the parent shop (01); each shop keeps its own invoice income and the businesses settle between them (loan). Does not include labor allocation. The CPA validates the tax treatment.",
+    "cpaNote": "All parts cost is charged to the parent shop (01); each shop keeps its own invoice income and the businesses settle between them (loan). Labor (billed and paid) is reported unified for both shops, not attributed per shop. The CPA validates the tax treatment.",
     "partsCost": "Parts cost",
     "exportPdf": "Export PDF",
     "business": "Business / Shop",
     "printed": "Printed",
-    "absorbsCostsNote": "Includes parts cost from both shops (charged to the parent)."
+    "absorbsCostsNote": "Includes parts cost from both shops (charged to the parent).",
+    "laborTitle": "Labor (unified, both shops)",
+    "laborSubtitle": "Not split by shop: mechanics are shared",
+    "laborBilled": "Labor billed",
+    "laborPaid": "Paid to mechanics",
+    "laborMargin": "Labor margin"
   },
   "salesReport": {
     "title": "SALES REPORT",
