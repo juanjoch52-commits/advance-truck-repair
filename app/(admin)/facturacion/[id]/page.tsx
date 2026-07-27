@@ -60,18 +60,30 @@ export default function FacturaDetallePage() {
   const creditsTotal = credits.reduce((s, c) => s + Number(c.amount), 0);
 
   // ─── Acciones ───
-  async function emitir(force = false) {
+  // Modal de emisión: permite cobrar (marcar pagada) en el mismo paso.
+  const [emitOpen, setEmitOpen] = useState(false);
+  const [emitPaid, setEmitPaid] = useState(true);
+  function openEmit() {
+    setEmitPaid(inv?.payment_method !== 'credit');
+    setEmitOpen(true);
+  }
+  function confirmEmit() {
+    emitir(false, emitPaid && inv?.payment_method !== 'credit');
+  }
+
+  async function emitir(force = false, markPaid = false) {
     setBusy(true);
     const res = await fetch(`/api/facturas/${id}/emitir`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force, mark_paid: markPaid }),
     });
     const j = await res.json().catch(() => ({}));
     setBusy(false);
     if (res.status === 409 && j.error === 'pending_tasks') {
-      if (confirm(t('invoices.emitPendingConfirm').replace('{n}', String(j.pending)))) emitir(true);
+      if (confirm(t('invoices.emitPendingConfirm').replace('{n}', String(j.pending)))) emitir(true, markPaid);
       return;
     }
     if (!res.ok) { alert(j.error ?? 'Error'); return; }
+    setEmitOpen(false);
     alert(j.commissions_created > 0
       ? t('invoices.emitDoneCommissions').replace('{n}', String(j.commissions_created)).replace('{a}', money(j.commissions_total))
       : t('invoices.emitDone'));
@@ -187,6 +199,43 @@ export default function FacturaDetallePage() {
 
   return (
     <div className="max-w-4xl">
+      {/* Modal emitir (permite cobrar en el mismo paso) */}
+      {emitOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-emerald-500/20 rounded-2xl p-6 w-full max-w-md my-8 shadow-2xl">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="display-font text-slate-100 font-bold text-lg tracking-wide">{L.emitTitle}</h2>
+              <button onClick={() => setEmitOpen(false)} className="text-slate-500 hover:text-slate-300 p-1.5 rounded-lg hover:bg-slate-700 transition">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <p className="text-slate-400 text-sm mb-4">{inv.document_number || t('invoices.draftLabel')}</p>
+            <p className="text-slate-400 text-sm mb-4">{L.emitBody}</p>
+            <div className="flex items-center justify-between bg-slate-800/60 rounded-xl px-4 py-3 mb-4">
+              <span className="text-slate-400">{L.emitTotal}</span>
+              <span className="text-amber-300 text-2xl font-bold display-font">{money(inv.total)}</span>
+            </div>
+            {inv.payment_method === 'credit' ? (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 text-amber-300 text-sm mb-4">{L.emitCreditNote}</div>
+            ) : (
+              <label className="flex items-start gap-3 mb-4 cursor-pointer">
+                <input type="checkbox" checked={emitPaid} onChange={e => setEmitPaid(e.target.checked)} className="accent-emerald-500 w-6 h-6 mt-0.5" />
+                <span className="text-slate-200">
+                  {L.emitPaidLabel} <span className="text-slate-500">· {t(`invoices.pm.${inv.payment_method}`)}</span>
+                  <span className="block text-slate-500 text-sm mt-0.5">{emitPaid ? L.emitPaidNote : L.emitOpenNote}</span>
+                </span>
+              </label>
+            )}
+            <div className="flex gap-3">
+              <button onClick={confirmEmit} disabled={busy} className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold py-2.5 px-6 rounded-lg transition display-font tracking-wide">
+                {busy ? t('common.saving') : t('invoices.emit')}
+              </button>
+              <button onClick={() => setEmitOpen(false)} className="bg-slate-700 hover:bg-slate-600 text-slate-300 py-2.5 px-5 rounded-lg transition text-sm">{t('common.cancel')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <a href="/facturacion" className="text-slate-400 hover:text-slate-200 text-base flex items-center gap-1.5 mb-4">
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
         {L.back}
@@ -229,7 +278,7 @@ export default function FacturaDetallePage() {
           </a>
         )}
         {isDraftInvoice && (
-          <button onClick={() => emitir()} disabled={busy} className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold px-5 py-2.5 rounded-lg transition display-font tracking-wide">
+          <button onClick={openEmit} disabled={busy} className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold px-5 py-2.5 rounded-lg transition display-font tracking-wide">
             {t('invoices.emit')}
           </button>
         )}
@@ -539,6 +588,13 @@ const ES = {
   registerDone: 'Cliente registrado y enlazado a la factura.', registerReused: 'Ya existía un cliente con ese nombre; se enlazó la factura a esa ficha.',
   workOrder: 'Orden de trabajo', workOrderLinked: 'Esta factura está enlazada a una orden de trabajo (sus comisiones ya están en planilla).',
   seeOrders: 'Ver órdenes →',
+  emitTitle: 'Emitir factura',
+  emitBody: 'Al emitir se asigna el número fiscal, se baja el inventario y se generan las comisiones de los mecánicos.',
+  emitTotal: 'Total a cobrar',
+  emitPaidLabel: 'El cliente ya pagó el total',
+  emitPaidNote: 'Se registrará el pago y su comprobante automáticamente.',
+  emitOpenNote: 'La factura quedará pendiente de pago (por cobrar).',
+  emitCreditNote: 'A crédito: la factura queda pendiente de pago; registra el pago cuando el cliente pague.',
 };
 const EN = {
   back: 'Back to invoices', notFound: 'Could not load the invoice.',
@@ -559,4 +615,11 @@ const EN = {
   registerDone: 'Client registered and linked to the invoice.', registerReused: 'A client with that name already existed; the invoice was linked to it.',
   workOrder: 'Work order', workOrderLinked: 'This invoice is linked to a work order (its commissions are already in payroll).',
   seeOrders: 'View orders →',
+  emitTitle: 'Emit invoice',
+  emitBody: 'Emitting assigns the tax number, lowers inventory and generates the mechanics’ commissions.',
+  emitTotal: 'Amount to charge',
+  emitPaidLabel: 'The customer already paid in full',
+  emitPaidNote: 'The payment and its receipt will be recorded automatically.',
+  emitOpenNote: 'The invoice will stay unpaid (receivable).',
+  emitCreditNote: 'On credit: the invoice stays unpaid; record the payment when the customer pays.',
 };

@@ -225,6 +225,10 @@ export default function FacturacionPage() {
   const [draftItems, setDraftItems] = useState<Record<string, any[]>>({});
   const [expandedDraft, setExpandedDraft] = useState<string | null>(null);
   const [emittingId, setEmittingId] = useState<string | null>(null);
+  // Modal de emisión: permite marcar la factura como PAGADA en el mismo paso
+  // (paridad con "Marcar como pagada ahora" del alta directa).
+  const [emitFor, setEmitFor] = useState<Invoice | null>(null);
+  const [emitPaid, setEmitPaid] = useState(true);
 
   async function loadDraftItems(invId: string) {
     try {
@@ -247,19 +251,30 @@ export default function FacturacionPage() {
     loadDraftItems(invId);
   }
 
-  async function emitInvoice(inv: Invoice, force = false) {
+  // Abre el modal de emisión (por defecto marca pagada si NO es a crédito).
+  function openEmit(inv: Invoice) {
+    setEmitFor(inv);
+    setEmitPaid(inv.payment_method !== 'credit');
+  }
+  function confirmEmit() {
+    if (!emitFor) return;
+    emitInvoice(emitFor, false, emitPaid && emitFor.payment_method !== 'credit');
+  }
+
+  async function emitInvoice(inv: Invoice, force = false, markPaid = false) {
     setEmittingId(inv.id);
     const res = await fetch(`/api/facturas/${inv.id}/emitir`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ force }),
+      body: JSON.stringify({ force, mark_paid: markPaid }),
     });
     const j = await res.json().catch(() => ({}));
     setEmittingId(null);
     if (res.status === 409 && j.error === 'pending_tasks') {
-      if (confirm(t('invoices.emitPendingConfirm').replace('{n}', String(j.pending)))) emitInvoice(inv, true);
+      if (confirm(t('invoices.emitPendingConfirm').replace('{n}', String(j.pending)))) emitInvoice(inv, true, markPaid);
       return;
     }
     if (!res.ok) { alert(j.error ?? 'Error'); return; }
+    setEmitFor(null);
     const msg = j.commissions_created > 0
       ? t('invoices.emitDoneCommissions').replace('{n}', String(j.commissions_created)).replace('{a}', money(j.commissions_total))
       : t('invoices.emitDone');
@@ -270,6 +285,43 @@ export default function FacturacionPage() {
 
   return (
     <div>
+      {/* Modal emitir */}
+      {emitFor && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-emerald-500/20 rounded-2xl p-6 w-full max-w-md my-8 shadow-2xl">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="display-font text-slate-100 font-bold text-lg tracking-wide">{L.emitTitle}</h2>
+              <button onClick={() => setEmitFor(null)} className="text-slate-500 hover:text-slate-300 p-1.5 rounded-lg hover:bg-slate-700 transition">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <p className="text-slate-400 text-sm mb-4">{emitFor.document_number || t('invoices.draftLabel')} · {emitFor.client_name ?? emitFor.customer_name ?? t('invoices.noClient')}</p>
+            <p className="text-slate-400 text-sm mb-4">{L.emitBody}</p>
+            <div className="flex items-center justify-between bg-slate-800/60 rounded-xl px-4 py-3 mb-4">
+              <span className="text-slate-400">{L.emitTotal}</span>
+              <span className="text-amber-300 text-2xl font-bold display-font">{money(emitFor.total)}</span>
+            </div>
+            {emitFor.payment_method === 'credit' ? (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 text-amber-300 text-sm mb-4">{L.emitCreditNote}</div>
+            ) : (
+              <label className="flex items-start gap-3 mb-4 cursor-pointer">
+                <input type="checkbox" checked={emitPaid} onChange={e => setEmitPaid(e.target.checked)} className="accent-emerald-500 w-6 h-6 mt-0.5" />
+                <span className="text-slate-200">
+                  {L.emitPaidLabel} <span className="text-slate-500">· {t(`invoices.pm.${emitFor.payment_method}`)}</span>
+                  <span className="block text-slate-500 text-sm mt-0.5">{emitPaid ? L.emitPaidNote : L.emitOpenNote}</span>
+                </span>
+              </label>
+            )}
+            <div className="flex gap-3">
+              <button onClick={confirmEmit} disabled={emittingId === emitFor.id} className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold py-2.5 px-6 rounded-lg transition display-font tracking-wide">
+                {emittingId === emitFor.id ? t('common.saving') : t('invoices.emit')}
+              </button>
+              <button onClick={() => setEmitFor(null)} className="bg-slate-700 hover:bg-slate-600 text-slate-300 py-2.5 px-5 rounded-lg transition text-sm">{t('common.cancel')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal pago */}
       {payFor && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto">
@@ -455,7 +507,7 @@ export default function FacturacionPage() {
                     <button onClick={() => toggleDraft(inv.id)} className="text-xs px-2.5 py-1.5 rounded border border-white/10 text-slate-300 hover:bg-slate-700 transition">
                       {expandedDraft === inv.id ? t('invoices.hideTasks') : t('invoices.viewTasks')}
                     </button>
-                    <button onClick={() => emitInvoice(inv)} disabled={emittingId === inv.id} className="text-xs font-bold px-3 py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 transition display-font">
+                    <button onClick={() => openEmit(inv)} disabled={emittingId === inv.id} className="text-xs font-bold px-3 py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 transition display-font">
                       {emittingId === inv.id ? t('common.saving') : t('invoices.emit')}
                     </button>
                   </>
@@ -567,6 +619,13 @@ const ES = {
   estimatesFilter: 'Cotizaciones',
   convert: 'CONVERTIR EN FACTURA', converted: 'Convertida',
   convertConfirm: '¿Convertir esta cotización en una factura borrador? La cotización queda marcada como convertida.',
+  emitTitle: 'Emitir factura',
+  emitBody: 'Al emitir se asigna el número fiscal, se baja el inventario y se generan las comisiones de los mecánicos.',
+  emitTotal: 'Total a cobrar',
+  emitPaidLabel: 'El cliente ya pagó el total',
+  emitPaidNote: 'Se registrará el pago y su comprobante automáticamente.',
+  emitOpenNote: 'La factura quedará pendiente de pago (por cobrar).',
+  emitCreditNote: 'A crédito: la factura queda pendiente de pago; registra el pago cuando el cliente pague.',
   ins: { sent: 'Enviado', approved: 'Aprobado', partial: 'Pago parcial', paid: 'Pagado', denied: 'Negado' } as Record<string, string>,
   csv: { number: 'Número', type: 'Tipo', status: 'Estado', date: 'Fecha', due: 'Vence', client: 'Cliente', truck: 'Camión', order: 'Orden', method: 'Método', subtotal: 'Subtotal', tax: 'Impuesto', discount: 'Descuento', total: 'Total', paid: 'Pagado', balance: 'Saldo', insurance: 'Aseguradora', insuranceStatus: 'Estado seguro' },
 };
@@ -577,6 +636,13 @@ const EN = {
   estimatesFilter: 'Estimates',
   convert: 'CONVERT TO INVOICE', converted: 'Converted',
   convertConfirm: 'Convert this estimate into a draft invoice? The estimate will be marked as converted.',
+  emitTitle: 'Emit invoice',
+  emitBody: 'Emitting assigns the tax number, lowers inventory and generates the mechanics’ commissions.',
+  emitTotal: 'Amount to charge',
+  emitPaidLabel: 'The customer already paid in full',
+  emitPaidNote: 'The payment and its receipt will be recorded automatically.',
+  emitOpenNote: 'The invoice will stay unpaid (receivable).',
+  emitCreditNote: 'On credit: the invoice stays unpaid; record the payment when the customer pays.',
   ins: { sent: 'Sent', approved: 'Approved', partial: 'Partially paid', paid: 'Paid', denied: 'Denied' } as Record<string, string>,
   csv: { number: 'Number', type: 'Type', status: 'Status', date: 'Date', due: 'Due', client: 'Customer', truck: 'Truck', order: 'Order', method: 'Method', subtotal: 'Subtotal', tax: 'Tax', discount: 'Discount', total: 'Total', paid: 'Paid', balance: 'Balance', insurance: 'Insurer', insuranceStatus: 'Insurance status' },
 };
