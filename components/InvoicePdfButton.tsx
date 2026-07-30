@@ -40,14 +40,11 @@ async function loadLogo(url: string, maxW: number, maxH: number): Promise<{ data
   }
 }
 
-export function InvoicePdfButton({ invoiceId, className, mode = 'download' }: { invoiceId: string; className?: string; mode?: 'download' | 'print' }) {
-  const [generating, setGenerating] = useState(false);
-
-  async function handleGenerate() {
-    setGenerating(true);
-    try {
+// Construye el PDF de la factura (mismo diseño para descargar, imprimir y enviar
+// por correo). Devuelve el doc jsPDF + datos, SIN guardar/imprimir.
+export async function buildInvoicePdf(invoiceId: string): Promise<{ doc: jsPDF; invoice: any; client: any; filename: string }> {
       const res = await fetch(`/api/facturas/${invoiceId}`);
-      if (!res.ok) { alert('No se pudo cargar la factura.'); return; }
+      if (!res.ok) throw new Error('No se pudo cargar la factura.');
       const { invoice, items, client, shop, truck } = await res.json();
 
       // ── Página / paleta ahorradora de tinta (solo grises) ──
@@ -221,15 +218,28 @@ export function InvoicePdfButton({ invoiceId, className, mode = 'download' }: { 
       doc.text('Thank you for your business', PAGE_W - M, FOOTER_Y, { align: 'right' });
 
       const fileLabel = (DOC_TITLE[docType] || 'INVOICE').replace(/\s+/g, '');
+      const filename = `${fileLabel}_${invoice.document_number || invoiceId}.pdf`;
+      return { doc, invoice, client, filename };
+}
+
+export function InvoicePdfButton({ invoiceId, className, mode = 'download' }: { invoiceId: string; className?: string; mode?: 'download' | 'print' }) {
+  const [generating, setGenerating] = useState(false);
+
+  async function handleGenerate() {
+    setGenerating(true);
+    try {
+      const { doc, invoice, filename } = await buildInvoicePdf(invoiceId);
       if (mode === 'print') {
         // Abre el PDF en una pestaña y lanza el diálogo de impresión (sin descargar).
         doc.autoPrint();
         const url = doc.output('bloburl');
         const w = window.open(url, '_blank');
-        if (!w) { doc.save(`${fileLabel}_${invoice.document_number || invoiceId}.pdf`); } // si el navegador bloquea el popup, cae a descarga
+        if (!w) { doc.save(filename); } // si el navegador bloquea el popup, cae a descarga
       } else {
-        doc.save(`${fileLabel}_${invoice.document_number || invoiceId}.pdf`);
+        doc.save(filename);
       }
+    } catch (e: any) {
+      alert(e?.message || 'No se pudo generar el PDF.');
     } finally {
       setGenerating(false);
     }

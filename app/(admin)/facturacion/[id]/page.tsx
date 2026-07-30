@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { InvoicePdfButton } from '@/components/InvoicePdfButton';
+import { EmailInvoiceButton } from '@/components/EmailInvoiceButton';
 import { PaymentReceiptButton } from '@/components/PaymentReceiptButton';
 import { fmtDate } from '@/lib/fmt';
 
@@ -310,6 +311,8 @@ export default function FacturaDetallePage() {
         <span className="flex-1" />
         <InvoicePdfButton invoiceId={inv.id} className="bg-slate-800 hover:bg-slate-700 border border-white/10 text-slate-300 p-2.5 rounded-lg transition" />
         <InvoicePdfButton invoiceId={inv.id} mode="print" className="bg-slate-800 hover:bg-slate-700 border border-white/10 text-slate-300 p-2.5 rounded-lg transition" />
+        {/* Enviar por correo — solo visible si NEXT_PUBLIC_EMAIL_ENABLED=true (apagado por ahora). */}
+        <EmailInvoiceButton invoiceId={inv.id} defaultEmail={client?.email ?? ''} className="bg-slate-800 hover:bg-slate-700 border border-white/10 text-slate-300 p-2.5 rounded-lg transition" />
         {!isVoid && (
           <button onClick={anular} disabled={busy} className="bg-slate-800 hover:bg-orange-500/10 border border-white/10 hover:border-orange-500/40 text-slate-400 hover:text-orange-300 px-4 py-2.5 rounded-lg transition text-sm">
             {t('invoices.void')}
