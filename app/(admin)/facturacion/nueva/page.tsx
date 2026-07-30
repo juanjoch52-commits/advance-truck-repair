@@ -22,13 +22,13 @@ interface InvItem { id: string; name: string; part_number: string | null; sale_p
 interface WorkOrderOpt { id: string; external_order_number: string | null; company: string | null; truck_number: string | null; work_date: string | null; client_id: string | null; truck_id: string | null }
 
 interface Mech { id: string; employee_id: string; commission_pct: string }
-interface Task { id: string; description: string; amount: string; mechanics: Mech[]; taxable: boolean }
+interface Task { id: string; description: string; qty: string; amount: string; mechanics: Mech[]; taxable: boolean }
 interface Part { id: string; description: string; qty: string; unit_price: string; cost: string; part_source: PartSource; inventory_item_id: string; taxable: boolean }
 
 let seq = 0;
 const uid = () => `r${++seq}`;
 const newMech = (pct = 50): Mech => ({ id: uid(), employee_id: '', commission_pct: String(pct) });
-const newTask = (): Task => ({ id: uid(), description: '', amount: '', mechanics: [newMech()], taxable: false });
+const newTask = (): Task => ({ id: uid(), description: '', qty: '1', amount: '', mechanics: [newMech()], taxable: false });
 const newPart = (): Part => ({ id: uid(), description: '', qty: '1', unit_price: '', cost: '', part_source: 'new_purchased', inventory_item_id: '', taxable: true });
 
 const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
@@ -71,6 +71,16 @@ function NuevaFacturaInner() {
   const [clientId, setClientId] = useState('');
   const [locationId, setLocationId] = useState('');
   const [truckId, setTruckId] = useState('');
+
+  // Alta rápida de cliente desde la propia factura (modal).
+  const [newClientOpen, setNewClientOpen] = useState(false);
+  const [ncName, setNcName] = useState('');
+  const [ncType, setNcType] = useState<'corporate' | 'individual'>('corporate');
+  const [ncPhone, setNcPhone] = useState('');
+  const [ncExempt, setNcExempt] = useState(false);
+  const [ncCert, setNcCert] = useState('');
+  const [ncSaving, setNcSaving] = useState(false);
+  const [ncError, setNcError] = useState('');
 
   // Tipo de documento: factura fiscal o cotización (estimate, sin número fiscal,
   // no cobra ni baja inventario; luego se puede CONVERTIR en factura).
@@ -166,6 +176,7 @@ function NuevaFacturaInner() {
           setTasks(laborItems.map((it: any) => ({
             id: uid(),
             description: it.description ?? '',
+            qty: String(Number(it.qty ?? 1)),
             amount: String(Number(it.unit_price ?? it.amount ?? 0)),
             taxable: !!it.taxable,
             mechanics: (it.assignments && it.assignments.length)
@@ -206,6 +217,34 @@ function NuevaFacturaInner() {
     else { setCustomerName(''); setCustomerCompany(''); setCustomerPhone(''); setCustomerTruck(''); }
   }
 
+  function openNewClient() {
+    setNcName(''); setNcType('corporate'); setNcPhone(''); setNcExempt(false); setNcCert(''); setNcError('');
+    setNewClientOpen(true);
+  }
+  async function saveNewClient() {
+    if (!ncName.trim()) { setNcError(L.errWalkinName); return; }
+    setNcSaving(true); setNcError('');
+    try {
+      const res = await fetch('/api/clientes', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: ncName.trim(), client_type: ncType, phone: ncPhone.trim() || null,
+          tax_exempt: ncExempt, tax_exempt_certificate: ncExempt ? (ncCert.trim() || null) : null,
+        }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) { setNcError(j?.error || L.ncFail); setNcSaving(false); return; }
+      const c = j.client;
+      // Insertar en el catálogo local (sin distritos/camiones aún) y seleccionarlo.
+      const opt: ClientOpt = { id: c.id, name: c.name, tax_exempt: !!c.tax_exempt, tax_exempt_certificate: c.tax_exempt_certificate ?? null, locations: [], trucks: [] };
+      setClients(prev => [opt, ...prev.filter(p => p.id !== c.id)].sort((a, b) => a.name.localeCompare(b.name)));
+      setWalkin(false);
+      onSelectClient(c.id);
+      setNewClientOpen(false);
+    } catch { setNcError(L.ncFail); }
+    setNcSaving(false);
+  }
+
   // ─── Partir de una orden existente (opcional): solo enlaza, no recrea comisión ───
   function onPickWorkOrder(id: string) {
     setWorkReportId(id);
@@ -218,7 +257,8 @@ function NuevaFacturaInner() {
   const linkedToOrder = !!workReportId;
 
   // ─── Tareas (mano de obra) ───
-  const taskAmount = (tk: Task) => parseFloat(tk.amount) || 0;
+  // Total de la tarea = cantidad × precio unitario (la comisión se calcula sobre este total).
+  const taskAmount = (tk: Task) => round2((parseFloat(tk.qty) || 0) * (parseFloat(tk.amount) || 0));
   const usedPct = (tk: Task) => tk.mechanics.reduce((s, m) => s + (parseFloat(m.commission_pct) || 0), 0);
   const mechPayout = (tk: Task, m: Mech) => round2(taskAmount(tk) * (parseFloat(m.commission_pct) || 0) / 100);
   function addTask() { setTasks(p => [...p, newTask()]); }
@@ -270,8 +310,8 @@ function NuevaFacturaInner() {
       .map(tk => ({
         line_type: 'labor',
         description: tk.description.trim(),
-        qty: 1,
-        unit_price: taskAmount(tk),
+        qty: parseFloat(tk.qty) || 1,
+        unit_price: parseFloat(tk.amount) || 0,
         taxable: tk.taxable,
         assignments: tk.mechanics.filter(m => m.employee_id).map(m => ({ employee_id: m.employee_id, commission_pct: parseFloat(m.commission_pct) || 0 })),
       }));
@@ -433,6 +473,11 @@ function NuevaFacturaInner() {
                   <option value="">{L.selectClient}</option>
                   {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.tax_exempt ? ' ★' : ''}</option>)}
                 </select>
+                <button type="button" onClick={openNewClient}
+                  className="mt-2 text-sky-300 hover:text-sky-200 text-base flex items-center gap-1.5 border border-sky-500/30 hover:border-sky-500/50 rounded-lg px-3 py-2 transition">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                  {L.newClient}
+                </button>
               </div>
               <div>
                 <label className={label}>{L.location}</label>
@@ -548,14 +593,22 @@ function NuevaFacturaInner() {
                       <button type="button" onClick={() => removeTask(tk.id)} className="text-slate-500 hover:text-red-400 text-base">✕ {L.remove}</button>
                     )}
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-                    <div className="md:col-span-2">
-                      <label className={label}>{L.taskDesc}</label>
-                      <input value={tk.description} onChange={e => updTask(tk.id, { description: e.target.value })} placeholder={L.taskDescHint} className={input} />
+                  <div className="mb-4">
+                    <label className={label}>{L.taskDesc}</label>
+                    <input value={tk.description} onChange={e => updTask(tk.id, { description: e.target.value })} placeholder={L.taskDescHint} className={input} />
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end mb-4">
+                    <div>
+                      <label className={label}>{L.qty}</label>
+                      <input type="number" min="0" step="1" value={tk.qty} onChange={e => updTask(tk.id, { qty: e.target.value })} placeholder="1" className={input} />
                     </div>
                     <div>
-                      <label className={label}>{L.amount}</label>
+                      <label className={label}>{L.unitPriceLabor}</label>
                       <input type="number" min="0" step="0.01" value={tk.amount} onChange={e => updTask(tk.id, { amount: e.target.value })} placeholder="0.00" className={input} />
+                    </div>
+                    <div className="col-span-2 md:text-right">
+                      <label className={label}>{L.lineTotal}</label>
+                      <span className="text-emerald-300 text-xl font-semibold block py-2.5">{money(taskAmount(tk))}</span>
                     </div>
                   </div>
 
@@ -757,6 +810,62 @@ function NuevaFacturaInner() {
           </>
         )}
       </div>
+
+      {/* ─── Modal: alta rápida de cliente ─── */}
+      {newClientOpen && (
+        <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-black/60 p-4 overflow-y-auto" onClick={() => !ncSaving && setNewClientOpen(false)}>
+          <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 md:p-7 w-full max-w-lg my-8" onClick={e => e.stopPropagation()}>
+            <h2 className="display-font text-slate-100 font-bold text-2xl tracking-wide mb-1">{L.newClientTitle}</h2>
+            <p className={`${hint} mb-5`}>{L.newClientDesc}</p>
+
+            <div className="space-y-4">
+              <div className="flex gap-3 flex-wrap">
+                <button type="button" onClick={() => setNcType('corporate')}
+                  className={`px-5 py-3 rounded-xl text-lg border transition ${ncType === 'corporate' ? 'bg-amber-500/15 border-amber-500/50 text-amber-200 font-semibold' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'}`}>
+                  {L.typeCompany}
+                </button>
+                <button type="button" onClick={() => setNcType('individual')}
+                  className={`px-5 py-3 rounded-xl text-lg border transition ${ncType === 'individual' ? 'bg-amber-500/15 border-amber-500/50 text-amber-200 font-semibold' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-slate-200'}`}>
+                  {L.typeIndividual}
+                </button>
+              </div>
+              <div>
+                <label className={label}>{L.walkinName}</label>
+                <input value={ncName} onChange={e => setNcName(e.target.value)} placeholder={L.walkinNameHint} className={input} autoFocus />
+              </div>
+              <div>
+                <label className={label}>{L.walkinPhone} <span className="text-slate-500 text-sm font-normal">{L.optional}</span></label>
+                <input value={ncPhone} onChange={e => setNcPhone(e.target.value)} placeholder={L.walkinPhoneHint} className={input} />
+              </div>
+              <div className="bg-slate-800/40 border border-white/5 rounded-xl p-4">
+                <label className="flex items-center gap-3 cursor-pointer text-lg text-slate-200">
+                  <input type="checkbox" checked={ncExempt} onChange={e => setNcExempt(e.target.checked)} className="accent-amber-500 w-5 h-5" />
+                  {L.ncExemptLabel}
+                </label>
+                {ncExempt && (
+                  <div className="mt-3">
+                    <label className={label}>{L.ncCertLabel}</label>
+                    <input value={ncCert} onChange={e => setNcCert(e.target.value)} className={input} />
+                  </div>
+                )}
+              </div>
+              <p className={hint}>{L.newClientMoreHint}</p>
+              {ncError && <div className="bg-red-500/10 border border-red-500/40 rounded-xl px-4 py-3 text-red-300 text-base">{ncError}</div>}
+            </div>
+
+            <div className="flex gap-3 flex-wrap mt-6">
+              <button type="button" disabled={ncSaving} onClick={saveNewClient}
+                className="bg-sky-500 hover:bg-sky-400 disabled:bg-sky-500/50 text-slate-950 font-bold text-lg py-3.5 px-8 rounded-xl transition">
+                {ncSaving ? L.saving : L.ncSave}
+              </button>
+              <button type="button" disabled={ncSaving} onClick={() => setNewClientOpen(false)}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-lg py-3.5 px-6 rounded-xl transition">
+                {t('common.cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -792,6 +901,12 @@ const ES = {
   walkinTruck: 'Camión / vehículo', walkinTruckHint: 'Ej. unidad 142 o placa ABC-1234',
   client: 'Cliente', selectClient: 'Seleccione un cliente', location: 'Distrito / Sucursal', noLocation: 'Sin distrito',
   truck: 'Camión', selectTruck: 'Seleccione un camión', exemptHint: 'Cliente exento de impuesto',
+  newClient: 'Registrar cliente nuevo', newClientTitle: 'Registrar cliente nuevo',
+  newClientDesc: 'Se guarda en tu lista de clientes y queda seleccionado en esta factura.',
+  typeCompany: 'Empresa', typeIndividual: 'Particular',
+  ncExemptLabel: 'Cliente exento de sales tax', ncCertLabel: 'Nº de certificado de exención',
+  newClientMoreHint: 'Puedes completar el resto (dirección, correo, términos) después en la sección Clientes.',
+  ncSave: 'Guardar cliente', ncFail: 'No se pudo crear el cliente.',
   sectionInvoice: 'Datos de la factura',
   fromOrder: '¿Ya hay una orden de trabajo para este trabajo? (opcional)', fromOrderNone: 'No, es una factura nueva',
   fromOrderHint: 'Se usará esa orden y sus comisiones; no se crearán comisiones nuevas.',
@@ -799,7 +914,8 @@ const ES = {
   shop: 'Taller', noShop: 'Sin taller', issueDate: 'Fecha', dueDate: 'Fecha de vencimiento',
   paymentMethod: 'Forma de pago', creditHint: 'A crédito: la factura queda pendiente de pago.',
   sectionLabor: 'Mano de obra', addTask: 'Agregar trabajo', task: 'Trabajo', remove: 'Quitar',
-  taskDesc: '¿Qué se hizo?', taskDescHint: 'Ej. Cambio de frenos', amount: 'Precio ($)',
+  taskDesc: '¿Qué se hizo?', taskDescHint: 'Ej. Cambio de llanta', amount: 'Precio ($)',
+  unitPriceLabor: 'Precio por unidad ($)', lineTotal: 'Total del renglón',
   taxableLabor: 'Cobra impuesto a esta mano de obra',
   whoWorked: '¿Quién trabajó?', addMechanic: 'Agregar mecánico', selectMechanic: 'Seleccione mecánico',
   laborLinkedHint: 'Esta factura está enlazada a una orden existente; las comisiones vienen de esa orden.',
@@ -845,6 +961,12 @@ const EN = {
   walkinTruck: 'Truck / vehicle', walkinTruckHint: 'e.g. unit 142 or plate ABC-1234',
   client: 'Customer', selectClient: 'Select a customer', location: 'District / Location', noLocation: 'No district',
   truck: 'Truck', selectTruck: 'Select a truck', exemptHint: 'Tax-exempt customer',
+  newClient: 'Register new customer', newClientTitle: 'Register new customer',
+  newClientDesc: 'It’s saved to your customer list and selected on this invoice.',
+  typeCompany: 'Company', typeIndividual: 'Individual',
+  ncExemptLabel: 'Tax-exempt customer', ncCertLabel: 'Exemption certificate #',
+  newClientMoreHint: 'You can fill in the rest (address, email, terms) later in the Customers section.',
+  ncSave: 'Save customer', ncFail: 'Could not create the customer.',
   sectionInvoice: 'Invoice details',
   fromOrder: 'Is there already a work order for this job? (optional)', fromOrderNone: 'No, this is a new invoice',
   fromOrderHint: 'That order and its commissions will be used; no new commissions are created.',
@@ -852,7 +974,8 @@ const EN = {
   shop: 'Shop', noShop: 'No shop', issueDate: 'Date', dueDate: 'Due date',
   paymentMethod: 'Payment method', creditHint: 'On credit: the invoice stays unpaid.',
   sectionLabor: 'Labor', addTask: 'Add job', task: 'Job', remove: 'Remove',
-  taskDesc: 'What was done?', taskDescHint: 'e.g. Brake replacement', amount: 'Price ($)',
+  taskDesc: 'What was done?', taskDescHint: 'e.g. Tire replacement', amount: 'Price ($)',
+  unitPriceLabor: 'Unit price ($)', lineTotal: 'Line total',
   taxableLabor: 'Charge tax on this labor',
   whoWorked: 'Who worked on it?', addMechanic: 'Add mechanic', selectMechanic: 'Select mechanic',
   laborLinkedHint: 'This invoice is linked to an existing order; commissions come from that order.',
