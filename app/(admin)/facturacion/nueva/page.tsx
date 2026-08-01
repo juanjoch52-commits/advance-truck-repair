@@ -108,7 +108,8 @@ function NuevaFacturaInner() {
   // Totales
   const [discount, setDiscount] = useState('');
   const [taxOverride, setTaxOverride] = useState(false);
-  const [taxManual, setTaxManual] = useState('');
+  const [taxManual, setTaxManual] = useState('');       // impuesto manual en $
+  const [taxRateManual, setTaxRateManual] = useState(''); // tasa manual en % (calcula el $)
   // Al editar un borrador: impuesto guardado, para restaurar el modo "a mano".
   const [loadedTax, setLoadedTax] = useState<number | null>(null);
   const taxReconciled = useRef(false);
@@ -228,7 +229,11 @@ function NuevaFacturaInner() {
     );
     const auto = selectedShop && !clientExempt ? round2(base * selectedShop.tax_rate / 100) : null;
     const isManual = auto === null ? loadedTax > 0.001 : Math.abs(loadedTax - auto) > 0.005;
-    if (isManual) { setTaxOverride(true); setTaxManual(String(loadedTax)); }
+    if (isManual) {
+      setTaxOverride(true);
+      setTaxManual(String(loadedTax));
+      setTaxRateManual(base > 0 ? String(round2(loadedTax / base * 100)) : '');
+    }
     taxReconciled.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditing, loadedTax, shopId, shops, selectedShop, clientExempt, tasks, parts]);
@@ -757,10 +762,18 @@ function NuevaFacturaInner() {
               ) : autoTax ? (
                 <span className="flex items-center gap-3">
                   <span className="text-slate-200 font-medium">{money(taxN)}</span>
-                  <button type="button" onClick={() => { setTaxOverride(true); setTaxManual(String(taxN)); }} className="text-slate-500 hover:text-slate-300 text-base underline">{L.taxManual}</button>
+                  <button type="button" onClick={() => { setTaxOverride(true); setTaxManual(String(taxN)); setTaxRateManual(selectedShop ? String(selectedShop.tax_rate) : ''); }} className="text-slate-500 hover:text-slate-300 text-base underline">{L.taxManual}</button>
                 </span>
               ) : (
-                <span className="flex items-center gap-2">
+                <span className="flex items-center gap-2 flex-wrap justify-end">
+                  <span className="flex items-center gap-1">
+                    <input type="number" min="0" step="0.01" value={taxRateManual}
+                      onChange={e => { const v = e.target.value; setTaxRateManual(v); setTaxManual(String(round2(taxableBase * (parseFloat(v) || 0) / 100))); }}
+                      placeholder="%" title={L.taxRateTitle}
+                      className="w-20 bg-slate-800 border border-white/15 rounded-xl px-3 py-2 text-lg text-slate-100 text-right" />
+                    <span className="text-slate-500 text-base">%</span>
+                  </span>
+                  <span className="text-slate-500 text-base">=</span>
                   <input type="number" min="0" step="0.01" value={taxManual} onChange={e => setTaxManual(e.target.value)} className="w-32 bg-slate-800 border border-white/15 rounded-xl px-3 py-2 text-lg text-slate-100 text-right" />
                   {selectedShop && <button type="button" onClick={() => setTaxOverride(false)} className="text-emerald-400 hover:text-emerald-300 text-base underline">{L.taxAuto}</button>}
                 </span>
@@ -948,6 +961,7 @@ const ES = {
   qty: 'Cantidad', unitPrice: 'Precio ($)', cost: 'Costo ($)', sourceNew: 'Nueva comprada', sourceUsed: 'Usada', taxable: 'Cobra impuesto',
   sectionTotals: 'Totales', labor: 'Mano de obra', partsLabel: 'Piezas', subtotal: 'Subtotal',
   tax: 'Impuesto', exempt: 'Exento', taxManual: 'Poner a mano', taxAuto: 'Volver a automático',
+  taxRateTitle: 'Tasa % a mano (calcula el monto sobre lo gravable)',
   discount: 'Descuento', total: 'TOTAL', toPayroll: 'Comisiones a planilla', markPaid: 'Marcar como pagada ahora',
   create: 'Crear factura', saveDraft: 'Guardar borrador', saving: 'Guardando...',
   draftHint: 'Borrador: guarda el trabajo en proceso. Al "Emitir" desde la lista se asigna el número fiscal, baja el inventario y se crea la orden de trabajo con las comisiones.',
@@ -1008,6 +1022,7 @@ const EN = {
   qty: 'Qty', unitPrice: 'Price ($)', cost: 'Cost ($)', sourceNew: 'New purchased', sourceUsed: 'Used', taxable: 'Taxable',
   sectionTotals: 'Totals', labor: 'Labor', partsLabel: 'Parts', subtotal: 'Subtotal',
   tax: 'Tax', exempt: 'Exempt', taxManual: 'Enter manually', taxAuto: 'Back to automatic',
+  taxRateTitle: 'Manual % rate (computes the amount on the taxable base)',
   discount: 'Discount', total: 'TOTAL', toPayroll: 'Commissions to payroll', markPaid: 'Mark as paid now',
   create: 'Create invoice', saveDraft: 'Save draft', saving: 'Saving...',
   draftHint: 'Draft: saves work in progress. "Emit" from the list assigns the tax number, lowers inventory and creates the work order with commissions.',
