@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireInvoicesAccess, INVOICE_COLS, PAYMENT_METHODS, INSURANCE_STATUSES, computeAutoTax, round2, deriveBalanceStatus } from '@/lib/invoicesApi';
+import { requireInvoicesAccess, INVOICE_COLS, PAYMENT_METHODS, INSURANCE_STATUSES, computeInvoiceTax, round2, deriveBalanceStatus } from '@/lib/invoicesApi';
 import { sanitizeDbError } from '@/lib/clientsApi';
 import { authErrorResponse } from '@/lib/apiAuth';
 
@@ -95,12 +95,6 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     const payment_method = PAYMENT_METHODS.includes(body.payment_method) ? body.payment_method : 'cash';
 
-    // Datos del taller (tasa para el tax automático).
-    let shop: { id: string; tax_rate: number } | null = null;
-    if (body.shop_id) {
-      const { data } = await supabase.from('shops').select('id,tax_rate').eq('id', body.shop_id).maybeSingle();
-      if (data) shop = data as any;
-    }
 
     // Enlace a orden de trabajo (igual que en POST): la factura hereda el número.
     let work_report_id: string | null = body.work_report_id || null;
@@ -154,9 +148,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     });
 
     const subtotal = items.length ? round2(items.reduce((s, it) => s + it.amount, 0)) : round2(body.subtotal);
-    const taxableBase = round2(items.filter(it => it.taxable).reduce((s, it) => s + it.amount, 0));
-    const autoTax = shop && items.length && body.tax_override !== true && !clientExempt;
-    const tax_amount = clientExempt ? 0 : (autoTax ? computeAutoTax(taxableBase, shop!.tax_rate) : round2(body.tax_amount));
+    // Sales tax: 6.50% sobre TODA la factura (subtotal). charge_tax por defecto true.
+    const chargeTax = body.charge_tax !== false;
+    const tax_amount = clientExempt ? 0 : computeInvoiceTax(subtotal, chargeTax);
     const discount = round2(body.discount);
     const total = round2(subtotal + tax_amount - discount);
     if (total <= 0) return NextResponse.json({ error: 'El total de la factura debe ser mayor a $0.' }, { status: 400 });

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireInvoicesAccess, INVOICE_COLS, PAYMENT_METHODS, DOCUMENT_TYPES, isFiscalDocument, computeAutoTax, applyWarehouseDeduction, round2, deriveBalanceStatus, nextReceiptNumber, createWorkOrderFromInvoice } from '@/lib/invoicesApi';
+import { requireInvoicesAccess, INVOICE_COLS, PAYMENT_METHODS, DOCUMENT_TYPES, isFiscalDocument, computeInvoiceTax, applyWarehouseDeduction, round2, deriveBalanceStatus, nextReceiptNumber, createWorkOrderFromInvoice } from '@/lib/invoicesApi';
 import { sanitizeDbError } from '@/lib/clientsApi';
 import { authErrorResponse, requireRole } from '@/lib/apiAuth';
 import { getSupabaseServerClient } from '@/lib/supabaseServer';
@@ -163,13 +163,10 @@ export async function POST(request: Request) {
       ? round2(items.reduce((s, it) => s + it.amount, 0))
       : round2(body.subtotal);
 
-    // Sales tax: si hay taller (con tasa) y renglones, se calcula automáticamente
-    // sobre la base gravable (Σ renglones taxable). Sin taller/renglones, o si el
-    // usuario pide override, se usa el monto manual.
-    const taxableBase = round2(items.filter(it => it.taxable).reduce((s, it) => s + it.amount, 0));
-    const autoTax = shop && items.length && body.tax_override !== true && !clientExempt;
-    // Cliente exento → tax 0 (gana sobre auto y manual).
-    const tax_amount = clientExempt ? 0 : (autoTax ? computeAutoTax(taxableBase, shop!.tax_rate) : round2(body.tax_amount));
+    // Sales tax: 6.50% sobre TODA la factura (subtotal). El botón "Cobrar impuesto"
+    // manda charge_tax (por defecto true). Cliente exento → 0 (gana sobre todo).
+    const chargeTax = body.charge_tax !== false;
+    const tax_amount = clientExempt ? 0 : computeInvoiceTax(subtotal, chargeTax);
 
     const discount = round2(body.discount);
     const total = round2(subtotal + tax_amount - discount);

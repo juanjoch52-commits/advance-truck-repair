@@ -37,11 +37,13 @@ export function round2(n: number) {
   return Math.round((Number(n) || 0) * 100) / 100;
 }
 
-// Sales tax automático: base gravable (Σ renglones marcados taxable) × tasa del
-// taller. La tasa se guarda como porcentaje (ej. 6.5 = 6.5%). La mano de obra no
-// se grava en FL; el flag `taxable` por renglón decide qué entra a la base.
-export function computeAutoTax(taxableBase: number, taxRatePct: number): number {
-  return round2((Number(taxableBase) || 0) * (Number(taxRatePct) || 0) / 100);
+// Sales tax: tasa fija del 6.50% sobre TODA la factura (el subtotal completo).
+// Un solo botón en la factura decide si se cobra o no. Cliente exento → 0.
+export const INVOICE_TAX_RATE = 6.5; // %
+
+export function computeInvoiceTax(subtotal: number, charge: boolean): number {
+  if (!charge) return 0;
+  return round2((Number(subtotal) || 0) * INVOICE_TAX_RATE / 100);
 }
 
 // Semana Lun–Dom de una fecha ISO (misma convención que las órdenes de trabajo,

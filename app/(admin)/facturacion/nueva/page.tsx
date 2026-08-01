@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useLanguage } from '@/contexts/LanguageContext';
 
@@ -32,6 +32,7 @@ const newTask = (): Task => ({ id: uid(), description: '', qty: '1', amount: '',
 const newPart = (): Part => ({ id: uid(), description: '', qty: '1', unit_price: '', cost: '', part_source: 'new_purchased', inventory_item_id: '', taxable: true });
 
 const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
+const TAX_RATE = 6.5; // % de impuesto sobre TODA la factura (mantener igual en lib/invoicesApi.ts)
 const money = (n: any) => `$${(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'check', 'card', 'deposit', 'credit'];
 const HARD_CAP = 100;
@@ -107,12 +108,8 @@ function NuevaFacturaInner() {
 
   // Totales
   const [discount, setDiscount] = useState('');
-  const [taxOverride, setTaxOverride] = useState(false);
-  const [taxManual, setTaxManual] = useState('');       // impuesto manual en $
-  const [taxRateManual, setTaxRateManual] = useState(''); // tasa manual en % (calcula el $)
-  // Al editar un borrador: impuesto guardado, para restaurar el modo "a mano".
-  const [loadedTax, setLoadedTax] = useState<number | null>(null);
-  const taxReconciled = useRef(false);
+  // Impuesto: 6.50% sobre TODA la factura. Un botón lo activa/desactiva.
+  const [chargeTax, setChargeTax] = useState(true);
   const [markPaid, setMarkPaid] = useState(true);
 
   const [saving, setSaving] = useState(false);
@@ -200,9 +197,8 @@ function NuevaFacturaInner() {
             taxable: !!it.taxable,
           })));
         }
-        // Guarda el impuesto del borrador para restaurar el modo "a mano" (ver efecto abajo).
-        taxReconciled.current = false;
-        setLoadedTax(Number(invoice.tax_amount) || 0);
+        // Restaura si el borrador cobraba impuesto (0 guardado = no se cobró).
+        setChargeTax((Number(invoice.tax_amount) || 0) > 0.001);
       } catch { setError(L.editNotFound); }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -213,35 +209,6 @@ function NuevaFacturaInner() {
   const clientTrucks = (selectedClient?.trucks ?? []).filter(tk => locationId ? tk.location_id === locationId : true);
   const clientExempt = !!selectedClient?.tax_exempt;
   const truckLabel = (tk: ClientTruck) => [tk.unit_number, tk.plate].filter(Boolean).join(' · ') || '—';
-
-  const selectedShop = shops.find(s => s.id === shopId) || null;
-
-  // Al editar un borrador, restaura el modo "impuesto a mano" si el impuesto
-  // guardado NO coincide con el que daría el automático (o si no hay taller pero
-  // hay impuesto). tax_override no se persiste, así que se infiere aquí. Corre
-  // una vez, cuando ya cargaron talleres/renglones.
-  useEffect(() => {
-    if (!isEditing || loadedTax === null || taxReconciled.current) return;
-    if (shopId && shops.length === 0) return; // espera el catálogo de talleres
-    const base = round2(
-      tasks.filter(t => t.taxable).reduce((s, t) => s + (parseFloat(t.qty) || 0) * (parseFloat(t.amount) || 0), 0)
-      + parts.filter(p => p.taxable).reduce((s, p) => s + (parseFloat(p.qty) || 0) * (parseFloat(p.unit_price) || 0), 0),
-    );
-    const auto = selectedShop && !clientExempt ? round2(base * selectedShop.tax_rate / 100) : null;
-    const isManual = auto === null ? loadedTax > 0.001 : Math.abs(loadedTax - auto) > 0.005;
-    if (isManual) {
-      // Subtotal completo (todos los renglones) para back-calcular la tasa % mostrada.
-      const sub = round2(
-        tasks.reduce((s, t) => s + (parseFloat(t.qty) || 0) * (parseFloat(t.amount) || 0), 0)
-        + parts.reduce((s, p) => s + (parseFloat(p.qty) || 0) * (parseFloat(p.unit_price) || 0), 0),
-      );
-      setTaxOverride(true);
-      setTaxManual(String(loadedTax));
-      setTaxRateManual(sub > 0 ? String(round2(loadedTax / sub * 100)) : '');
-    }
-    taxReconciled.current = true;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEditing, loadedTax, shopId, shops, selectedShop, clientExempt, tasks, parts]);
 
   // ─── Cliente ───
   function onSelectClient(id: string) { setClientId(id); setLocationId(''); setTruckId(''); }
@@ -323,13 +290,9 @@ function NuevaFacturaInner() {
   const laborTotal = round2(tasks.reduce((s, tk) => s + taskAmount(tk), 0));
   const partsTotal = round2(parts.reduce((s, pt) => s + partAmount(pt), 0));
   const subtotal = round2(laborTotal + partsTotal);
-  // Base gravable: piezas marcadas + mano de obra marcada (casilla por trabajo).
-  const taxableBase = round2(
-    parts.filter(p => p.taxable).reduce((s, p) => s + partAmount(p), 0) +
-    tasks.filter(tk => tk.taxable).reduce((s, tk) => s + taskAmount(tk), 0)
-  );
-  const autoTax = !!selectedShop && !taxOverride && !clientExempt;
-  const taxN = clientExempt ? 0 : (autoTax ? round2(taxableBase * (selectedShop!.tax_rate) / 100) : (parseFloat(taxManual) || 0));
+  // Impuesto: 6.50% sobre TODA la factura. Cliente exento → 0. Botón para desactivar.
+  const willChargeTax = chargeTax && !clientExempt;
+  const taxN = willChargeTax ? round2(subtotal * TAX_RATE / 100) : 0;
   const discountN = parseFloat(discount) || 0;
   const total = Math.max(0, round2(subtotal + taxN - discountN));
   const isCredit = paymentMethod === 'credit';
@@ -398,7 +361,7 @@ function NuevaFacturaInner() {
       issue_date: issueDate,
       due_date: dueDate || null,
       payment_method: paymentMethod,
-      tax_override: taxOverride,
+      charge_tax: chargeTax,
       tax_amount: taxN,
       discount: discountN,
       items: buildItems(),
@@ -646,10 +609,6 @@ function NuevaFacturaInner() {
                     </div>
                   </div>
 
-                  <label className="flex items-center gap-2.5 text-base text-slate-300 cursor-pointer mb-4">
-                    <input type="checkbox" checked={tk.taxable} onChange={e => updTask(tk.id, { taxable: e.target.checked })} className="accent-amber-500 w-5 h-5" />
-                    {L.taxableLabor}
-                  </label>
 
                   {!linkedToOrder && (
                     <div className="bg-slate-900/40 rounded-xl p-4">
@@ -733,18 +692,14 @@ function NuevaFacturaInner() {
                     }
                     return null;
                   })()}
-                  <div className="flex items-center gap-4 mt-3 flex-wrap">
-                    {pt.part_source !== 'warehouse' && (
+                  {pt.part_source !== 'warehouse' && (
+                    <div className="flex items-center gap-4 mt-3 flex-wrap">
                       <select value={pt.part_source} onChange={e => updPart(pt.id, { part_source: e.target.value as PartSource })} className="bg-slate-800 border border-white/15 rounded-lg px-3 py-2 text-base text-slate-100">
                         <option value="new_purchased">{L.sourceNew}</option>
                         <option value="used">{L.sourceUsed}</option>
                       </select>
-                    )}
-                    <label className="flex items-center gap-2 text-base text-slate-300 cursor-pointer">
-                      <input type="checkbox" checked={pt.taxable} onChange={e => updPart(pt.id, { taxable: e.target.checked })} className="accent-amber-500 w-5 h-5" />
-                      {L.taxable}
-                    </label>
-                  </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -764,23 +719,18 @@ function NuevaFacturaInner() {
               <span className="text-slate-400">{L.tax}</span>
               {clientExempt ? (
                 <span className="text-emerald-300 font-medium">{money(0)} · {L.exempt}</span>
-              ) : autoTax ? (
-                <span className="flex items-center gap-3">
-                  <span className="text-slate-200 font-medium">{money(taxN)}</span>
-                  <button type="button" onClick={() => { setTaxOverride(true); setTaxManual(String(taxN)); setTaxRateManual(selectedShop ? String(selectedShop.tax_rate) : ''); }} className="text-slate-500 hover:text-slate-300 text-base underline">{L.taxManual}</button>
-                </span>
               ) : (
-                <span className="flex items-center gap-2 flex-wrap justify-end">
-                  <span className="flex items-center gap-1">
-                    <input type="number" min="0" step="0.01" value={taxRateManual}
-                      onChange={e => { const v = e.target.value; setTaxRateManual(v); setTaxManual(String(round2(subtotal * (parseFloat(v) || 0) / 100))); }}
-                      placeholder="%" title={L.taxRateTitle}
-                      className="w-20 bg-slate-800 border border-white/15 rounded-xl px-3 py-2 text-lg text-slate-100 text-right" />
-                    <span className="text-slate-500 text-base">%</span>
-                  </span>
-                  <span className="text-slate-500 text-base">=</span>
-                  <input type="number" min="0" step="0.01" value={taxManual} onChange={e => setTaxManual(e.target.value)} className="w-32 bg-slate-800 border border-white/15 rounded-xl px-3 py-2 text-lg text-slate-100 text-right" />
-                  {selectedShop && <button type="button" onClick={() => setTaxOverride(false)} className="text-emerald-400 hover:text-emerald-300 text-base underline">{L.taxAuto}</button>}
+                <span className="flex items-center gap-3">
+                  <span className={`font-medium ${chargeTax ? 'text-slate-200' : 'text-slate-500'}`}>{money(taxN)}</span>
+                  <button
+                    type="button"
+                    onClick={() => setChargeTax(v => !v)}
+                    className={`text-base px-3 py-1.5 rounded-xl border transition-colors ${chargeTax
+                      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
+                      : 'border-white/15 bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                  >
+                    {chargeTax ? L.taxOnBtn : L.taxOffBtn}
+                  </button>
                 </span>
               )}
             </div>
@@ -927,7 +877,7 @@ const ES = {
   pmDesc: 'Efectivo, cheque, tarjeta o depósito = ya pagada. A crédito = queda pendiente en Cuentas por cobrar.',
   laborDesc: 'Un renglón por trabajo: qué se hizo y su precio. Marca "cobra impuesto" solo si aplica (normalmente la mano de obra no lo lleva en Florida). Elige quién trabajó y su % de comisión.',
   partsDesc: '"De bodega" descuenta el stock y usa el costo guardado. "Suelta" es una pieza que no manejas en inventario: le pones costo (lo que te costó) y precio (lo que cobras) a mano.',
-  totalsDesc: 'El impuesto se calcula solo con la tasa del taller; puedes ponerlo a mano. El descuento resta del total.',
+  totalsDesc: 'El impuesto es 6.50% sobre toda la factura; el botón lo cobra o lo quita. El descuento resta del total.',
   createEstimate: 'Guardar cotización', editEstimateTitle: 'Editar cotización',
   stockWarn: 'Solo hay {q} en bodega; el inventario quedará en negativo al emitir.',
   editTitle: 'Editar borrador', saveChanges: 'Guardar cambios',
@@ -965,8 +915,8 @@ const ES = {
   oneoff: 'Pieza suelta (no de bodega)', inStock: 'en bodega', partDesc: 'Descripción de la pieza',
   qty: 'Cantidad', unitPrice: 'Precio ($)', cost: 'Costo ($)', sourceNew: 'Nueva comprada', sourceUsed: 'Usada', taxable: 'Cobra impuesto',
   sectionTotals: 'Totales', labor: 'Mano de obra', partsLabel: 'Piezas', subtotal: 'Subtotal',
-  tax: 'Impuesto', exempt: 'Exento', taxManual: 'Poner a mano', taxAuto: 'Volver a automático',
-  taxRateTitle: 'Tasa % a mano (calcula el monto sobre el subtotal y lo suma)',
+  tax: 'Impuesto (6.50%)', exempt: 'Exento',
+  taxOnBtn: 'Cobrando 6.50%', taxOffBtn: 'No se cobra',
   discount: 'Descuento', total: 'TOTAL', toPayroll: 'Comisiones a planilla', markPaid: 'Marcar como pagada ahora',
   create: 'Crear factura', saveDraft: 'Guardar borrador', saving: 'Guardando...',
   draftHint: 'Borrador: guarda el trabajo en proceso. Al "Emitir" desde la lista se asigna el número fiscal, baja el inventario y se crea la orden de trabajo con las comisiones.',
@@ -988,7 +938,7 @@ const EN = {
   pmDesc: 'Cash, check, card or deposit = already paid. On credit = stays open in Accounts receivable.',
   laborDesc: 'One row per job: what was done and its price. Check “charge tax” only if it applies (labor usually isn’t taxed in Florida). Pick who worked and their commission %.',
   partsDesc: '“From warehouse” lowers stock and uses the saved cost. “One-off” is a part you don’t keep in inventory: you enter cost (what you paid) and price (what you charge) by hand.',
-  totalsDesc: 'Tax is computed automatically with the shop rate; you can enter it by hand. The discount subtracts from the total.',
+  totalsDesc: 'Tax is 6.50% on the whole invoice; the button charges it or removes it. The discount subtracts from the total.',
   createEstimate: 'Save estimate', editEstimateTitle: 'Edit estimate',
   stockWarn: 'Only {q} in stock; inventory will go negative when emitted.',
   editTitle: 'Edit draft', saveChanges: 'Save changes',
@@ -1026,8 +976,8 @@ const EN = {
   oneoff: 'One-off part (not from warehouse)', inStock: 'in stock', partDesc: 'Part description',
   qty: 'Qty', unitPrice: 'Price ($)', cost: 'Cost ($)', sourceNew: 'New purchased', sourceUsed: 'Used', taxable: 'Taxable',
   sectionTotals: 'Totals', labor: 'Labor', partsLabel: 'Parts', subtotal: 'Subtotal',
-  tax: 'Tax', exempt: 'Exempt', taxManual: 'Enter manually', taxAuto: 'Back to automatic',
-  taxRateTitle: 'Manual % rate (computes the amount on the subtotal and adds it)',
+  tax: 'Tax (6.50%)', exempt: 'Exempt',
+  taxOnBtn: 'Charging 6.50%', taxOffBtn: 'Not charged',
   discount: 'Discount', total: 'TOTAL', toPayroll: 'Commissions to payroll', markPaid: 'Mark as paid now',
   create: 'Create invoice', saveDraft: 'Save draft', saving: 'Saving...',
   draftHint: 'Draft: saves work in progress. "Emit" from the list assigns the tax number, lowers inventory and creates the work order with commissions.',
