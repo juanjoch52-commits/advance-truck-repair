@@ -229,6 +229,8 @@ export default function FacturacionPage() {
   // (paridad con "Marcar como pagada ahora" del alta directa).
   const [emitFor, setEmitFor] = useState<Invoice | null>(null);
   const [emitPaid, setEmitPaid] = useState(true);
+  const [emitMethod, setEmitMethod] = useState('cash');
+  const [emitRef, setEmitRef] = useState('');
 
   async function loadDraftItems(invId: string) {
     try {
@@ -254,7 +256,10 @@ export default function FacturacionPage() {
   // Abre el modal de emisión (por defecto marca pagada si NO es a crédito).
   function openEmit(inv: Invoice) {
     setEmitFor(inv);
-    setEmitPaid(inv.payment_method !== 'credit');
+    const credit = inv.payment_method === 'credit';
+    setEmitPaid(!credit);
+    setEmitMethod(credit ? 'cash' : inv.payment_method);
+    setEmitRef('');
   }
   function confirmEmit() {
     if (!emitFor) return;
@@ -265,7 +270,7 @@ export default function FacturacionPage() {
     setEmittingId(inv.id);
     const res = await fetch(`/api/facturas/${inv.id}/emitir`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ force, mark_paid: markPaid }),
+      body: JSON.stringify({ force, mark_paid: markPaid, pay_method: emitMethod, payment_reference: emitRef.trim() || null }),
     });
     const j = await res.json().catch(() => ({}));
     setEmittingId(null);
@@ -304,13 +309,29 @@ export default function FacturacionPage() {
             {emitFor.payment_method === 'credit' ? (
               <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 text-amber-300 text-sm mb-4">{L.emitCreditNote}</div>
             ) : (
-              <label className="flex items-start gap-3 mb-4 cursor-pointer">
-                <input type="checkbox" checked={emitPaid} onChange={e => setEmitPaid(e.target.checked)} className="accent-emerald-500 w-6 h-6 mt-0.5" />
-                <span className="text-slate-200">
-                  {L.emitPaidLabel} <span className="text-slate-500">· {t(`invoices.pm.${emitFor.payment_method}`)}</span>
-                  <span className="block text-slate-500 text-sm mt-0.5">{emitPaid ? L.emitPaidNote : L.emitOpenNote}</span>
-                </span>
-              </label>
+              <>
+                <label className="flex items-start gap-3 mb-4 cursor-pointer">
+                  <input type="checkbox" checked={emitPaid} onChange={e => setEmitPaid(e.target.checked)} className="accent-emerald-500 w-6 h-6 mt-0.5" />
+                  <span className="text-slate-200">
+                    {L.emitPaidLabel}
+                    <span className="block text-slate-500 text-sm mt-0.5">{emitPaid ? L.emitPaidNote : L.emitOpenNote}</span>
+                  </span>
+                </label>
+                {emitPaid && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                    <div>
+                      <label className="block text-slate-400 text-sm mb-1.5">{L.emitMethod}</label>
+                      <select value={emitMethod} onChange={e => setEmitMethod(e.target.value)} className="w-full bg-slate-800 border border-white/15 rounded-lg px-3 py-2.5 text-slate-100 focus:outline-none focus:border-emerald-400/60">
+                        {['cash', 'check', 'card', 'deposit'].map(m => <option key={m} value={m}>{t(`invoices.pm.${m}`)}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 text-sm mb-1.5">{L.emitRef} <span className="text-slate-600">{L.optional}</span></label>
+                      <input value={emitRef} onChange={e => setEmitRef(e.target.value)} placeholder={L.emitRefHint} className="w-full bg-slate-800 border border-white/15 rounded-lg px-3 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-400/60" />
+                    </div>
+                  </div>
+                )}
+              </>
             )}
             <div className="flex gap-3">
               <button onClick={confirmEmit} disabled={emittingId === emitFor.id} className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold py-2.5 px-6 rounded-lg transition display-font tracking-wide">
@@ -625,6 +646,7 @@ const ES = {
   emitPaidLabel: 'El cliente ya pagó el total',
   emitPaidNote: 'Se registrará el pago y su comprobante automáticamente.',
   emitOpenNote: 'La factura quedará pendiente de pago (por cobrar).',
+  emitMethod: 'Forma de pago', emitRef: 'Referencia', emitRefHint: 'Nº de cheque / aprobación', optional: '(opcional)',
   emitCreditNote: 'A crédito: la factura queda pendiente de pago; registra el pago cuando el cliente pague.',
   ins: { sent: 'Enviado', approved: 'Aprobado', partial: 'Pago parcial', paid: 'Pagado', denied: 'Negado' } as Record<string, string>,
   csv: { number: 'Número', type: 'Tipo', status: 'Estado', date: 'Fecha', due: 'Vence', client: 'Cliente', truck: 'Camión', order: 'Orden', method: 'Método', subtotal: 'Subtotal', tax: 'Impuesto', discount: 'Descuento', total: 'Total', paid: 'Pagado', balance: 'Saldo', insurance: 'Aseguradora', insuranceStatus: 'Estado seguro' },
@@ -642,6 +664,7 @@ const EN = {
   emitPaidLabel: 'The customer already paid in full',
   emitPaidNote: 'The payment and its receipt will be recorded automatically.',
   emitOpenNote: 'The invoice will stay unpaid (receivable).',
+  emitMethod: 'Payment method', emitRef: 'Reference', emitRefHint: 'Check / approval #', optional: '(optional)',
   emitCreditNote: 'On credit: the invoice stays unpaid; record the payment when the customer pays.',
   ins: { sent: 'Sent', approved: 'Approved', partial: 'Partially paid', paid: 'Paid', denied: 'Denied' } as Record<string, string>,
   csv: { number: 'Number', type: 'Type', status: 'Status', date: 'Date', due: 'Due', client: 'Customer', truck: 'Truck', order: 'Order', method: 'Method', subtotal: 'Subtotal', tax: 'Tax', discount: 'Discount', total: 'Total', paid: 'Paid', balance: 'Balance', insurance: 'Insurer', insuranceStatus: 'Insurance status' },

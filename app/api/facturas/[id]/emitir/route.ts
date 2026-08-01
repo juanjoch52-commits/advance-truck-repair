@@ -7,7 +7,8 @@ import { getSupabaseServerClient } from '@/lib/supabaseServer';
 
 // POST /api/facturas/[id]/emitir → emite un BORRADOR de factura:
 //   1. valida que esté en 'draft' y sin comisiones generadas;
-//   2. (salvo force) exige que las tareas de mano de obra estén marcadas hechas;
+//   2. marca TODAS las tareas de mano de obra como completadas (emitir = trabajo
+//      terminado; ya no se exige marcarlas antes);
 //   3. asigna el número fiscal correlativo (atómico) del taller;
 //   4. descuenta inventario de las piezas de bodega;
 //   5. CREA LA ORDEN DE TRABAJO amarrada (work_reports + report_tasks +
@@ -36,11 +37,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const allItems = items ?? [];
     const laborItems = allItems.filter((it: any) => it.line_type === 'labor');
 
-    // Tareas de mano de obra pendientes (sin marcar hechas) → bloquea salvo force.
-    const pendingLabor = laborItems.filter((it: any) => !it.done);
-    if (pendingLabor.length > 0 && body.force !== true) {
-      return NextResponse.json({ error: 'pending_tasks', pending: pendingLabor.length }, { status: 409 });
-    }
+    // Al EMITIR se da el trabajo por terminado: no exige marcar tareas hechas y
+    // más abajo se marcan TODAS como completadas. Las comisiones y el descuento
+    // de inventario ocurren igual (no dependen del checkbox 'done').
 
     // Asignaciones de mecánicos por renglón de mano de obra (hasta 2 por tarea).
     const laborIds = laborItems.map((it: any) => it.id);
@@ -77,11 +76,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     // Descuento de bodega (diferido del borrador).
     await applyWarehouseDeduction(supabase, allItems, id, (invoice.created_by as any) ?? null);
 
+    // Marca TODAS las tareas de mano de obra como completadas (emitir = terminado).
+    if (laborIds.length) {
+      await supabase.from('invoice_items').update({ done: true }).in('id', laborIds);
+    }
+
     // Estado / pago.
     const total = Number(invoice.total) || 0;
     const markPaid = invoice.payment_method !== 'credit' && body.mark_paid === true;
     const amount_paid = markPaid ? total : 0;
     const { balance, status } = deriveBalanceStatus(total, amount_paid);
+
+    // Forma de pago del cobro: se puede confirmar/cambiar al emitir (efectivo,
+    // cheque, tarjeta, depósito). Si no viene una válida, se usa la de la factura.
+    const PAID_METHODS = ['cash', 'check', 'card', 'deposit'];
+    const payMethod = PAID_METHODS.includes(String(body.pay_method))
+      ? String(body.pay_method)
+      : (invoice.payment_method === 'credit' ? 'cash' : invoice.payment_method);
 
     const { data: updated, error: upErr } = await supabase.from('invoices').update({
       document_number,
@@ -90,13 +101,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       balance,
       emitted_at: new Date().toISOString(),
       commissions_generated: true,
+      // Si se cobra al emitir, refleja la forma de pago realmente usada.
+      ...(markPaid ? { payment_method: payMethod } : {}),
     }).eq('id', id).select(INVOICE_COLS).single();
     if (upErr) return NextResponse.json({ error: sanitizeDbError('facturas/emitir.update', upErr.message) }, { status: 500 });
 
     if (markPaid) {
       const receipt_number = await nextReceiptNumber(supabase, id, document_number);
       await supabase.from('invoice_payments').insert({
-        invoice_id: id, amount: total, method: invoice.payment_method, payment_type: 'settlement', receipt_number,
+        invoice_id: id, amount: total, method: payMethod, payment_type: 'settlement', receipt_number,
         reference: String(body.payment_reference ?? '').trim() || null,
         paid_at: invoice.issue_date,
         created_by: (session as any)?.id ?? null,

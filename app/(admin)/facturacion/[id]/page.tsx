@@ -64,8 +64,13 @@ export default function FacturaDetallePage() {
   // Modal de emisión: permite cobrar (marcar pagada) en el mismo paso.
   const [emitOpen, setEmitOpen] = useState(false);
   const [emitPaid, setEmitPaid] = useState(true);
+  const [emitMethod, setEmitMethod] = useState('cash');
+  const [emitRef, setEmitRef] = useState('');
   function openEmit() {
-    setEmitPaid(inv?.payment_method !== 'credit');
+    const credit = inv?.payment_method === 'credit';
+    setEmitPaid(!credit);
+    setEmitMethod(credit ? 'cash' : (inv?.payment_method ?? 'cash'));
+    setEmitRef('');
     setEmitOpen(true);
   }
   function confirmEmit() {
@@ -75,7 +80,8 @@ export default function FacturaDetallePage() {
   async function emitir(force = false, markPaid = false) {
     setBusy(true);
     const res = await fetch(`/api/facturas/${id}/emitir`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force, mark_paid: markPaid }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force, mark_paid: markPaid, pay_method: emitMethod, payment_reference: emitRef.trim() || null }),
     });
     const j = await res.json().catch(() => ({}));
     setBusy(false);
@@ -219,13 +225,29 @@ export default function FacturaDetallePage() {
             {inv.payment_method === 'credit' ? (
               <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 text-amber-300 text-sm mb-4">{L.emitCreditNote}</div>
             ) : (
-              <label className="flex items-start gap-3 mb-4 cursor-pointer">
-                <input type="checkbox" checked={emitPaid} onChange={e => setEmitPaid(e.target.checked)} className="accent-emerald-500 w-6 h-6 mt-0.5" />
-                <span className="text-slate-200">
-                  {L.emitPaidLabel} <span className="text-slate-500">· {t(`invoices.pm.${inv.payment_method}`)}</span>
-                  <span className="block text-slate-500 text-sm mt-0.5">{emitPaid ? L.emitPaidNote : L.emitOpenNote}</span>
-                </span>
-              </label>
+              <>
+                <label className="flex items-start gap-3 mb-4 cursor-pointer">
+                  <input type="checkbox" checked={emitPaid} onChange={e => setEmitPaid(e.target.checked)} className="accent-emerald-500 w-6 h-6 mt-0.5" />
+                  <span className="text-slate-200">
+                    {L.emitPaidLabel}
+                    <span className="block text-slate-500 text-sm mt-0.5">{emitPaid ? L.emitPaidNote : L.emitOpenNote}</span>
+                  </span>
+                </label>
+                {emitPaid && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                    <div>
+                      <label className="block text-slate-400 text-sm mb-1.5">{L.emitMethod}</label>
+                      <select value={emitMethod} onChange={e => setEmitMethod(e.target.value)} className="w-full bg-slate-800 border border-white/15 rounded-lg px-3 py-2.5 text-slate-100 focus:outline-none focus:border-emerald-400/60">
+                        {['cash', 'check', 'card', 'deposit'].map(m => <option key={m} value={m}>{t(`invoices.pm.${m}`)}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 text-sm mb-1.5">{L.emitRef} <span className="text-slate-600">{L.optional}</span></label>
+                      <input value={emitRef} onChange={e => setEmitRef(e.target.value)} placeholder={L.emitRefHint} className="w-full bg-slate-800 border border-white/15 rounded-lg px-3 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-400/60" />
+                    </div>
+                  </div>
+                )}
+              </>
             )}
             <div className="flex gap-3">
               <button onClick={confirmEmit} disabled={busy} className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold py-2.5 px-6 rounded-lg transition display-font tracking-wide">
@@ -598,6 +620,7 @@ const ES = {
   emitPaidNote: 'Se registrará el pago y su comprobante automáticamente.',
   emitOpenNote: 'La factura quedará pendiente de pago (por cobrar).',
   emitCreditNote: 'A crédito: la factura queda pendiente de pago; registra el pago cuando el cliente pague.',
+  emitMethod: 'Forma de pago', emitRef: 'Referencia', emitRefHint: 'Nº de cheque / aprobación', optional: '(opcional)',
 };
 const EN = {
   back: 'Back to invoices', notFound: 'Could not load the invoice.',
@@ -625,4 +648,5 @@ const EN = {
   emitPaidNote: 'The payment and its receipt will be recorded automatically.',
   emitOpenNote: 'The invoice will stay unpaid (receivable).',
   emitCreditNote: 'On credit: the invoice stays unpaid; record the payment when the customer pays.',
+  emitMethod: 'Payment method', emitRef: 'Reference', emitRefHint: 'Check / approval #', optional: '(optional)',
 };
