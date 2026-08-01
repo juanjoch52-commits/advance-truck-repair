@@ -263,6 +263,17 @@ function NuevaFacturaInner() {
   const usedPct = (tk: Task) => tk.mechanics.reduce((s, m) => s + (parseFloat(m.commission_pct) || 0), 0);
   const mechPayout = (tk: Task, m: Mech) => round2(taskAmount(tk) * (parseFloat(m.commission_pct) || 0) / 100);
   function addTask() { setTasks(p => [...p, newTask()]); }
+  // Inserta un trabajo nuevo JUSTO DEBAJO del indicado (para meter uno olvidado
+  // sin borrar los siguientes). Los números se recalculan solos al renderizar.
+  function insertTaskAfter(id: string) {
+    setTasks(p => {
+      const i = p.findIndex(t => t.id === id);
+      if (i === -1) return [...p, newTask()];
+      const copy = [...p];
+      copy.splice(i + 1, 0, newTask());
+      return copy;
+    });
+  }
   function removeTask(id: string) { setTasks(p => p.filter(t => t.id !== id)); }
   function updTask(id: string, patch: Partial<Task>) { setTasks(p => p.map(t => t.id === id ? { ...t, ...patch } : t)); }
   function addMech(taskId: string) {
@@ -583,7 +594,8 @@ function NuevaFacturaInner() {
             {tasks.map((tk, i) => {
               const over = usedPct(tk) > HARD_CAP;
               return (
-                <div key={tk.id} className={`rounded-2xl border bg-slate-800/40 p-5 ${over ? 'border-red-500/50' : 'border-white/10'}`}>
+                <div key={tk.id}>
+                <div className={`rounded-2xl border bg-slate-800/40 p-5 ${over ? 'border-red-500/50' : 'border-white/10'}`}>
                   <div className="flex items-center justify-between mb-3">
                     <span className="display-font text-slate-400 text-sm tracking-widest">{L.task.toUpperCase()} {i + 1}</span>
                     {tasks.length > 1 && (
@@ -639,6 +651,13 @@ function NuevaFacturaInner() {
                       {over && <p className="text-red-400 text-base mt-2">{L.errCommission}</p>}
                     </div>
                   )}
+                </div>
+                <div className="flex justify-center my-2">
+                  <button type="button" onClick={() => insertTaskAfter(tk.id)} title={L.insertTaskHint}
+                    className="text-sky-300 hover:text-sky-100 hover:bg-sky-500/15 border border-dashed border-sky-500/40 rounded-lg px-4 py-1.5 text-base transition">
+                    ↳ {L.insertTask}
+                  </button>
+                </div>
                 </div>
               );
             })}
@@ -906,6 +925,7 @@ const ES = {
   shop: 'Taller', noShop: 'Sin taller', issueDate: 'Fecha', dueDate: 'Fecha de vencimiento',
   paymentMethod: 'Forma de pago', creditHint: 'A crédito: la factura queda pendiente de pago.',
   sectionLabor: 'Mano de obra', addTask: 'Agregar trabajo', task: 'Trabajo', remove: 'Quitar',
+  insertTask: 'Insertar trabajo aquí', insertTaskHint: 'Agrega un trabajo nuevo justo debajo de este, sin borrar los demás',
   taskDesc: '¿Qué se hizo?', taskDescHint: 'Ej. Cambio de llanta', amount: 'Precio ($)',
   unitPriceLabor: 'Precio por unidad ($)', lineTotal: 'Total del renglón',
   taxableLabor: 'Cobra impuesto a esta mano de obra',
@@ -967,6 +987,7 @@ const EN = {
   shop: 'Shop', noShop: 'No shop', issueDate: 'Date', dueDate: 'Due date',
   paymentMethod: 'Payment method', creditHint: 'On credit: the invoice stays unpaid.',
   sectionLabor: 'Labor', addTask: 'Add job', task: 'Job', remove: 'Remove',
+  insertTask: 'Insert job here', insertTaskHint: 'Adds a new job right below this one, without deleting the others',
   taskDesc: 'What was done?', taskDescHint: 'e.g. Tire replacement', amount: 'Price ($)',
   unitPriceLabor: 'Unit price ($)', lineTotal: 'Line total',
   taxableLabor: 'Charge tax on this labor',
