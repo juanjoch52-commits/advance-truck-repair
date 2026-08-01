@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useLanguage } from '@/contexts/LanguageContext';
 
@@ -109,6 +109,9 @@ function NuevaFacturaInner() {
   const [discount, setDiscount] = useState('');
   const [taxOverride, setTaxOverride] = useState(false);
   const [taxManual, setTaxManual] = useState('');
+  // Al editar un borrador: impuesto guardado, para restaurar el modo "a mano".
+  const [loadedTax, setLoadedTax] = useState<number | null>(null);
+  const taxReconciled = useRef(false);
   const [markPaid, setMarkPaid] = useState(true);
 
   const [saving, setSaving] = useState(false);
@@ -196,6 +199,9 @@ function NuevaFacturaInner() {
             taxable: !!it.taxable,
           })));
         }
+        // Guarda el impuesto del borrador para restaurar el modo "a mano" (ver efecto abajo).
+        taxReconciled.current = false;
+        setLoadedTax(Number(invoice.tax_amount) || 0);
       } catch { setError(L.editNotFound); }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -208,6 +214,24 @@ function NuevaFacturaInner() {
   const truckLabel = (tk: ClientTruck) => [tk.unit_number, tk.plate].filter(Boolean).join(' · ') || '—';
 
   const selectedShop = shops.find(s => s.id === shopId) || null;
+
+  // Al editar un borrador, restaura el modo "impuesto a mano" si el impuesto
+  // guardado NO coincide con el que daría el automático (o si no hay taller pero
+  // hay impuesto). tax_override no se persiste, así que se infiere aquí. Corre
+  // una vez, cuando ya cargaron talleres/renglones.
+  useEffect(() => {
+    if (!isEditing || loadedTax === null || taxReconciled.current) return;
+    if (shopId && shops.length === 0) return; // espera el catálogo de talleres
+    const base = round2(
+      tasks.filter(t => t.taxable).reduce((s, t) => s + (parseFloat(t.qty) || 0) * (parseFloat(t.amount) || 0), 0)
+      + parts.filter(p => p.taxable).reduce((s, p) => s + (parseFloat(p.qty) || 0) * (parseFloat(p.unit_price) || 0), 0),
+    );
+    const auto = selectedShop && !clientExempt ? round2(base * selectedShop.tax_rate / 100) : null;
+    const isManual = auto === null ? loadedTax > 0.001 : Math.abs(loadedTax - auto) > 0.005;
+    if (isManual) { setTaxOverride(true); setTaxManual(String(loadedTax)); }
+    taxReconciled.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditing, loadedTax, shopId, shops, selectedShop, clientExempt, tasks, parts]);
 
   // ─── Cliente ───
   function onSelectClient(id: string) { setClientId(id); setLocationId(''); setTruckId(''); }
