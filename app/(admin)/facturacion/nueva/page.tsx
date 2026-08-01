@@ -15,7 +15,7 @@ type PartSource = 'new_purchased' | 'used' | 'warehouse';
 
 interface ClientTruck { id: string; location_id: string | null; unit_number: string | null; plate: string | null }
 interface ClientLoc { id: string; name: string }
-interface ClientOpt { id: string; name: string; tax_exempt?: boolean; tax_exempt_certificate?: string | null; locations: ClientLoc[]; trucks: ClientTruck[] }
+interface ClientOpt { id: string; name: string; phone?: string | null; contact_name?: string | null; tax_exempt?: boolean; tax_exempt_certificate?: string | null; locations: ClientLoc[]; trucks: ClientTruck[] }
 interface ShopOpt { id: string; name: string; tax_rate: number }
 interface MechanicOpt { id: string; full_name: string }
 interface InvItem { id: string; name: string; part_number: string | null; sale_price: number; unit_cost: number; quantity_on_hand: number }
@@ -70,6 +70,8 @@ function NuevaFacturaInner() {
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerTruck, setCustomerTruck] = useState('');
   const [clientId, setClientId] = useState('');
+  const [clientQuery, setClientQuery] = useState('');   // texto del buscador de clientes
+  const [clientListOpen, setClientListOpen] = useState(false);
   const [locationId, setLocationId] = useState('');
   const [truckId, setTruckId] = useState('');
 
@@ -211,12 +213,36 @@ function NuevaFacturaInner() {
   const truckLabel = (tk: ClientTruck) => [tk.unit_number, tk.plate].filter(Boolean).join(' · ') || '—';
 
   // ─── Cliente ───
-  function onSelectClient(id: string) { setClientId(id); setLocationId(''); setTruckId(''); }
+  function onSelectClient(id: string) {
+    setClientId(id); setLocationId(''); setTruckId(''); setClientListOpen(false);
+    const c = clients.find(x => x.id === id);
+    if (c) setClientQuery(c.name);
+  }
   function onWalkinToggle(on: boolean) {
     setWalkin(on);
-    if (on) { setClientId(''); setLocationId(''); setTruckId(''); }
+    if (on) { setClientId(''); setLocationId(''); setTruckId(''); setClientQuery(''); setClientListOpen(false); }
     else { setCustomerName(''); setCustomerCompany(''); setCustomerPhone(''); setCustomerTruck(''); }
   }
+  // Al editar un borrador (o venir de una orden), el cliente se fija por id antes
+  // de que cargue el catálogo; sincroniza el texto del buscador cuando ya está.
+  useEffect(() => {
+    if (clientId && !clientQuery) {
+      const c = clients.find(x => x.id === clientId);
+      if (c) setClientQuery(c.name);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, clients]);
+
+  // Filtro del buscador: por nombre, contacto, teléfono o placa/unidad de camión.
+  const filteredClients = useMemo(() => {
+    const q = clientQuery.trim().toLowerCase();
+    if (!q) return clients.slice(0, 50);
+    const has = (s: unknown) => String(s ?? '').toLowerCase().includes(q);
+    return clients.filter(c =>
+      has(c.name) || has(c.contact_name) || has(c.phone) ||
+      c.trucks.some(t => has(t.plate) || has(t.unit_number)),
+    ).slice(0, 50);
+  }, [clients, clientQuery]);
 
   function openNewClient() {
     setNcName(''); setNcType('corporate'); setNcPhone(''); setNcExempt(false); setNcCert(''); setNcError('');
@@ -241,6 +267,7 @@ function NuevaFacturaInner() {
       setClients(prev => [opt, ...prev.filter(p => p.id !== c.id)].sort((a, b) => a.name.localeCompare(b.name)));
       setWalkin(false);
       onSelectClient(c.id);
+      setClientQuery(c.name);
       setNewClientOpen(false);
     } catch { setNcError(L.ncFail); }
     setNcSaving(false);
@@ -475,12 +502,40 @@ function NuevaFacturaInner() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
+              <div className="relative">
                 <label className={label}>{L.client}</label>
-                <select value={clientId} onChange={e => onSelectClient(e.target.value)} className={input}>
-                  <option value="">{L.selectClient}</option>
-                  {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.tax_exempt ? ' ★' : ''}</option>)}
-                </select>
+                <div className="relative z-20">
+                  <svg className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" /></svg>
+                  <input
+                    value={clientQuery}
+                    onChange={e => { setClientQuery(e.target.value); setClientListOpen(true); if (clientId) { setClientId(''); setLocationId(''); setTruckId(''); } }}
+                    onFocus={e => { setClientListOpen(true); e.currentTarget.select(); }}
+                    placeholder={L.clientSearchHint}
+                    className={input + ' pl-11 pr-9'}
+                    autoComplete="off"
+                  />
+                  {clientQuery && (
+                    <button type="button" onClick={() => { setClientQuery(''); setClientId(''); setLocationId(''); setTruckId(''); setClientListOpen(true); }}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200 text-xl leading-none" title={L.clientClear}>×</button>
+                  )}
+                </div>
+                {clientListOpen && (
+                  <>
+                    <button type="button" aria-hidden onClick={() => setClientListOpen(false)} className="fixed inset-0 z-10 cursor-default" tabIndex={-1} />
+                    <div className="absolute z-30 mt-1 w-full max-h-72 overflow-auto rounded-xl border border-white/15 bg-slate-800 shadow-2xl">
+                      {filteredClients.length === 0 ? (
+                        <div className="px-4 py-3 text-slate-400 text-base">{L.clientNoResults}</div>
+                      ) : filteredClients.map(c => (
+                        <button key={c.id} type="button"
+                          onClick={() => onSelectClient(c.id)}
+                          className={`w-full text-left px-4 py-2.5 hover:bg-sky-500/20 flex items-center justify-between gap-3 ${c.id === clientId ? 'bg-sky-500/10' : ''}`}>
+                          <span className="text-lg text-slate-100 truncate">{c.name}{c.tax_exempt ? ' ★' : ''}</span>
+                          {(c.phone || c.contact_name) && <span className="text-slate-400 text-sm shrink-0 truncate max-w-[45%]">{c.phone || c.contact_name}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
                 <button type="button" onClick={openNewClient}
                   className="mt-2 text-sky-300 hover:text-sky-200 text-base flex items-center gap-1.5 border border-sky-500/30 hover:border-sky-500/50 rounded-lg px-3 py-2 transition">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
@@ -911,6 +966,7 @@ const ES = {
   walkinPhone: 'Teléfono', walkinPhoneHint: 'Ej. (305) 555-1234',
   walkinTruck: 'Camión / vehículo', walkinTruckHint: 'Ej. unidad 142 o placa ABC-1234',
   client: 'Cliente', selectClient: 'Seleccione un cliente', location: 'Distrito / Sucursal', noLocation: 'Sin distrito',
+  clientSearchHint: 'Buscar por nombre, teléfono o camión…', clientNoResults: 'No se encontró ningún cliente', clientClear: 'Limpiar',
   truck: 'Camión', selectTruck: 'Seleccione un camión', exemptHint: 'Cliente exento de impuesto',
   newClient: 'Registrar cliente nuevo', newClientTitle: 'Registrar cliente nuevo',
   newClientDesc: 'Se guarda en tu lista de clientes y queda seleccionado en esta factura.',
@@ -973,6 +1029,7 @@ const EN = {
   walkinPhone: 'Phone', walkinPhoneHint: 'e.g. (305) 555-1234',
   walkinTruck: 'Truck / vehicle', walkinTruckHint: 'e.g. unit 142 or plate ABC-1234',
   client: 'Customer', selectClient: 'Select a customer', location: 'District / Location', noLocation: 'No district',
+  clientSearchHint: 'Search by name, phone or truck…', clientNoResults: 'No customer found', clientClear: 'Clear',
   truck: 'Truck', selectTruck: 'Select a truck', exemptHint: 'Tax-exempt customer',
   newClient: 'Register new customer', newClientTitle: 'Register new customer',
   newClientDesc: 'It’s saved to your customer list and selected on this invoice.',
