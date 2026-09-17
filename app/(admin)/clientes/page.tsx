@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { cleanStr } from '@/lib/fmt';
 
 type ClientType = 'corporate' | 'individual';
 type PaymentMethod = 'cash' | 'check' | 'card' | 'transfer' | 'credit';
@@ -250,19 +251,19 @@ export default function ClientesPage() {
     return {
       name: c.name,
       clientType: c.client_type,
-      contactName: c.contact_name ?? '',
-      phone: c.phone ?? '',
-      email: c.email ?? '',
-      billingAddress: c.billing_address_line ?? '',
-      city: c.city ?? '',
-      state: c.state ?? '',
-      zip: c.zip ?? '',
-      taxId: c.tax_id ?? '',
+      contactName: cleanStr(c.contact_name),
+      phone: cleanStr(c.phone),
+      email: cleanStr(c.email),
+      billingAddress: cleanStr(c.billing_address_line),
+      city: cleanStr(c.city),
+      state: cleanStr(c.state),
+      zip: cleanStr(c.zip),
+      taxId: cleanStr(c.tax_id),
       paymentMethod: c.default_payment_method,
       paymentTermsDays: String(c.payment_terms_days ?? 0),
       taxExempt: !!c.tax_exempt,
-      taxExemptCertificate: c.tax_exempt_certificate ?? '',
-      notes: c.notes ?? '',
+      taxExemptCertificate: cleanStr(c.tax_exempt_certificate),
+      notes: cleanStr(c.notes),
     };
   }
 

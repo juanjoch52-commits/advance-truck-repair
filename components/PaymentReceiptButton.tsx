@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { jsPDF } from 'jspdf';
+import { cleanStr } from '@/lib/fmt';
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 
@@ -63,7 +64,7 @@ export function PaymentReceiptButton({ invoiceId, paymentId, className, mode = '
       const stamp = `${now.toLocaleDateString('en-US')} ${now.toLocaleTimeString('en-US')}`;
 
       const shopName = shop?.legal_name || shop?.name || 'Advance Truck Repair';
-      const addr = (o: any) => [o?.billing_address_line, [o?.city, o?.state, o?.zip].filter(Boolean).join(', ')].filter(Boolean);
+      const addr = (o: any) => [cleanStr(o?.billing_address_line), [cleanStr(o?.city), cleanStr(o?.state), cleanStr(o?.zip)].filter(Boolean).join(', ')].filter(Boolean);
 
       // Encabezado: logo + datos del taller.
       const logo = await loadLogo(shop?.logo_url || '/logo.png', 120, 48);
@@ -105,7 +106,7 @@ export function PaymentReceiptButton({ invoiceId, paymentId, className, mode = '
       doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(SOFT, SOFT, SOFT);
       doc.text('RECEIVED FROM', M, y);
       doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(INK, INK, INK);
-      doc.text(client?.name || 'Cliente', M, y + 14);
+      doc.text(cleanStr(client?.name) || 'Cliente', M, y + 14);
       y += 36;
 
       // Monto pagado (destacado).

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { cleanStr } from '@/lib/fmt';
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 
@@ -56,7 +57,7 @@ export async function buildInvoicePdf(invoiceId: string): Promise<{ doc: jsPDF; 
       const stamp = `${now.toLocaleDateString('en-US')} ${now.toLocaleTimeString('en-US')}`;
 
       const shopName = shop?.legal_name || shop?.name || 'Advance Truck Repair';
-      const addr = (o: any) => [o?.billing_address_line, [o?.city, o?.state, o?.zip].filter(Boolean).join(', ')].filter(Boolean);
+      const addr = (o: any) => [cleanStr(o?.billing_address_line), [cleanStr(o?.city), cleanStr(o?.state), cleanStr(o?.zip)].filter(Boolean).join(', ')].filter(Boolean);
 
       // ── Logo (logo del taller o el del proyecto) ──
       const logo = await loadLogo(shop?.logo_url || '/logo.png', 120, 48);
@@ -110,14 +111,16 @@ export async function buildInvoicePdf(invoiceId: string): Promise<{ doc: jsPDF; 
       doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(SOFT, SOFT, SOFT);
       doc.text('BILL TO', M, y);
       doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(INK, INK, INK);
-      doc.text(client?.name || invoice?.customer_name || 'Cliente', M, y + 13);
+      doc.text(cleanStr(client?.name) || cleanStr(invoice?.customer_name) || 'Cliente', M, y + 13);
       doc.setFontSize(8); doc.setTextColor(SOFT, SOFT, SOFT);
       let by = y + 24;
       for (const l of addr(client)) { doc.text(l, M, by); by += 10; }
       // Cliente ocasional (walk-in): empresa / teléfono a texto (no hay ficha CRM).
       if (!client) {
-        if (invoice.customer_company) { doc.text(String(invoice.customer_company), M, by); by += 10; }
-        if (invoice.customer_phone) { doc.text(`Tel: ${invoice.customer_phone}`, M, by); by += 10; }
+        const cCompany = cleanStr(invoice.customer_company);
+        const cPhone = cleanStr(invoice.customer_phone);
+        if (cCompany) { doc.text(cCompany, M, by); by += 10; }
+        if (cPhone) { doc.text(`Tel: ${cPhone}`, M, by); by += 10; }
       }
       // Camión / unidad de la factura (historial por unidad).
       if (truck) {

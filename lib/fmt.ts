@@ -7,3 +7,14 @@ export function fmtDate(dateStr: string): string {
   const [year, month, day] = datePart.split('-');
   return `${month}/${day}/${year}`;
 }
+
+/**
+ * Texto limpio para mostrar/guardar. Devuelve '' cuando el valor es nulo, vacío
+ * o el LITERAL "null"/"undefined" — algunos registros viejos (importados) guardaron
+ * esas palabras como texto, y así nunca se imprimen en facturas ni se re-guardan.
+ */
+export function cleanStr(v: unknown): string {
+  const s = String(v ?? '').trim();
+  const low = s.toLowerCase();
+  return low === 'null' || low === 'undefined' ? '' : s;
+}

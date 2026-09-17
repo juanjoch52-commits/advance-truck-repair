@@ -6,7 +6,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { InvoicePdfButton } from '@/components/InvoicePdfButton';
 import { EmailInvoiceButton } from '@/components/EmailInvoiceButton';
 import { PaymentReceiptButton } from '@/components/PaymentReceiptButton';
-import { fmtDate } from '@/lib/fmt';
+import { fmtDate, cleanStr } from '@/lib/fmt';
 
 // ─── Detalle de factura / cotización ─────────────────────────────────────────
 // Todo lo de un documento en una pantalla: encabezado, cliente (registrado o
@@ -434,9 +434,9 @@ export default function FacturaDetallePage() {
             <div className="text-slate-400 text-sm mt-2 space-y-1">
               {client ? (
                 <>
-                  {client.billing_address_line && <p>{client.billing_address_line}</p>}
-                  {(client.city || client.state || client.zip) && <p>{[client.city, client.state, client.zip].filter(Boolean).join(', ')}</p>}
-                  {client.phone && <p>Tel: {client.phone}</p>}
+                  {cleanStr(client.billing_address_line) && <p>{cleanStr(client.billing_address_line)}</p>}
+                  {(() => { const a = [client.city, client.state, client.zip].map(cleanStr).filter(Boolean).join(', '); return a ? <p>{a}</p> : null; })()}
+                  {cleanStr(client.phone) && <p>Tel: {cleanStr(client.phone)}</p>}
                   <a href={`/clientes/${client.id}`} className="text-amber-400/80 hover:text-amber-300 text-xs inline-block mt-1">{L.seeClient}</a>
                 </>
               ) : (

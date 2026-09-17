@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { cleanStr } from '@/lib/fmt';
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 
@@ -63,9 +64,9 @@ export function ClientStatementButton({ client, invoices, summary, truckLabel, l
       doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(SOFT, SOFT, SOFT);
       doc.text(L.billTo, M, y);
       doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(INK, INK, INK);
-      doc.text(client.name || '—', M, y + 14);
+      doc.text(cleanStr(client.name) || '—', M, y + 14);
       doc.setFontSize(8); doc.setTextColor(SOFT, SOFT, SOFT);
-      const addr = [client.billing_address_line, [client.city, client.state, client.zip].filter(Boolean).join(', ')].filter(Boolean);
+      const addr = [cleanStr(client.billing_address_line), [cleanStr(client.city), cleanStr(client.state), cleanStr(client.zip)].filter(Boolean).join(', ')].filter(Boolean);
       let by = y + 26; for (const l of addr) { doc.text(String(l), M, by); by += 10; }
       y = by + 8;
 
