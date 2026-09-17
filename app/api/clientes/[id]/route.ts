@@ -64,19 +64,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const payload: Record<string, unknown> = {};
     if (body.name !== undefined) {
-      const name = String(body.name).trim();
+      const name = String(body.name ?? '').trim();
       if (!name) return NextResponse.json({ error: 'El nombre es requerido' }, { status: 400 });
       payload.name = name;
     }
     if (body.client_type !== undefined) payload.client_type = body.client_type === 'individual' ? 'individual' : 'corporate';
-    if (body.contact_name !== undefined) payload.contact_name = String(body.contact_name).trim() || null;
-    if (body.phone !== undefined) payload.phone = String(body.phone).trim() || null;
-    if (body.email !== undefined) payload.email = String(body.email).trim() || null;
-    if (body.billing_address_line !== undefined) payload.billing_address_line = String(body.billing_address_line).trim() || null;
-    if (body.city !== undefined) payload.city = String(body.city).trim() || null;
-    if (body.state !== undefined) payload.state = String(body.state).trim() || null;
-    if (body.zip !== undefined) payload.zip = String(body.zip).trim() || null;
-    if (body.tax_id !== undefined) payload.tax_id = String(body.tax_id).trim() || null;
+    if (body.contact_name !== undefined) payload.contact_name = String(body.contact_name ?? '').trim() || null;
+    if (body.phone !== undefined) payload.phone = String(body.phone ?? '').trim() || null;
+    if (body.email !== undefined) payload.email = String(body.email ?? '').trim() || null;
+    if (body.billing_address_line !== undefined) payload.billing_address_line = String(body.billing_address_line ?? '').trim() || null;
+    if (body.city !== undefined) payload.city = String(body.city ?? '').trim() || null;
+    if (body.state !== undefined) payload.state = String(body.state ?? '').trim() || null;
+    if (body.zip !== undefined) payload.zip = String(body.zip ?? '').trim() || null;
+    if (body.tax_id !== undefined) payload.tax_id = String(body.tax_id ?? '').trim() || null;
     if (body.default_payment_method !== undefined)
       payload.default_payment_method = ['cash', 'check', 'card', 'transfer', 'credit'].includes(body.default_payment_method)
         ? body.default_payment_method : 'cash';
@@ -88,8 +88,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (!body.tax_exempt) payload.tax_exempt_certificate = null;
     }
     if (body.tax_exempt_certificate !== undefined)
-      payload.tax_exempt_certificate = String(body.tax_exempt_certificate).trim() || null;
-    if (body.notes !== undefined) payload.notes = String(body.notes).trim() || null;
+      payload.tax_exempt_certificate = String(body.tax_exempt_certificate ?? '').trim() || null;
+    if (body.notes !== undefined) payload.notes = String(body.notes ?? '').trim() || null;
     if (body.is_active !== undefined) payload.is_active = Boolean(body.is_active);
 
     const { data, error } = await supabase.from('clients').update(payload).eq('id', id).select(CLIENT_COLS).single();

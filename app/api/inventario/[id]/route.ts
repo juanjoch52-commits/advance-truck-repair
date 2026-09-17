@@ -11,17 +11,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const body = await request.json();
 
     const payload: Record<string, unknown> = {};
-    if (body.part_number !== undefined) payload.part_number = String(body.part_number).trim() || null;
+    if (body.part_number !== undefined) payload.part_number = String(body.part_number ?? '').trim() || null;
     if (body.name !== undefined) {
-      const name = String(body.name).trim();
+      const name = String(body.name ?? '').trim();
       if (!name) return NextResponse.json({ error: 'El nombre es requerido' }, { status: 400 });
       payload.name = name;
     }
-    if (body.description !== undefined) payload.description = String(body.description).trim() || null;
+    if (body.description !== undefined) payload.description = String(body.description ?? '').trim() || null;
     if (body.unit_cost !== undefined) payload.unit_cost = num(body.unit_cost);
     if (body.sale_price !== undefined) payload.sale_price = num(body.sale_price);
     if (body.reorder_level !== undefined) payload.reorder_level = num(body.reorder_level);
-    if (body.location !== undefined) payload.location = String(body.location).trim() || null;
+    if (body.location !== undefined) payload.location = String(body.location ?? '').trim() || null;
     if (body.is_active !== undefined) payload.is_active = Boolean(body.is_active);
 
     if (Object.keys(payload).length === 0) return NextResponse.json({ error: 'Nada que actualizar' }, { status: 400 });

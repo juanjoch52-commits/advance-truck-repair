@@ -55,11 +55,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (body.due_date !== undefined) payload.due_date = body.due_date || null;
     if (body.issue_date !== undefined && body.issue_date) payload.issue_date = body.issue_date;
     if (body.payment_method !== undefined && PAYMENT_METHODS.includes(body.payment_method)) payload.payment_method = body.payment_method;
-    if (body.description !== undefined) payload.description = String(body.description).trim() || null;
-    if (body.notes !== undefined) payload.notes = String(body.notes).trim() || null;
+    if (body.description !== undefined) payload.description = String(body.description ?? '').trim() || null;
+    if (body.notes !== undefined) payload.notes = String(body.notes ?? '').trim() || null;
     // Seguro: metadata editable incluso después de emitir (no toca montos).
-    if (body.insurance_company !== undefined) payload.insurance_company = String(body.insurance_company).trim() || null;
-    if (body.insurance_claim !== undefined) payload.insurance_claim = String(body.insurance_claim).trim() || null;
+    if (body.insurance_company !== undefined) payload.insurance_company = String(body.insurance_company ?? '').trim() || null;
+    if (body.insurance_claim !== undefined) payload.insurance_claim = String(body.insurance_claim ?? '').trim() || null;
     if (body.insurance_status !== undefined) {
       payload.insurance_status = INSURANCE_STATUSES.includes(body.insurance_status) ? body.insurance_status : null;
     }

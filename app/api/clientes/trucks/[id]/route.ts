@@ -18,14 +18,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const body = await request.json();
 
     const payload: Record<string, unknown> = {};
-    if (body.location_id !== undefined) payload.location_id = String(body.location_id).trim() || null;
-    if (body.unit_number !== undefined) payload.unit_number = String(body.unit_number).trim() || null;
-    if (body.plate !== undefined) payload.plate = String(body.plate).trim() || null;
-    if (body.make !== undefined) payload.make = String(body.make).trim() || null;
-    if (body.model !== undefined) payload.model = String(body.model).trim() || null;
+    if (body.location_id !== undefined) payload.location_id = String(body.location_id ?? '').trim() || null;
+    if (body.unit_number !== undefined) payload.unit_number = String(body.unit_number ?? '').trim() || null;
+    if (body.plate !== undefined) payload.plate = String(body.plate ?? '').trim() || null;
+    if (body.make !== undefined) payload.make = String(body.make ?? '').trim() || null;
+    if (body.model !== undefined) payload.model = String(body.model ?? '').trim() || null;
     if (body.year !== undefined) payload.year = parseYear(body.year);
-    if (body.vin !== undefined) payload.vin = String(body.vin).trim() || null;
-    if (body.notes !== undefined) payload.notes = String(body.notes).trim() || null;
+    if (body.vin !== undefined) payload.vin = String(body.vin ?? '').trim() || null;
+    if (body.notes !== undefined) payload.notes = String(body.notes ?? '').trim() || null;
     if (body.is_active !== undefined) payload.is_active = Boolean(body.is_active);
 
     const { data, error } = await supabase.from('trucks').update(payload).eq('id', id).select(TRUCK_COLS).single();
