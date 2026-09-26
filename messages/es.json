@@ -1019,6 +1019,8 @@
     "allShops": "Todos los talleres",
     "total": "Total cobrado",
     "payments": "pagos",
+    "salesTax": "Impuesto recolectado (sales tax)",
+    "salesTaxNote": "Sobre {n} facturas emitidas · {a} facturado",
     "byMethod": "Por método",
     "byType": "Por tipo",
     "date": "Fecha",

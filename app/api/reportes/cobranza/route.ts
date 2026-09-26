@@ -89,6 +89,26 @@ export async function GET(request: Request) {
       });
     }
 
+    // Impuesto (sales tax) RECOLECTADO en el periodo. Mismo criterio que
+    // /reporte-talleres: facturas fiscales emitidas (no anuladas/borrador) por
+    // fecha de emisión, para que la cifra coincida entre reportes. Scoped por taller.
+    let taxQuery = supabase
+      .from('invoices')
+      .select('tax_amount,total,shop_id')
+      .eq('document_type', 'invoice')
+      .not('status', 'in', '("void","draft")')
+      .gte('issue_date', from)
+      .lte('issue_date', to);
+    if (shopFilter) taxQuery = taxQuery.eq('shop_id', shopFilter);
+    const { data: taxInvs, error: taxErr } = await taxQuery;
+    if (taxErr) return NextResponse.json({ error: sanitizeDbError('cobranza.tax', taxErr.message) }, { status: 500 });
+    let salesTax = 0, invoicedTotal = 0, invoicedCount = 0;
+    for (const i of taxInvs ?? []) {
+      salesTax = round2(salesTax + Number(i.tax_amount));
+      invoicedTotal = round2(invoicedTotal + Number(i.total));
+      invoicedCount += 1;
+    }
+
     return NextResponse.json({
       from, to,
       shop_filter: shopFilter,
@@ -97,6 +117,9 @@ export async function GET(request: Request) {
       by_method: byMethod,
       by_type: byType,
       rows,
+      sales_tax: salesTax,
+      invoiced_total: invoicedTotal,
+      invoiced_count: invoicedCount,
     });
   } catch (err) {
     const authResp = authErrorResponse(err);

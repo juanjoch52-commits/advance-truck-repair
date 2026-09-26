@@ -14,6 +14,7 @@ interface Bucket { total: number; count: number }
 interface Data {
   from: string; to: string; total: number; count: number;
   by_method: Record<string, Bucket>; by_type: Record<string, Bucket>; rows: Row[];
+  sales_tax: number; invoiced_total: number; invoiced_count: number;
 }
 interface ShopOpt { id: string; name: string }
 
@@ -121,13 +122,20 @@ export default function ReporteCobranzaPage() {
         <div className="text-center py-12 text-slate-500">{t('collections.none')}</div>
       ) : (
         <>
-          {/* Resumen */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          {/* Resumen: dinero cobrado + impuesto recolectado */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-5">
               <p className="text-emerald-300/70 text-xs uppercase tracking-wide">{t('collections.total')}</p>
               <p className="display-font text-3xl font-bold text-emerald-300 mt-1">{money(data.total)}</p>
               <p className="text-slate-500 text-xs mt-1">{data.count} {t('collections.payments')}</p>
             </div>
+            <div className="bg-sky-500/10 border border-sky-500/30 rounded-xl p-5">
+              <p className="text-sky-300/70 text-xs uppercase tracking-wide">{t('collections.salesTax')}</p>
+              <p className="display-font text-3xl font-bold text-sky-300 mt-1">{money(data.sales_tax)}</p>
+              <p className="text-slate-500 text-xs mt-1">{t('collections.salesTaxNote').replace('{n}', String(data.invoiced_count)).replace('{a}', money(data.invoiced_total))}</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div className="bg-slate-900/60 border border-white/5 rounded-xl p-5">
               <p className="text-slate-400 text-xs uppercase tracking-wide mb-2">{t('collections.byMethod')}</p>
               <div className="space-y-1.5">

@@ -1019,6 +1019,8 @@
     "allShops": "All shops",
     "total": "Total collected",
     "payments": "payments",
+    "salesTax": "Sales tax collected",
+    "salesTaxNote": "On {n} invoices issued · {a} invoiced",
     "byMethod": "By method",
     "byType": "By type",
     "date": "Date",
