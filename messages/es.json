@@ -167,6 +167,7 @@
       "receiptNo": "Comprobante",
       "recordedBy": "Registrado por",
       "printReceipt": "Imprimir comprobante",
+      "receiptButton": "Comprobante de pago",
       "downloadReceipt": "Descargar",
       "receipts": "Comprobantes de pago",
       "noPayments": "Sin pagos registrados.",

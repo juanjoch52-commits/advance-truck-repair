@@ -6,6 +6,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { InvoicePdfButton } from '@/components/InvoicePdfButton';
 import { EmailInvoiceButton } from '@/components/EmailInvoiceButton';
 import { PaymentReceiptButton } from '@/components/PaymentReceiptButton';
+import { useSessionRole } from '@/lib/useSessionRole';
 import { fmtDate, cleanStr } from '@/lib/fmt';
 
 // ─── Detalle de factura / cotización ─────────────────────────────────────────
@@ -47,9 +48,12 @@ export default function FacturaDetallePage() {
 
   useEffect(() => { load(); }, [load]);
 
+  const { readOnly } = useSessionRole(); // contable: solo lectura → ocultar acciones de escritura
   const inv = data?.invoice;
   const items: any[] = data?.items ?? [];
   const payments: any[] = data?.payments ?? [];
+  // Pago más reciente no anulado → para el botón de comprobante siempre visible.
+  const latestPayment = payments.find((p: any) => !p.voided) ?? null;
   const credits: any[] = data?.credits ?? [];
   const client = data?.client;
   const shop = data?.shop;
@@ -295,17 +299,17 @@ export default function FacturaDetallePage() {
 
       {/* ─── Acciones ─── */}
       <div className="flex items-center gap-2 flex-wrap mb-6">
-        {inv.status === 'draft' && !isVoid && (
+        {!readOnly && inv.status === 'draft' && !isVoid && (
           <a href={`/facturacion/nueva?id=${inv.id}`} className="bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/40 text-sky-200 font-semibold px-5 py-2.5 rounded-lg transition">
             {t('common.edit')}
           </a>
         )}
-        {isDraftInvoice && (
+        {!readOnly && isDraftInvoice && (
           <button onClick={openEmit} disabled={busy} className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold px-5 py-2.5 rounded-lg transition display-font tracking-wide">
             {t('invoices.emit')}
           </button>
         )}
-        {isEstimate && !inv.converted_to_invoice_id && !isVoid && (
+        {!readOnly && isEstimate && !inv.converted_to_invoice_id && !isVoid && (
           <button onClick={convertir} disabled={busy} className="bg-purple-500 hover:bg-purple-400 disabled:opacity-50 text-slate-950 font-bold px-5 py-2.5 rounded-lg transition display-font tracking-wide">
             {L.convert}
           </button>
@@ -315,27 +319,34 @@ export default function FacturaDetallePage() {
             {L.seeConverted}
           </a>
         )}
-        {inv.balance > 0.001 && !isVoid && inv.status !== 'draft' && (
+        {!readOnly && inv.balance > 0.001 && !isVoid && inv.status !== 'draft' && (
           <button onClick={openPay} className="bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-200 font-semibold px-5 py-2.5 rounded-lg transition">
             {t('invoices.recordPayment')}
           </button>
         )}
-        {!isVoid && inv.status !== 'draft' && inv.document_type === 'invoice' && inv.balance > 0.001 && (
+        {!readOnly && !isVoid && inv.status !== 'draft' && inv.document_type === 'invoice' && inv.balance > 0.001 && (
           <button onClick={() => { setShowCredit(v => !v); setCreditError(''); }} className="bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/40 text-orange-200 font-semibold px-5 py-2.5 rounded-lg transition">
             {L.creditNote}
           </button>
         )}
-        {!inv.client_id && (inv.customer_name || inv.customer_company) && (
+        {!readOnly && !inv.client_id && (inv.customer_name || inv.customer_company) && (
           <button onClick={registrarCliente} disabled={busy} className="bg-slate-800 hover:bg-slate-700 border border-white/10 text-slate-200 px-5 py-2.5 rounded-lg transition">
             {L.registerClient}
           </button>
         )}
         <span className="flex-1" />
+        {/* Comprobante de pago: visible y a un clic en cualquier factura con pago
+            (antes quedaba enterrado en el historial). Es de lectura → también la contable. */}
+        {latestPayment && (
+          <PaymentReceiptButton invoiceId={inv.id} paymentId={latestPayment.id} mode="print"
+            label={t('invoices.payment.receiptButton')}
+            className="inline-flex items-center gap-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold px-5 py-2.5 rounded-lg transition text-sm" />
+        )}
         <InvoicePdfButton invoiceId={inv.id} className="bg-slate-800 hover:bg-slate-700 border border-white/10 text-slate-300 p-2.5 rounded-lg transition" />
         <InvoicePdfButton invoiceId={inv.id} mode="print" className="bg-slate-800 hover:bg-slate-700 border border-white/10 text-slate-300 p-2.5 rounded-lg transition" />
         {/* Enviar por correo — solo visible si NEXT_PUBLIC_EMAIL_ENABLED=true (apagado por ahora). */}
-        <EmailInvoiceButton invoiceId={inv.id} defaultEmail={client?.email ?? ''} className="bg-slate-800 hover:bg-slate-700 border border-white/10 text-slate-300 p-2.5 rounded-lg transition" />
-        {!isVoid && (
+        {!readOnly && <EmailInvoiceButton invoiceId={inv.id} defaultEmail={client?.email ?? ''} className="bg-slate-800 hover:bg-slate-700 border border-white/10 text-slate-300 p-2.5 rounded-lg transition" />}
+        {!readOnly && !isVoid && (
           <button onClick={anular} disabled={busy} className="bg-slate-800 hover:bg-orange-500/10 border border-white/10 hover:border-orange-500/40 text-slate-400 hover:text-orange-300 px-4 py-2.5 rounded-lg transition text-sm">
             {t('invoices.void')}
           </button>
@@ -461,7 +472,7 @@ export default function FacturaDetallePage() {
                 {inv.insurance_claim && <p className="text-slate-400">{L.claim}: <span className="text-slate-200">{inv.insurance_claim}</span></p>}
                 <div className="flex items-center gap-2 pt-1">
                   <label className="text-slate-500 text-xs">{L.claimStatus}:</label>
-                  <select value={inv.insurance_status ?? ''} onChange={e => setInsuranceStatus(e.target.value)} className={inputCls}>
+                  <select value={inv.insurance_status ?? ''} onChange={e => setInsuranceStatus(e.target.value)} disabled={readOnly} className={inputCls + (readOnly ? ' opacity-60 cursor-not-allowed' : '')}>
                     <option value="">{L.claimStatusNone}</option>
                     {INSURANCE_STATUSES.map(s => <option key={s} value={s}>{(L.ins as any)[s]}</option>)}
                   </select>
@@ -546,9 +557,11 @@ export default function FacturaDetallePage() {
                     {!p.voided && <>
                       <PaymentReceiptButton invoiceId={inv.id} paymentId={p.id} mode="print" />
                       <PaymentReceiptButton invoiceId={inv.id} paymentId={p.id} mode="download" />
-                      <button onClick={() => voidPayment(p)} title={t('invoices.payment.void')} className="p-1.5 rounded text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
-                      </button>
+                      {!readOnly && (
+                        <button onClick={() => voidPayment(p)} title={t('invoices.payment.void')} className="p-1.5 rounded text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                        </button>
+                      )}
                     </>}
                   </div>
                 </div>

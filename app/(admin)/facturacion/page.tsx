@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { InvoicePdfButton } from '@/components/InvoicePdfButton';
 import { PaymentReceiptButton } from '@/components/PaymentReceiptButton';
+import { useSessionRole } from '@/lib/useSessionRole';
 
 type PaymentMethod = 'cash' | 'check' | 'card' | 'deposit' | 'credit';
 type ReceiptMethod = 'cash' | 'check' | 'card' | 'deposit';
@@ -58,6 +59,7 @@ const STATUS_STYLE: Record<InvoiceStatus, string> = {
 
 export default function FacturacionPage() {
   const { t, lang } = useLanguage();
+  const { readOnly } = useSessionRole(); // contable: solo lectura
   const L = lang === 'en' ? EN : ES;
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -425,10 +427,12 @@ export default function FacturacionPage() {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
             {exporting ? L.exporting : L.exportCsv}
           </button>
-          <a data-tour="fac-add" href="/facturacion/nueva" className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 px-5 rounded-lg transition display-font tracking-wide flex items-center gap-2">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-            {t('invoices.addInvoice')}
-          </a>
+          {!readOnly && (
+            <a data-tour="fac-add" href="/facturacion/nueva" className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 px-5 rounded-lg transition display-font tracking-wide flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+              {t('invoices.addInvoice')}
+            </a>
+          )}
         </div>
       </div>
 
@@ -512,13 +516,13 @@ export default function FacturacionPage() {
                 {inv.balance > 0.001 && inv.status !== 'void' && inv.status !== 'draft' && <p className="text-amber-400 text-xs">{t('invoices.balance')}: {money(inv.balance)}</p>}
               </div>
               <div data-tour="fac-actions" className="flex items-center gap-1 flex-shrink-0">
-                {isEstimate && !inv.converted_to_invoice_id && inv.status !== 'void' && (
+                {!readOnly && isEstimate && !inv.converted_to_invoice_id && inv.status !== 'void' && (
                   <button onClick={() => convertEstimate(inv)} disabled={convertingId === inv.id}
                     className="text-xs font-bold px-3 py-1.5 rounded bg-purple-500 hover:bg-purple-400 disabled:opacity-50 text-slate-950 transition display-font">
                     {convertingId === inv.id ? t('common.saving') : L.convert}
                   </button>
                 )}
-                {isEditableDraft && (
+                {!readOnly && isEditableDraft && (
                   <a href={`/facturacion/nueva?id=${inv.id}`} className="text-xs px-2.5 py-1.5 rounded border border-sky-500/30 text-sky-300 hover:bg-sky-500/10 transition">
                     {t('common.edit')}
                   </a>
@@ -528,9 +532,11 @@ export default function FacturacionPage() {
                     <button onClick={() => toggleDraft(inv.id)} className="text-xs px-2.5 py-1.5 rounded border border-white/10 text-slate-300 hover:bg-slate-700 transition">
                       {expandedDraft === inv.id ? t('invoices.hideTasks') : t('invoices.viewTasks')}
                     </button>
-                    <button onClick={() => openEmit(inv)} disabled={emittingId === inv.id} className="text-xs font-bold px-3 py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 transition display-font">
-                      {emittingId === inv.id ? t('common.saving') : t('invoices.emit')}
-                    </button>
+                    {!readOnly && (
+                      <button onClick={() => openEmit(inv)} disabled={emittingId === inv.id} className="text-xs font-bold px-3 py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 transition display-font">
+                        {emittingId === inv.id ? t('common.saving') : t('invoices.emit')}
+                      </button>
+                    )}
                   </>
                 )}
                 <InvoicePdfButton invoiceId={inv.id} />
@@ -540,19 +546,21 @@ export default function FacturacionPage() {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                   </button>
                 )}
-                {inv.balance > 0.001 && inv.status !== 'void' && inv.status !== 'draft' && (
+                {!readOnly && inv.balance > 0.001 && inv.status !== 'void' && inv.status !== 'draft' && (
                   <button onClick={() => openPay(inv)} title={t('invoices.recordPayment')} className="p-1.5 rounded text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   </button>
                 )}
-                {inv.status !== 'void' && (
+                {!readOnly && inv.status !== 'void' && (
                   <button onClick={() => handleVoid(inv)} disabled={busyId === inv.id} title={t('invoices.void')} className="p-1.5 rounded text-slate-500 hover:text-orange-400 hover:bg-orange-500/10 transition">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
                   </button>
                 )}
-                <button onClick={() => handleDelete(inv)} disabled={busyId === inv.id} title={t('common.delete')} className="p-1.5 rounded text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                </button>
+                {!readOnly && (
+                  <button onClick={() => handleDelete(inv)} disabled={busyId === inv.id} title={t('common.delete')} className="p-1.5 rounded text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  </button>
+                )}
               </div>
               </div>
 

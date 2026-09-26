@@ -167,6 +167,7 @@
       "receiptNo": "Receipt #",
       "recordedBy": "Recorded by",
       "printReceipt": "Print receipt",
+      "receiptButton": "Payment receipt",
       "downloadReceipt": "Download",
       "receipts": "Payment receipts",
       "noPayments": "No payments recorded.",
