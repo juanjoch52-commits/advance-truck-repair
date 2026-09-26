@@ -94,6 +94,12 @@ export async function POST(request: Request) {
     // descuenta inventario y NO cobra; todo eso ocurre al EMITIR (/emitir).
     const isDraft = body.draft === true && isFiscal;
 
+    // BLOQUEO: una FACTURA final (no borrador/cotización) debe tener taller.
+    // Sin taller no hay numeración fiscal correcta ni reporte por taller.
+    if (isFiscal && !isDraft && !body.shop_id) {
+      return NextResponse.json({ error: 'Debes elegir un taller para emitir la factura.' }, { status: 400 });
+    }
+
     // Datos del taller (una sola consulta): tasa para el tax automático y
     // prefijo/correlativo para la numeración fiscal.
     let shop: { id: string; tax_rate: number; invoice_prefix: string | null } | null = null;
@@ -166,10 +172,10 @@ export async function POST(request: Request) {
       ? round2(items.reduce((s, it) => s + it.amount, 0))
       : round2(body.subtotal);
 
-    // Sales tax: 6.50% sobre TODA la factura (subtotal). El botón "Cobrar impuesto"
-    // manda charge_tax (por defecto true). Cliente exento → 0 (gana sobre todo).
-    const chargeTax = body.charge_tax !== false;
-    const tax_amount = clientExempt ? 0 : computeInvoiceTax(subtotal, chargeTax);
+    // Sales tax FORZADO: 6.50% sobre TODA la factura (subtotal) SALVO cliente
+    // exento. El taller grava todo (mano de obra incluida); ya no se permite
+    // emitir sin impuesto a un cliente no exento (antes se colaban facturas en $0).
+    const tax_amount = clientExempt ? 0 : computeInvoiceTax(subtotal, true);
 
     const discount = round2(body.discount);
     const total = round2(subtotal + tax_amount - discount);

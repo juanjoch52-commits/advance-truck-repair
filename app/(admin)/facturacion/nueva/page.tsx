@@ -328,8 +328,9 @@ function NuevaFacturaInner() {
   const laborTotal = round2(tasks.reduce((s, tk) => s + taskAmount(tk), 0));
   const partsTotal = round2(parts.reduce((s, pt) => s + partAmount(pt), 0));
   const subtotal = round2(laborTotal + partsTotal);
-  // Impuesto: 6.50% sobre TODA la factura. Cliente exento → 0. Botón para desactivar.
-  const willChargeTax = chargeTax && !clientExempt;
+  // Impuesto FORZADO: 6.50% sobre TODA la factura SALVO cliente exento. Ya no se
+  // puede desactivar a mano (el taller grava todo; antes se colaban facturas en $0).
+  const willChargeTax = !clientExempt;
   const taxN = willChargeTax ? round2(subtotal * TAX_RATE / 100) : 0;
   const discountN = parseFloat(discount) || 0;
   const total = Math.max(0, round2(subtotal + taxN - discountN));
@@ -382,6 +383,8 @@ function NuevaFacturaInner() {
     setError('');
     const err = validate();
     if (err) { setError(err); return; }
+    // BLOQUEO: toda factura debe tener taller (evita facturas huérfanas sin negocio).
+    if (!shopId) { setError(L.shopRequired); return; }
     setSaving(true);
     const body: any = {
       client_id: walkin ? null : (clientId || null),
@@ -583,9 +586,10 @@ function NuevaFacturaInner() {
             </div>
             {shops.length > 0 && (
               <div>
-                <label className={label}>{L.shop}</label>
-                <select value={shopId} onChange={e => setShopId(e.target.value)} className={input}>
-                  <option value="">{L.noShop}</option>
+                <label className={label}>{L.shop} <span className="text-red-400">*</span></label>
+                <select value={shopId} onChange={e => setShopId(e.target.value)}
+                  className={input + (shopId ? '' : ' border-red-500/40')}>
+                  <option value="">{L.selectShopPh}</option>
                   {shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
                 <p className={hint}>{L.shopDesc}</p>
@@ -794,17 +798,9 @@ function NuevaFacturaInner() {
               {clientExempt ? (
                 <span className="text-emerald-300 font-medium">{money(0)} · {L.exempt}</span>
               ) : (
-                <span className="flex items-center gap-3">
-                  <span className={`font-medium ${chargeTax ? 'text-slate-200' : 'text-slate-500'}`}>{money(taxN)}</span>
-                  <button
-                    type="button"
-                    onClick={() => setChargeTax(v => !v)}
-                    className={`text-base px-3 py-1.5 rounded-xl border transition-colors ${chargeTax
-                      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
-                      : 'border-white/15 bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
-                  >
-                    {chargeTax ? L.taxOnBtn : L.taxOffBtn}
-                  </button>
+                <span className="flex items-center gap-2">
+                  <span className="text-slate-200 font-medium">{money(taxN)}</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 whitespace-nowrap">{L.taxAlways}</span>
                 </span>
               )}
             </div>
@@ -993,6 +989,7 @@ const ES = {
   sectionTotals: 'Totales', labor: 'Mano de obra', partsLabel: 'Piezas', subtotal: 'Subtotal',
   tax: 'Impuesto (6.50%)', exempt: 'Exento',
   taxOnBtn: 'Cobrando 6.50%', taxOffBtn: 'No se cobra',
+  taxAlways: 'Siempre 6.50%', shopRequired: 'Debes elegir un taller para la factura.', selectShopPh: 'Elige un taller…',
   discount: 'Descuento', total: 'TOTAL', toPayroll: 'Comisiones a planilla', markPaid: 'Marcar como pagada ahora',
   create: 'Crear factura', saveDraft: 'Guardar borrador', saving: 'Guardando...',
   draftHint: 'Borrador: guarda el trabajo en proceso. Al "Emitir" desde la lista se asigna el número fiscal, baja el inventario y se crea la orden de trabajo con las comisiones.',
@@ -1056,6 +1053,7 @@ const EN = {
   sectionTotals: 'Totals', labor: 'Labor', partsLabel: 'Parts', subtotal: 'Subtotal',
   tax: 'Tax (6.50%)', exempt: 'Exempt',
   taxOnBtn: 'Charging 6.50%', taxOffBtn: 'Not charged',
+  taxAlways: 'Always 6.50%', shopRequired: 'You must choose a shop for the invoice.', selectShopPh: 'Choose a shop…',
   discount: 'Discount', total: 'TOTAL', toPayroll: 'Commissions to payroll', markPaid: 'Mark as paid now',
   create: 'Create invoice', saveDraft: 'Save draft', saving: 'Saving...',
   draftHint: 'Draft: saves work in progress. "Emit" from the list assigns the tax number, lowers inventory and creates the work order with commissions.',

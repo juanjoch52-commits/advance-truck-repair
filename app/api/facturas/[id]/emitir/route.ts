@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { INVOICE_COLS, deriveBalanceStatus, applyWarehouseDeduction, round2, nextReceiptNumber, createWorkOrderFromInvoice } from '@/lib/invoicesApi';
+import { INVOICE_COLS, deriveBalanceStatus, applyWarehouseDeduction, round2, nextReceiptNumber, createWorkOrderFromInvoice, computeInvoiceTax } from '@/lib/invoicesApi';
 import { computePayout } from '@/lib/money';
 import { sanitizeDbError } from '@/lib/clientsApi';
 import { authErrorResponse, requireRole } from '@/lib/apiAuth';
@@ -30,6 +30,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (invoice.document_type !== 'invoice') return NextResponse.json({ error: 'Solo una FACTURA se puede emitir. Convierta la cotización en factura primero.' }, { status: 400 });
     if (invoice.status !== 'draft') return NextResponse.json({ error: 'Solo se puede emitir un borrador.' }, { status: 400 });
     if (invoice.commissions_generated) return NextResponse.json({ error: 'Esta factura ya fue emitida.' }, { status: 400 });
+    // BLOQUEO: no se puede emitir una factura sin taller. Cada factura pertenece
+    // a un negocio; sin taller no hay numeración fiscal correcta ni reporte por taller.
+    if (!invoice.shop_id) return NextResponse.json({ error: 'Debes asignar un taller a la factura antes de emitirla.' }, { status: 400 });
 
     const { data: items } = await supabase.from('invoice_items')
       .select('id,line_type,description,qty,unit_price,amount,cost,part_source,inventory_item_id,done')
@@ -54,15 +57,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
     }
 
-    // Fecha de emisión (la del número y la de la comisión).
+    // Fecha para la PLANILLA/comisiones: el día en que se emite (se termina el
+    // trabajo), o la que mande el cliente. No es la fecha fiscal de la factura.
     const emitDate = (typeof body.completed_date === 'string' && body.completed_date) || new Date().toISOString().slice(0, 10);
+    // Fecha FISCAL de la factura = su propia fecha (issue_date). El número la lleva
+    // dentro (AAAAMMDD), así el número coincide con la fecha mostrada.
+    const invoiceDate = String(invoice.issue_date ?? '').slice(0, 10) || emitDate;
 
-    // Número fiscal: correlativo atómico del taller (con la fecha de emisión), o respaldo global.
+    // Número fiscal: correlativo atómico del taller (con la fecha de la FACTURA), o respaldo global.
     let document_number = String(invoice.document_number ?? '').trim();
     if (!document_number) {
       let prefix = 'INV-';
       if (invoice.shop_id) {
-        const { data: num } = await supabase.rpc('next_shop_invoice_number', { p_shop_id: invoice.shop_id, p_date: emitDate });
+        const { data: num } = await supabase.rpc('next_shop_invoice_number', { p_shop_id: invoice.shop_id, p_date: invoiceDate });
         if (num) document_number = String(num);
         const { data: shop } = await supabase.from('shops').select('invoice_prefix').eq('id', invoice.shop_id).maybeSingle();
         if (shop?.invoice_prefix) prefix = shop.invoice_prefix;
@@ -81,8 +88,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       await supabase.from('invoice_items').update({ done: true }).in('id', laborIds);
     }
 
+    // Impuesto FORZADO al emitir: 6.50% salvo cliente exento. Corrige borradores
+    // viejos que quedaron sin impuesto (se recalcula sobre el subtotal guardado).
+    // Idempotente: si ya traía el impuesto correcto, da el mismo valor.
+    let clientExempt = false;
+    if (invoice.client_id) {
+      const { data: cli } = await supabase.from('clients').select('tax_exempt').eq('id', invoice.client_id).maybeSingle();
+      clientExempt = !!(cli as any)?.tax_exempt;
+    }
+    const subtotalV = Number(invoice.subtotal) || 0;
+    const discountV = Number(invoice.discount) || 0;
+    const tax_amount = clientExempt ? 0 : computeInvoiceTax(subtotalV, true);
+
     // Estado / pago.
-    const total = Number(invoice.total) || 0;
+    const total = round2(subtotalV + tax_amount - discountV);
     const markPaid = invoice.payment_method !== 'credit' && body.mark_paid === true;
     const amount_paid = markPaid ? total : 0;
     const { balance, status } = deriveBalanceStatus(total, amount_paid);
@@ -97,6 +116,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { data: updated, error: upErr } = await supabase.from('invoices').update({
       document_number,
       status,
+      // Impuesto/total forzados (corrige borradores sin impuesto al emitir).
+      tax_amount,
+      total,
       amount_paid,
       balance,
       emitted_at: new Date().toISOString(),
