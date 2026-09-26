@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { PaymentReceiptButton } from '@/components/PaymentReceiptButton';
+import { useSessionRole } from '@/lib/useSessionRole';
 
 type ReceiptMethod = 'cash' | 'check' | 'card' | 'deposit';
 type PaymentKind = 'deposit' | 'advance' | 'settlement';
@@ -47,6 +48,7 @@ const BUCKET_STYLE: Record<Bucket, string> = {
 
 export default function CuentasPorCobrarPage() {
   const { t } = useLanguage();
+  const { readOnly } = useSessionRole(); // contable: solo lectura
   const [summary, setSummary] = useState<ARSummary | null>(null);
   const [clients, setClients] = useState<ARClient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -244,7 +246,7 @@ export default function CuentasPorCobrarPage() {
                     <div className="flex items-center gap-3 flex-shrink-0">
                       <span className={`text-xs ${BUCKET_STYLE[inv.bucket]}`}>{inv.days_past_due} {t('receivables.alerts.daysLate')}</span>
                       <span className="text-amber-300 font-semibold">{money(inv.balance)}</span>
-                      <button onClick={() => openPay(inv)} className="text-emerald-400 hover:text-emerald-300 text-xs font-medium hover:underline">{t('receivables.collect')}</button>
+                      {!readOnly && <button onClick={() => openPay(inv)} className="text-emerald-400 hover:text-emerald-300 text-xs font-medium hover:underline">{t('receivables.collect')}</button>}
                     </div>
                   </div>
                 ))}
@@ -312,7 +314,7 @@ export default function CuentasPorCobrarPage() {
                               <td className="px-3 py-2.5 text-right text-slate-500">{money(inv.amount_paid)}</td>
                               <td className="px-3 py-2.5 text-right text-amber-300 font-semibold">{money(inv.balance)}</td>
                               <td className="px-3 py-2.5 text-right">
-                                <button onClick={() => openPay(inv)} className="text-emerald-400 hover:text-emerald-300 text-xs font-medium hover:underline">{t('receivables.collect')}</button>
+                                {!readOnly && <button onClick={() => openPay(inv)} className="text-emerald-400 hover:text-emerald-300 text-xs font-medium hover:underline">{t('receivables.collect')}</button>}
                               </td>
                             </tr>
                           ))}

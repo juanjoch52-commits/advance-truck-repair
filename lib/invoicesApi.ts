@@ -33,6 +33,14 @@ export async function requireInvoicesAccess() {
   return getSupabaseServerClient();
 }
 
+// LECTURA de facturación (incluye 'contable', solo lectura). Devuelve la sesión
+// para poder aplicar el filtro por taller (shopScopeFor). Úsese SOLO en handlers
+// GET; las escrituras deben seguir usando requireInvoicesAccess (sin contable).
+export async function requireInvoicesReadAccess() {
+  const session = await requireRole('owner', 'admin', 'super_user', 'contable');
+  return { session, supabase: getSupabaseServerClient() };
+}
+
 export function round2(n: number) {
   return Math.round((Number(n) || 0) * 100) / 100;
 }

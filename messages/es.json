@@ -19,7 +19,8 @@
     "settings": "Datos de Facturación",
     "attendance": "Asistencia",
     "shopReport": "Reporte por taller",
-    "salesReport": "Informe de Ventas"
+    "salesReport": "Informe de Ventas",
+    "collections": "Cobranza"
   },
   "settings": {
     "title": "DATOS DE FACTURACIÓN",
@@ -167,6 +168,7 @@
       "receiptNo": "Comprobante",
       "recordedBy": "Registrado por",
       "printReceipt": "Imprimir comprobante",
+      "receiptButton": "Comprobante de pago",
       "downloadReceipt": "Descargar",
       "receipts": "Comprobantes de pago",
       "noPayments": "Sin pagos registrados.",
@@ -689,10 +691,14 @@
     "createdAt": "Creado",
     "protectedNote": "El rol Super Admin está protegido y no puede ser modificado por otros usuarios.",
     "errorChangeRole": "Error al cambiar rol: ",
+    "assignShop": "Taller asignado",
+    "selectShop": "Elige un taller…",
+    "contableHint": "La contable solo verá (lectura) la facturación y los reportes de ese taller, más la nómina de la empresa.",
     "roles": {
       "super_admin": "Super Admin",
       "owner": "Dueño",
-      "admin": "Administrador"
+      "admin": "Administrador",
+      "contable": "Contable"
     }
   },
   "staff": {
@@ -1003,6 +1009,28 @@
     "laborBilled": "Mano de obra facturada",
     "laborPaid": "Pago a mecánicos",
     "laborMargin": "Margen de mano de obra"
+  },
+  "collections": {
+    "title": "COBRANZA",
+    "subtitle": "Pagos recibidos en el periodo — para cuadrar la caja",
+    "from": "Desde",
+    "to": "Hasta",
+    "shop": "Taller",
+    "allShops": "Todos los talleres",
+    "total": "Total cobrado",
+    "payments": "pagos",
+    "byMethod": "Por método",
+    "byType": "Por tipo",
+    "date": "Fecha",
+    "receipt": "Comprobante",
+    "invoice": "Factura",
+    "client": "Cliente",
+    "method": "Método",
+    "type": "Tipo",
+    "amount": "Monto",
+    "recordedBy": "Registró",
+    "exportCsv": "Exportar CSV",
+    "none": "No hay pagos en este periodo."
   },
   "salesReport": {
     "title": "INFORME DE VENTAS",

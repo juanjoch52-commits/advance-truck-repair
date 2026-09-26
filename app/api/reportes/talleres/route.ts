@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { requireShopsAccess } from '@/lib/shopsApi';
 import { round2 } from '@/lib/invoicesApi';
 import { sanitizeDbError } from '@/lib/clientsApi';
-import { authErrorResponse } from '@/lib/apiAuth';
+import { authErrorResponse, requireRole, shopScopeFor } from '@/lib/apiAuth';
+import { getSupabaseServerClient } from '@/lib/supabaseServer';
 
 // GET /api/reportes/talleres?from=YYYY-MM-DD&to=YYYY-MM-DD
 // Resumen financiero por taller (negocio) en un periodo: facturado, sales tax
@@ -14,23 +14,30 @@ import { authErrorResponse } from '@/lib/apiAuth';
 // evita el reparto intercompany. Ver `labor` en la respuesta.
 export async function GET(request: Request) {
   try {
-    const supabase = await requireShopsAccess();
+    // Lectura: owner/admin/super_user (global) + contable (limitada a su taller).
+    const session = await requireRole('owner', 'admin', 'super_user', 'contable');
+    const supabase = getSupabaseServerClient();
+    const shopScope = shopScopeFor(session);
     const url = new URL(request.url);
     const today = new Date().toISOString().slice(0, 10);
     const from = url.searchParams.get('from') || today.slice(0, 8) + '01';
     const to = url.searchParams.get('to') || today;
 
-    const { data: shops, error: shopErr } = await supabase
+    let shopsQuery = supabase
       .from('shops').select('id,name,legal_name,business_code').order('sort_order');
+    if (shopScope) shopsQuery = shopsQuery.eq('id', shopScope); // contable: solo su taller
+    const { data: shops, error: shopErr } = await shopsQuery;
     if (shopErr) return NextResponse.json({ error: sanitizeDbError('reportes/talleres.shops', shopErr.message) }, { status: 500 });
 
-    const { data: invoices, error: invErr } = await supabase
+    let invQuery = supabase
       .from('invoices')
       .select('id,shop_id,total,tax_amount,subtotal,discount,amount_paid,balance')
       .eq('document_type', 'invoice')
       .not('status', 'in', '("void","draft")')
       .gte('issue_date', from)
       .lte('issue_date', to);
+    if (shopScope) invQuery = invQuery.eq('shop_id', shopScope); // contable: solo su taller
+    const { data: invoices, error: invErr } = await invQuery;
     if (invErr) return NextResponse.json({ error: sanitizeDbError('reportes/talleres.invoices', invErr.message) }, { status: 500 });
 
     const invList = invoices ?? [];
@@ -59,8 +66,12 @@ export async function GET(request: Request) {
     // Pago a mecánicos UNIFICADO: comisiones de mecánicos (earned_entries tipo
     // 'mechanic') generadas en el periodo, sin separar por taller. Origen único
     // (factura emitida u orden), ya agregado a nivel de negocio combinado.
-    let laborPaid = 0;
-    {
+    // La mano de obra es una cifra de EMPRESA (mecánicos compartidos): no se puede
+    // atribuir a un solo taller. Por eso, para la contable (scoped) se omite el
+    // bloque `labor` — lo verá completo en la sección de Nómina.
+    let labor: { facturada: number; pagada: number; margen: number } | null = null;
+    if (!shopScope) {
+      let laborPaid = 0;
       const { data: entries, error: entErr } = await supabase
         .from('earned_entries')
         .select('amount')
@@ -69,8 +80,8 @@ export async function GET(request: Request) {
         .lte('work_date', to);
       if (entErr) return NextResponse.json({ error: sanitizeDbError('reportes/talleres.earned', entErr.message) }, { status: 500 });
       for (const e of entries ?? []) laborPaid = round2(laborPaid + Number(e.amount));
+      labor = { facturada: laborBilled, pagada: laborPaid, margen: round2(laborBilled - laborPaid) };
     }
-    const labor = { facturada: laborBilled, pagada: laborPaid, margen: round2(laborBilled - laborPaid) };
 
     // Taller que absorbe TODO el costo de piezas: el papá (business_code '01').
     // Decisión del dueño: las compras/costos de piezas se cargan al papá; los dos

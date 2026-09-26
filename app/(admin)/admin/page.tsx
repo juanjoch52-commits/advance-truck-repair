@@ -21,22 +21,38 @@ const ROLE_COLORS: Record<string, string> = {
   super_admin: 'text-amber-400 bg-amber-500/15 border-amber-500/30',
   owner: 'text-purple-400 bg-purple-500/15 border-purple-500/30',
   admin: 'text-blue-400 bg-blue-500/15 border-blue-500/30',
+  contable: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30',
 };
+
+interface Shop {
+  id: string;
+  name: string;
+  legal_name?: string | null;
+}
 
 export default function AdminPage() {
   const { t, lang } = useLanguage();
   const locale = lang === 'en' ? 'en-US' : 'es-MX';
 
-  // Roles available to assign (super_admin can only be set by another super_admin)
+  // Roles available to change on EXISTING users (inline dropdown). El rol
+  // 'contable' no se ofrece aquí porque requiere elegir taller: se asigna al
+  // crear el usuario (abajo).
   const ASSIGNABLE_ROLES = [
     { value: 'admin', label: t('users.roles.admin') },
     { value: 'owner', label: t('users.roles.owner') },
+  ];
+  // Roles ofrecidos al CREAR un usuario (incluye contable).
+  const CREATE_ROLES = [
+    { value: 'admin', label: t('users.roles.admin') },
+    { value: 'owner', label: t('users.roles.owner') },
+    { value: 'contable', label: t('users.roles.contable') },
   ];
 
   function roleLabel(role: string) {
     if (role === 'super_admin') return t('users.roles.super_admin');
     if (role === 'owner') return t('users.roles.owner');
     if (role === 'admin') return t('users.roles.admin');
+    if (role === 'contable') return t('users.roles.contable');
     return role;
   }
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -49,7 +65,9 @@ export default function AdminPage() {
   const [showForm, setShowForm] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [newName, setNewName] = useState('');
-  const [newRole, setNewRole] = useState<'admin' | 'owner'>('admin');
+  const [newRole, setNewRole] = useState<'admin' | 'owner' | 'contable'>('admin');
+  const [newShopId, setNewShopId] = useState('');
+  const [shops, setShops] = useState<Shop[]>([]);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
 
@@ -64,6 +82,14 @@ export default function AdminPage() {
         setCurrentUserRole(j.me?.role ?? '');
       }
     } catch {}
+    // Talleres para asignar a un usuario 'contable'.
+    try {
+      const rs = await fetch('/api/shops');
+      if (rs.ok) {
+        const js = await rs.json();
+        setShops(js.shops ?? []);
+      }
+    } catch {}
     setLoading(false);
   }
 
@@ -75,6 +101,8 @@ export default function AdminPage() {
   function canChangeRole(targetUser: UserProfile): boolean {
     if (targetUser.id === currentUserId) return false; // No puedes cambiarte a ti mismo
     if (targetUser.role === 'super_admin') return false; // Nadie puede tocar al super_admin
+    // El rol 'contable' se gestiona al crear (necesita taller): no se edita inline.
+    if (targetUser.role === 'contable') return false;
     if (currentUserRole === 'super_admin') return true;
     if (currentUserRole === 'owner') return true;
     return false;
@@ -130,20 +158,31 @@ export default function AdminPage() {
 
   async function handleCreateUser(e: React.FormEvent) {
     e.preventDefault();
+    // La contable necesita un taller asignado.
+    if (newRole === 'contable' && !newShopId) {
+      setCreateError(t('users.selectShop'));
+      return;
+    }
     setCreating(true);
     setCreateError('');
     try {
       const res = await fetch('/api/admin/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ createUser: true, email: newEmail, name: newName, role: newRole }),
+        body: JSON.stringify({
+          createUser: true,
+          email: newEmail,
+          name: newName,
+          role: newRole,
+          shop_id: newRole === 'contable' ? newShopId : null,
+        }),
       });
       const data = await res.json();
       if (data.error) {
         setCreateError(data.error);
       } else {
         setTempPasswords(prev => [...prev, { userId: data.userId, password: data.tempPassword }]);
-        setNewEmail(''); setNewName(''); setNewRole('admin');
+        setNewEmail(''); setNewName(''); setNewRole('admin'); setNewShopId('');
         setShowForm(false);
         load();
       }
@@ -203,11 +242,25 @@ export default function AdminPage() {
               <label className="block text-slate-400 text-sm mb-1.5">{t('common.role')}</label>
               <select value={newRole} onChange={e => setNewRole(e.target.value as any)}
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-amber-400/50 transition">
-                {ASSIGNABLE_ROLES.map(r => (
+                {CREATE_ROLES.map(r => (
                   <option key={r.value} value={r.value}>{r.label}</option>
                 ))}
               </select>
             </div>
+            {/* Taller asignado: solo para 'contable' (usuario de solo lectura de un taller) */}
+            {newRole === 'contable' && (
+              <div className="md:col-span-3">
+                <label className="block text-slate-400 text-sm mb-1.5">{t('users.assignShop')} *</label>
+                <select required value={newShopId} onChange={e => setNewShopId(e.target.value)}
+                  className="w-full bg-slate-800 border border-emerald-500/30 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-emerald-400/50 transition">
+                  <option value="">{t('users.selectShop')}</option>
+                  {shops.map(s => (
+                    <option key={s.id} value={s.id}>{s.legal_name || s.name}</option>
+                  ))}
+                </select>
+                <p className="text-emerald-300/60 text-xs mt-1.5">{t('users.contableHint')}</p>
+              </div>
+            )}
             {createError && (
               <div className="md:col-span-3 bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2.5 text-red-400 text-sm">{createError}</div>
             )}

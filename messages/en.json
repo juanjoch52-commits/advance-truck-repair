@@ -19,7 +19,8 @@
     "settings": "Billing Settings",
     "attendance": "Attendance",
     "shopReport": "Shop report",
-    "salesReport": "Sales Report"
+    "salesReport": "Sales Report",
+    "collections": "Collections"
   },
   "settings": {
     "title": "BILLING SETTINGS",
@@ -167,6 +168,7 @@
       "receiptNo": "Receipt #",
       "recordedBy": "Recorded by",
       "printReceipt": "Print receipt",
+      "receiptButton": "Payment receipt",
       "downloadReceipt": "Download",
       "receipts": "Payment receipts",
       "noPayments": "No payments recorded.",
@@ -689,10 +691,14 @@
     "createdAt": "Created",
     "protectedNote": "The Super Admin role is protected and cannot be modified by other users.",
     "errorChangeRole": "Error changing role: ",
+    "assignShop": "Assigned shop",
+    "selectShop": "Choose a shop…",
+    "contableHint": "The accountant will only see (read-only) invoicing and reports for that shop, plus company payroll.",
     "roles": {
       "super_admin": "Super Admin",
       "owner": "Owner",
-      "admin": "Administrator"
+      "admin": "Administrator",
+      "contable": "Accountant"
     }
   },
   "staff": {
@@ -1003,6 +1009,28 @@
     "laborBilled": "Labor billed",
     "laborPaid": "Paid to mechanics",
     "laborMargin": "Labor margin"
+  },
+  "collections": {
+    "title": "COLLECTIONS",
+    "subtitle": "Payments received in the period — to reconcile the cash box",
+    "from": "From",
+    "to": "To",
+    "shop": "Shop",
+    "allShops": "All shops",
+    "total": "Total collected",
+    "payments": "payments",
+    "byMethod": "By method",
+    "byType": "By type",
+    "date": "Date",
+    "receipt": "Receipt",
+    "invoice": "Invoice",
+    "client": "Client",
+    "method": "Method",
+    "type": "Type",
+    "amount": "Amount",
+    "recordedBy": "Recorded by",
+    "exportCsv": "Export CSV",
+    "none": "No payments in this period."
   },
   "salesReport": {
     "title": "SALES REPORT",

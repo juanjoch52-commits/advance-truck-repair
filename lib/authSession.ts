@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { createHmac, timingSafeEqual } from 'crypto';
 
-export type EffectiveRole = 'owner' | 'admin' | 'mechanic';
+export type EffectiveRole = 'owner' | 'admin' | 'mechanic' | 'contable';
 export type BaseRole = EffectiveRole | 'super_user';
 
 export type SessionUser = {
@@ -11,6 +11,9 @@ export type SessionUser = {
   effective_role: EffectiveRole;
   requires_pin_update: boolean;
   is_super_user: boolean;
+  // Taller asignado. Solo lo usan roles limitados a un taller (contable);
+  // null/undefined para roles globales (owner/admin/super_user).
+  shop_id?: string | null;
 };
 
 const SESSION_COOKIE = 'atr_session';
@@ -74,8 +77,8 @@ export function parseSession(rawValue: string | undefined): SessionUser | null {
   try {
     const parsed = JSON.parse(decoded.toString('utf8')) as Partial<SessionUser>;
     if (!parsed || !parsed.id || !parsed.full_name || !parsed.role || !parsed.effective_role) return null;
-    if (!['owner', 'admin', 'mechanic', 'super_user'].includes(parsed.role)) return null;
-    if (!['owner', 'admin', 'mechanic'].includes(parsed.effective_role)) return null;
+    if (!['owner', 'admin', 'mechanic', 'contable', 'super_user'].includes(parsed.role)) return null;
+    if (!['owner', 'admin', 'mechanic', 'contable'].includes(parsed.effective_role)) return null;
     return {
       id: parsed.id,
       full_name: parsed.full_name,
@@ -83,6 +86,7 @@ export function parseSession(rawValue: string | undefined): SessionUser | null {
       effective_role: parsed.effective_role as EffectiveRole,
       requires_pin_update: Boolean(parsed.requires_pin_update),
       is_super_user: Boolean(parsed.is_super_user),
+      shop_id: typeof parsed.shop_id === 'string' ? parsed.shop_id : null,
     };
   } catch {
     return null;
@@ -94,7 +98,11 @@ export function getEffectiveRole(session: SessionUser) {
 }
 
 export function getDefaultHomeForRole(role: EffectiveRole) {
-  return role === 'mechanic' ? '/taller' : '/dashboard';
+  if (role === 'mechanic') return '/taller';
+  // La contable no ve el dashboard (métricas globales de ambos talleres); su
+  // punto de entrada es la facturación de su taller.
+  if (role === 'contable') return '/facturacion';
+  return '/dashboard';
 }
 
 export function isJuanSuperUser(session: SessionUser) {

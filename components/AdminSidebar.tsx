@@ -169,6 +169,16 @@ const NAV_ITEMS = [
     ),
   },
   {
+    labelKey: 'nav.collections',
+    href: '/reporte-cobranza',
+    icon: (
+      <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m3-4h9a2 2 0 012 2v6a2 2 0 01-2 2h-9a2 2 0 01-2-2v-6a2 2 0 012-2zm7 3a2 2 0 11-4 0 2 2 0 014 0z" />
+      </svg>
+    ),
+  },
+  {
     labelKey: 'nav.users',
     href: '/admin',
     icon: (
@@ -193,6 +203,12 @@ const NAV_ITEMS = [
 
 // Items only visible to owner / super-admin / super-user
 const PRIVILEGED_ONLY_HREFS = new Set<string>(['/nomina-admin', '/deducciones', '/configuracion', '/reporte-talleres', '/informe-ventas']);
+
+// La contable (solo lectura, limitada a un taller) solo ve estas secciones:
+// facturación + cuentas por cobrar + reporte por taller (todo de SU taller) y
+// la nómina (completa de la empresa). El resto queda oculto y, además,
+// bloqueado en el servidor por cada endpoint.
+const CONTABLE_HREFS = new Set<string>(['/facturacion', '/cuentas-por-cobrar', '/reporte-cobranza', '/reporte-talleres', '/nomina']);
 
 export default function AdminSidebar() {
   const pathname = usePathname();
@@ -224,7 +240,11 @@ export default function AdminSidebar() {
   }, []);
 
   const isPrivileged = role === 'super_user' || role === 'super_admin' || role === 'owner';
-  const visibleNavItems = NAV_ITEMS.filter(it => !PRIVILEGED_ONLY_HREFS.has(it.href) || isPrivileged);
+  const isContable = role === 'contable';
+  const visibleNavItems = NAV_ITEMS.filter(it => {
+    if (isContable) return CONTABLE_HREFS.has(it.href);
+    return !PRIVILEGED_ONLY_HREFS.has(it.href) || isPrivileged;
+  });
 
   async function handleLogout() {
     await supabase.auth.signOut();

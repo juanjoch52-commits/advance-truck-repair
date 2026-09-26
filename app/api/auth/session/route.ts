@@ -13,6 +13,10 @@ function mapProfileRole(raw: unknown): { role: BaseRole; effective: EffectiveRol
   if (value === 'owner' || value === 'dueno' || value === 'dueño') {
     return { role: 'owner', effective: 'owner', isSuper: false };
   }
+  // Contable: solo lectura, limitada a un taller (shop_id, cargado aparte).
+  if (value === 'contable') {
+    return { role: 'contable', effective: 'contable', isSuper: false };
+  }
   // Default: admin (the only remaining interactive role).
   return { role: 'admin', effective: 'admin', isSuper: false };
 }
@@ -49,9 +53,9 @@ export async function POST(request: Request) {
   const admin = getSupabaseServerClient();
   const { data: profile } = await admin
     .from('profiles')
-    .select('full_name, role, must_change_password')
+    .select('full_name, role, must_change_password, shop_id')
     .eq('id', authUser.id)
-    .maybeSingle<{ full_name: string | null; role: string | null; must_change_password: boolean | null }>();
+    .maybeSingle<{ full_name: string | null; role: string | null; must_change_password: boolean | null; shop_id: string | null }>();
 
   const { role, effective, isSuper } = mapProfileRole(profile?.role);
 
@@ -62,6 +66,8 @@ export async function POST(request: Request) {
     effective_role: effective,
     requires_pin_update: Boolean(profile?.must_change_password),
     is_super_user: isSuper,
+    // Solo relevante para roles limitados a un taller (contable).
+    shop_id: role === 'contable' ? (profile?.shop_id ?? null) : null,
   };
 
   const response = NextResponse.json({

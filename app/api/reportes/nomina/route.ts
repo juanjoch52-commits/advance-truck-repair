@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { authErrorResponse } from '@/lib/apiAuth';
-import { requirePayrollAccess, requireOwnerAccess, sanitizeDbError } from '@/lib/payrollApi';
+import { authErrorResponse, requireRole } from '@/lib/apiAuth';
+import { requirePayrollAccess, sanitizeDbError } from '@/lib/payrollApi';
+import { getSupabaseServerClient } from '@/lib/supabaseServer';
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -35,8 +36,13 @@ export async function GET(request: Request) {
     }
 
     // La barrera de rol: nómina administrativa exige sesión privilegiada.
-    const { supabase } =
-      scope === 'mechanic' ? await requirePayrollAccess() : await requireOwnerAccess();
+    // La contable (solo lectura) puede ver la nómina completa de la empresa.
+    if (scope === 'mechanic') {
+      await requireRole('owner', 'admin', 'super_user', 'contable');
+    } else {
+      await requireRole('owner', 'super_user', 'contable');
+    }
+    const supabase = getSupabaseServerClient();
 
     // ── Modo empleado individual (comprobante de pago) ────────────────────
     if (employeeId) {

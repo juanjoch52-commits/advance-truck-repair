@@ -36,8 +36,20 @@ export async function POST(req: NextRequest) {
 
   // Crear nuevo usuario
   if (body.createUser) {
-    const { email, name, role } = body;
+    const { email, name, role, shop_id } = body;
     if (!email) return NextResponse.json({ error: 'Email requerido' }, { status: 400 });
+
+    // Roles asignables al crear. 'contable' es un usuario de SOLO LECTURA
+    // limitado a un taller: exige shop_id.
+    const ALLOWED = ['admin', 'owner', 'contable'];
+    const finalRole = ALLOWED.includes(role) ? role : 'admin';
+    const finalShopId = finalRole === 'contable' ? String(shop_id ?? '').trim() : null;
+    if (finalRole === 'contable' && !finalShopId) {
+      return NextResponse.json({ error: 'La contable necesita un taller asignado' }, { status: 400 });
+    }
+    // profiles.full_name es NOT NULL: exigir nombre.
+    const fullName = String(name ?? '').trim();
+    if (!fullName) return NextResponse.json({ error: 'Nombre requerido' }, { status: 400 });
 
     const tempPassword = generateTempPassword();
 
@@ -52,13 +64,20 @@ export async function POST(req: NextRequest) {
     }
 
     // Insertar perfil con must_change_password=true
-    await supabaseAdmin.from('profiles').upsert({
+    const { error: profErr } = await supabaseAdmin.from('profiles').upsert({
       id: newUser.user.id,
       email,
-      full_name: name || null,
-      role: role || 'admin',
+      full_name: fullName,
+      role: finalRole,
+      shop_id: finalShopId,
       must_change_password: true,
     });
+    if (profErr) {
+      // El usuario de Auth quedó creado pero el perfil falló: revertir para no
+      // dejar una cuenta huérfana sin perfil (no podría iniciar sesión bien).
+      await supabaseAdmin.auth.admin.deleteUser(newUser.user.id).catch(() => {});
+      return NextResponse.json({ error: profErr.message }, { status: 500 });
+    }
 
     return NextResponse.json({ userId: newUser.user.id, tempPassword });
   }
