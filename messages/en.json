@@ -689,10 +689,14 @@
     "createdAt": "Created",
     "protectedNote": "The Super Admin role is protected and cannot be modified by other users.",
     "errorChangeRole": "Error changing role: ",
+    "assignShop": "Assigned shop",
+    "selectShop": "Choose a shop…",
+    "contableHint": "The accountant will only see (read-only) invoicing and reports for that shop, plus company payroll.",
     "roles": {
       "super_admin": "Super Admin",
       "owner": "Owner",
-      "admin": "Administrator"
+      "admin": "Administrator",
+      "contable": "Accountant"
     }
   },
   "staff": {

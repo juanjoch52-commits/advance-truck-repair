@@ -48,6 +48,20 @@ export async function requireSelfOrAdmin(targetEmployeeId: string): Promise<Sess
   throw new AuthError(403, 'No autorizado para acceder a estos datos');
 }
 
+/**
+ * Alcance por taller para una sesión. Si el rol está limitado a un taller
+ * (contable), devuelve su shop_id; si el rol es global (owner/admin/super_user)
+ * devuelve null (ve todos los talleres). Un 'contable' sin taller asignado
+ * devuelve el centinela '__none__' para que, por seguridad, no vea NADA
+ * (aunque el CHECK de la BD ya obliga a que tenga taller).
+ */
+export function shopScopeFor(session: SessionUser): string | null {
+  if (session.role === 'contable') {
+    return session.shop_id || '__none__';
+  }
+  return null;
+}
+
 export function authErrorResponse(error: unknown): NextResponse | null {
   if (error instanceof AuthError) {
     return NextResponse.json({ error: error.message }, { status: error.status });

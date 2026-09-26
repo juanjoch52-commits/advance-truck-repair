@@ -20,6 +20,15 @@ export async function requireOwnerAccess() {
   return { session, supabase: getSupabaseServerClient() };
 }
 
+// LECTURA de nómina para la contable (solo lectura, nómina COMPLETA de la
+// empresa: los empleados no están asignados a un taller). Incluye owner/super_user
+// para no romper los consumidores existentes. Úsese SOLO en handlers GET; las
+// escrituras siguen en requireOwnerAccess (sin contable).
+export async function requirePayrollReadAccess() {
+  const session = await requireRole('owner', 'super_user', 'contable');
+  return { session, supabase: getSupabaseServerClient() };
+}
+
 // ¿La sesión puede ver montos de salario? (owner o super_user)
 export function isPrivilegedSession(session: SessionUser): boolean {
   return session.is_super_user || getEffectiveRole(session) === 'owner';

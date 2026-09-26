@@ -689,10 +689,14 @@
     "createdAt": "Creado",
     "protectedNote": "El rol Super Admin está protegido y no puede ser modificado por otros usuarios.",
     "errorChangeRole": "Error al cambiar rol: ",
+    "assignShop": "Taller asignado",
+    "selectShop": "Elige un taller…",
+    "contableHint": "La contable solo verá (lectura) la facturación y los reportes de ese taller, más la nómina de la empresa.",
     "roles": {
       "super_admin": "Super Admin",
       "owner": "Dueño",
-      "admin": "Administrador"
+      "admin": "Administrador",
+      "contable": "Contable"
     }
   },
   "staff": {

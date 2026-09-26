@@ -1,17 +1,22 @@
 import { NextResponse } from 'next/server';
-import { requireInvoicesAccess, INVOICE_COLS, PAYMENT_METHODS, INSURANCE_STATUSES, computeInvoiceTax, round2, deriveBalanceStatus } from '@/lib/invoicesApi';
+import { requireInvoicesAccess, requireInvoicesReadAccess, INVOICE_COLS, PAYMENT_METHODS, INSURANCE_STATUSES, computeInvoiceTax, round2, deriveBalanceStatus } from '@/lib/invoicesApi';
 import { sanitizeDbError } from '@/lib/clientsApi';
-import { authErrorResponse } from '@/lib/apiAuth';
+import { authErrorResponse, shopScopeFor } from '@/lib/apiAuth';
 
 // GET /api/facturas/[id] → factura con sus pagos y datos del cliente
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const supabase = await requireInvoicesAccess();
+    const { session, supabase } = await requireInvoicesReadAccess();
+    const shopScope = shopScopeFor(session);
     const { id } = await params;
 
     const { data: invoice, error } = await supabase.from('invoices').select(INVOICE_COLS).eq('id', id).maybeSingle();
     if (error) return NextResponse.json({ error: sanitizeDbError('facturas/[id].GET', error.message) }, { status: 500 });
     if (!invoice) return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
+    // La contable solo puede abrir facturas de SU taller.
+    if (shopScope && invoice.shop_id !== shopScope) {
+      return NextResponse.json({ error: 'No autorizado para esta acción' }, { status: 403 });
+    }
 
     const [{ data: payments }, { data: items }, { data: credits }, clientRes, shopRes, truckRes] = await Promise.all([
       supabase.from('invoice_payments').select('id,amount,method,payment_type,receipt_number,reference,paid_at,notes,created_by_name,voided,voided_by_name,void_reason,created_at').eq('invoice_id', id).order('paid_at', { ascending: false }),

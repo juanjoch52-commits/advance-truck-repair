@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { requireInvoicesAccess, INVOICE_COLS, PAYMENT_METHODS, DOCUMENT_TYPES, isFiscalDocument, computeInvoiceTax, applyWarehouseDeduction, round2, deriveBalanceStatus, nextReceiptNumber, createWorkOrderFromInvoice } from '@/lib/invoicesApi';
+import { requireInvoicesAccess, requireInvoicesReadAccess, INVOICE_COLS, PAYMENT_METHODS, DOCUMENT_TYPES, isFiscalDocument, computeInvoiceTax, applyWarehouseDeduction, round2, deriveBalanceStatus, nextReceiptNumber, createWorkOrderFromInvoice } from '@/lib/invoicesApi';
 import { sanitizeDbError } from '@/lib/clientsApi';
-import { authErrorResponse, requireRole } from '@/lib/apiAuth';
+import { authErrorResponse, requireRole, shopScopeFor } from '@/lib/apiAuth';
 import { getSupabaseServerClient } from '@/lib/supabaseServer';
 
 // GET /api/facturas → lista de facturas (con nombre de cliente), con filtros y
@@ -10,7 +10,9 @@ import { getSupabaseServerClient } from '@/lib/supabaseServer';
 //      nombre de cliente registrado (resuelto contra la tabla clients).
 export async function GET(request: Request) {
   try {
-    const supabase = await requireInvoicesAccess();
+    const { session, supabase } = await requireInvoicesReadAccess();
+    // Alcance por taller: la contable solo ve las facturas de SU taller.
+    const shopScope = shopScopeFor(session);
     const url = new URL(request.url);
     const status = url.searchParams.get('status');
     const clientId = url.searchParams.get('client_id');
@@ -25,6 +27,7 @@ export async function GET(request: Request) {
     let query = supabase.from('invoices').select(INVOICE_COLS, { count: 'exact' })
       .order('issue_date', { ascending: false })
       .order('created_at', { ascending: false });
+    if (shopScope) query = query.eq('shop_id', shopScope);
     if (status) query = query.eq('status', status);
     if (clientId) query = query.eq('client_id', clientId);
     if (doctype) query = query.eq('document_type', doctype);

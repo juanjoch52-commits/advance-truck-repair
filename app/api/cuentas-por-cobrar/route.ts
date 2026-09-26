@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { requireInvoicesAccess, agingBucket, daysBetween } from '@/lib/invoicesApi';
+import { requireInvoicesReadAccess, agingBucket, daysBetween } from '@/lib/invoicesApi';
 import { sanitizeDbError } from '@/lib/clientsApi';
-import { authErrorResponse } from '@/lib/apiAuth';
+import { authErrorResponse, shopScopeFor } from '@/lib/apiAuth';
 
 type Bucket = 'current' | 'd1_30' | 'd31_60' | 'd61_90' | 'd90_plus';
 const ZERO = () => ({ current: 0, d1_30: 0, d31_60: 0, d61_90: 0, d90_plus: 0 });
@@ -10,13 +10,17 @@ const ZERO = () => ({ current: 0, d1_30: 0, d31_60: 0, d61_90: 0, d90_plus: 0 })
 // saldos. Incluye facturas abiertas/parciales (saldo > 0); resalta las de crédito.
 export async function GET() {
   try {
-    const supabase = await requireInvoicesAccess();
+    const { session, supabase } = await requireInvoicesReadAccess();
+    const shopScope = shopScopeFor(session);
 
-    const { data: invoices, error } = await supabase
+    let arQuery = supabase
       .from('invoices')
-      .select('id,client_id,document_number,issue_date,due_date,payment_method,status,total,amount_paid,balance')
+      .select('id,client_id,document_number,issue_date,due_date,payment_method,status,total,amount_paid,balance,shop_id')
       .in('status', ['open', 'partial'])
       .order('due_date', { ascending: true });
+    // La contable solo ve las cuentas por cobrar de SU taller.
+    if (shopScope) arQuery = arQuery.eq('shop_id', shopScope);
+    const { data: invoices, error } = await arQuery;
     if (error) return NextResponse.json({ error: sanitizeDbError('cxc.GET', error.message) }, { status: 500 });
 
     const open = (invoices ?? []).filter((i: any) => Number(i.balance) > 0.001);

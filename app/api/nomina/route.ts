@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { authErrorResponse } from '@/lib/apiAuth';
-import { requireOwnerAccess, sanitizeDbError } from '@/lib/payrollApi';
+import { requireOwnerAccess, requirePayrollReadAccess, sanitizeDbError } from '@/lib/payrollApi';
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const ADMIN_ENTRY_TYPES = ['admin_fixed', 'admin_hourly', 'admin_manual'];
@@ -57,7 +57,8 @@ function parseEntry(raw: unknown): EntryRow | null {
 // → { employees, absences, entries, debtPayments }
 export async function GET(request: Request) {
   try {
-    const { supabase } = await requireOwnerAccess();
+    // Lectura: owner/super_user + contable (solo lectura, nómina completa).
+    const { supabase } = await requirePayrollReadAccess();
 
     const { searchParams } = new URL(request.url);
     const start = searchParams.get('start') ?? '';
