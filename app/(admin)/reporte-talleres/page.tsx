@@ -42,7 +42,8 @@ export default function ReporteTalleresPage() {
     (async () => {
       let role = '';
       try { const res = await fetch('/api/auth/me'); if (res.ok) { const j = await res.json(); role = (j?.user?.role ?? '').toLowerCase(); } } catch {}
-      setAllowed(role === 'super_user' || role === 'super_admin' || role === 'owner');
+      // La contable también puede ver este reporte (el API lo limita a su taller).
+      setAllowed(role === 'super_user' || role === 'super_admin' || role === 'owner' || role === 'contable');
     })();
   }, []);
 

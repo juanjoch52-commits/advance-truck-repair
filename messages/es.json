@@ -19,7 +19,8 @@
     "settings": "Datos de Facturación",
     "attendance": "Asistencia",
     "shopReport": "Reporte por taller",
-    "salesReport": "Informe de Ventas"
+    "salesReport": "Informe de Ventas",
+    "collections": "Cobranza"
   },
   "settings": {
     "title": "DATOS DE FACTURACIÓN",
@@ -1008,6 +1009,28 @@
     "laborBilled": "Mano de obra facturada",
     "laborPaid": "Pago a mecánicos",
     "laborMargin": "Margen de mano de obra"
+  },
+  "collections": {
+    "title": "COBRANZA",
+    "subtitle": "Pagos recibidos en el periodo — para cuadrar la caja",
+    "from": "Desde",
+    "to": "Hasta",
+    "shop": "Taller",
+    "allShops": "Todos los talleres",
+    "total": "Total cobrado",
+    "payments": "pagos",
+    "byMethod": "Por método",
+    "byType": "Por tipo",
+    "date": "Fecha",
+    "receipt": "Comprobante",
+    "invoice": "Factura",
+    "client": "Cliente",
+    "method": "Método",
+    "type": "Tipo",
+    "amount": "Monto",
+    "recordedBy": "Registró",
+    "exportCsv": "Exportar CSV",
+    "none": "No hay pagos en este periodo."
   },
   "salesReport": {
     "title": "INFORME DE VENTAS",

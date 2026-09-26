@@ -169,6 +169,16 @@ const NAV_ITEMS = [
     ),
   },
   {
+    labelKey: 'nav.collections',
+    href: '/reporte-cobranza',
+    icon: (
+      <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m3-4h9a2 2 0 012 2v6a2 2 0 01-2 2h-9a2 2 0 01-2-2v-6a2 2 0 012-2zm7 3a2 2 0 11-4 0 2 2 0 014 0z" />
+      </svg>
+    ),
+  },
+  {
     labelKey: 'nav.users',
     href: '/admin',
     icon: (
@@ -198,7 +208,7 @@ const PRIVILEGED_ONLY_HREFS = new Set<string>(['/nomina-admin', '/deducciones', 
 // facturación + cuentas por cobrar + reporte por taller (todo de SU taller) y
 // la nómina (completa de la empresa). El resto queda oculto y, además,
 // bloqueado en el servidor por cada endpoint.
-const CONTABLE_HREFS = new Set<string>(['/facturacion', '/cuentas-por-cobrar', '/reporte-talleres', '/nomina']);
+const CONTABLE_HREFS = new Set<string>(['/facturacion', '/cuentas-por-cobrar', '/reporte-cobranza', '/reporte-talleres', '/nomina']);
 
 export default function AdminSidebar() {
   const pathname = usePathname();

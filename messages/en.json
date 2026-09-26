@@ -19,7 +19,8 @@
     "settings": "Billing Settings",
     "attendance": "Attendance",
     "shopReport": "Shop report",
-    "salesReport": "Sales Report"
+    "salesReport": "Sales Report",
+    "collections": "Collections"
   },
   "settings": {
     "title": "BILLING SETTINGS",
@@ -1008,6 +1009,28 @@
     "laborBilled": "Labor billed",
     "laborPaid": "Paid to mechanics",
     "laborMargin": "Labor margin"
+  },
+  "collections": {
+    "title": "COLLECTIONS",
+    "subtitle": "Payments received in the period — to reconcile the cash box",
+    "from": "From",
+    "to": "To",
+    "shop": "Shop",
+    "allShops": "All shops",
+    "total": "Total collected",
+    "payments": "payments",
+    "byMethod": "By method",
+    "byType": "By type",
+    "date": "Date",
+    "receipt": "Receipt",
+    "invoice": "Invoice",
+    "client": "Client",
+    "method": "Method",
+    "type": "Type",
+    "amount": "Amount",
+    "recordedBy": "Recorded by",
+    "exportCsv": "Export CSV",
+    "none": "No payments in this period."
   },
   "salesReport": {
     "title": "SALES REPORT",
