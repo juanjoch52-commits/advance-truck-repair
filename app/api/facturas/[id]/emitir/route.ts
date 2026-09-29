@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { INVOICE_COLS, deriveBalanceStatus, applyWarehouseDeduction, round2, nextReceiptNumber, createWorkOrderFromInvoice, computeInvoiceTax } from '@/lib/invoicesApi';
+import { INVOICE_COLS, deriveBalanceStatus, applyWarehouseDeduction, round2, nextReceiptNumber, createWorkOrderFromInvoice } from '@/lib/invoicesApi';
 import { computePayout } from '@/lib/money';
 import { sanitizeDbError } from '@/lib/clientsApi';
 import { authErrorResponse, requireRole } from '@/lib/apiAuth';
@@ -88,20 +88,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       await supabase.from('invoice_items').update({ done: true }).in('id', laborIds);
     }
 
-    // Impuesto FORZADO al emitir: 6.50% salvo cliente exento. Corrige borradores
-    // viejos que quedaron sin impuesto (se recalcula sobre el subtotal guardado).
-    // Idempotente: si ya traía el impuesto correcto, da el mismo valor.
-    let clientExempt = false;
-    if (invoice.client_id) {
-      const { data: cli } = await supabase.from('clients').select('tax_exempt').eq('id', invoice.client_id).maybeSingle();
-      clientExempt = !!(cli as any)?.tax_exempt;
-    }
-    const subtotalV = Number(invoice.subtotal) || 0;
-    const discountV = Number(invoice.discount) || 0;
-    const tax_amount = clientExempt ? 0 : computeInvoiceTax(subtotalV, true);
-
-    // Estado / pago.
-    const total = round2(subtotalV + tax_amount - discountV);
+    // Estado / pago. Se respeta el impuesto YA definido en la factura (la persona
+    // eligió si cobrarlo o no al crearla/editarla); emitir no lo recalcula.
+    const total = Number(invoice.total) || 0;
     const markPaid = invoice.payment_method !== 'credit' && body.mark_paid === true;
     const amount_paid = markPaid ? total : 0;
     const { balance, status } = deriveBalanceStatus(total, amount_paid);
@@ -116,9 +105,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { data: updated, error: upErr } = await supabase.from('invoices').update({
       document_number,
       status,
-      // Impuesto/total forzados (corrige borradores sin impuesto al emitir).
-      tax_amount,
-      total,
       amount_paid,
       balance,
       emitted_at: new Date().toISOString(),

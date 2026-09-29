@@ -153,9 +153,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     });
 
     const subtotal = items.length ? round2(items.reduce((s, it) => s + it.amount, 0)) : round2(body.subtotal);
-    // Sales tax FORZADO: 6.50% sobre el subtotal SALVO cliente exento (el taller
-    // grava todo). Editar un borrador viejo sin impuesto lo deja ya con impuesto.
-    const tax_amount = clientExempt ? 0 : computeInvoiceTax(subtotal, true);
+    // Sales tax: 6.50% sobre el subtotal. Se respeta la elección de quien factura
+    // (charge_tax, por defecto true; el form confirma al quitarlo). Exento → 0.
+    const chargeTax = body.charge_tax !== false;
+    const tax_amount = clientExempt ? 0 : computeInvoiceTax(subtotal, chargeTax);
     const discount = round2(body.discount);
     const total = round2(subtotal + tax_amount - discount);
     if (total <= 0) return NextResponse.json({ error: 'El total de la factura debe ser mayor a $0.' }, { status: 400 });

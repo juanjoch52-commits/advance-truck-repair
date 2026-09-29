@@ -172,10 +172,11 @@ export async function POST(request: Request) {
       ? round2(items.reduce((s, it) => s + it.amount, 0))
       : round2(body.subtotal);
 
-    // Sales tax FORZADO: 6.50% sobre TODA la factura (subtotal) SALVO cliente
-    // exento. El taller grava todo (mano de obra incluida); ya no se permite
-    // emitir sin impuesto a un cliente no exento (antes se colaban facturas en $0).
-    const tax_amount = clientExempt ? 0 : computeInvoiceTax(subtotal, true);
+    // Sales tax: 6.50% sobre TODA la factura (subtotal). Quien hace la factura
+    // decide si cobrarlo (charge_tax, por defecto true; el form pide confirmar al
+    // quitarlo). Cliente exento → 0 (gana sobre todo).
+    const chargeTax = body.charge_tax !== false;
+    const tax_amount = clientExempt ? 0 : computeInvoiceTax(subtotal, chargeTax);
 
     const discount = round2(body.discount);
     const total = round2(subtotal + tax_amount - discount);

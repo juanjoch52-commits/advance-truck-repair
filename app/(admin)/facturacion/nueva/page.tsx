@@ -328,10 +328,19 @@ function NuevaFacturaInner() {
   const laborTotal = round2(tasks.reduce((s, tk) => s + taskAmount(tk), 0));
   const partsTotal = round2(parts.reduce((s, pt) => s + partAmount(pt), 0));
   const subtotal = round2(laborTotal + partsTotal);
-  // Impuesto FORZADO: 6.50% sobre TODA la factura SALVO cliente exento. Ya no se
-  // puede desactivar a mano (el taller grava todo; antes se colaban facturas en $0).
-  const willChargeTax = !clientExempt;
+  // Impuesto: 6.50% sobre TODA la factura. Quien factura decide si cobrarlo (con
+  // confirmación al quitarlo). Cliente exento → 0 siempre.
+  const willChargeTax = chargeTax && !clientExempt;
   const taxN = willChargeTax ? round2(subtotal * TAX_RATE / 100) : 0;
+
+  // Al QUITAR el impuesto se pide confirmar (evita quitarlo sin querer).
+  function toggleTax() {
+    if (chargeTax) {
+      if (confirm(L.taxOffConfirm)) setChargeTax(false);
+    } else {
+      setChargeTax(true);
+    }
+  }
   const discountN = parseFloat(discount) || 0;
   const total = Math.max(0, round2(subtotal + taxN - discountN));
   const isCredit = paymentMethod === 'credit';
@@ -798,9 +807,17 @@ function NuevaFacturaInner() {
               {clientExempt ? (
                 <span className="text-emerald-300 font-medium">{money(0)} · {L.exempt}</span>
               ) : (
-                <span className="flex items-center gap-2">
-                  <span className="text-slate-200 font-medium">{money(taxN)}</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 whitespace-nowrap">{L.taxAlways}</span>
+                <span className="flex items-center gap-3">
+                  <span className={`font-medium ${chargeTax ? 'text-slate-200' : 'text-slate-500'}`}>{money(taxN)}</span>
+                  <button
+                    type="button"
+                    onClick={toggleTax}
+                    className={`text-base px-3 py-1.5 rounded-xl border transition-colors ${chargeTax
+                      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
+                      : 'border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20'}`}
+                  >
+                    {chargeTax ? L.taxOnBtn : L.taxOffBtn}
+                  </button>
                 </span>
               )}
             </div>
@@ -990,6 +1007,7 @@ const ES = {
   tax: 'Impuesto (6.50%)', exempt: 'Exento',
   taxOnBtn: 'Cobrando 6.50%', taxOffBtn: 'No se cobra',
   taxAlways: 'Siempre 6.50%', shopRequired: 'Debes elegir un taller para la factura.', selectShopPh: 'Elige un taller…',
+  taxOffConfirm: '¿Seguro que NO quieres cobrar el impuesto (6.50%) en ESTA factura?',
   discount: 'Descuento', total: 'TOTAL', toPayroll: 'Comisiones a planilla', markPaid: 'Marcar como pagada ahora',
   create: 'Crear factura', saveDraft: 'Guardar borrador', saving: 'Guardando...',
   draftHint: 'Borrador: guarda el trabajo en proceso. Al "Emitir" desde la lista se asigna el número fiscal, baja el inventario y se crea la orden de trabajo con las comisiones.',
@@ -1054,6 +1072,7 @@ const EN = {
   tax: 'Tax (6.50%)', exempt: 'Exempt',
   taxOnBtn: 'Charging 6.50%', taxOffBtn: 'Not charged',
   taxAlways: 'Always 6.50%', shopRequired: 'You must choose a shop for the invoice.', selectShopPh: 'Choose a shop…',
+  taxOffConfirm: 'Are you sure you do NOT want to charge tax (6.50%) on THIS invoice?',
   discount: 'Discount', total: 'TOTAL', toPayroll: 'Commissions to payroll', markPaid: 'Mark as paid now',
   create: 'Create invoice', saveDraft: 'Save draft', saving: 'Saving...',
   draftHint: 'Draft: saves work in progress. "Emit" from the list assigns the tax number, lowers inventory and creates the work order with commissions.',
